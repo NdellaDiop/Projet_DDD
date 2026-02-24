@@ -1,66 +1,401 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Backend - Projet DDD (Dakar Dem Dikk)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## 📋 Table des matières
+- [Vue d'ensemble](#vue-densemble)
+- [Technologies utilisées](#technologies-utilisées)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Structure du projet](#structure-du-projet)
+- [Modèles de données](#modèles-de-données)
+- [Fonctionnalités développées](#fonctionnalités-développées)
+- [API Routes](#api-routes)
+- [Authentification et autorisation](#authentification-et-autorisation)
+- [Services et logique métier](#services-et-logique-métier)
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🎯 Vue d'ensemble
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Backend Laravel pour la gestion des appels d'offres. Il gère l'authentification, les rôles (Admin, Responsable Marché, Fournisseur), les appels d'offres, les candidatures, les documents et les notifications.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## 🛠 Technologies utilisées
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **Laravel 11.x** - Framework PHP
+- **Laravel Sanctum** - Authentification API
+- **PostgreSQL** - Base de données
+- **Eloquent ORM** - ORM Laravel
+- **Laravel Mail** - Envoi d'emails (réinitialisation de mot de passe)
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+---
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 🏗 Architecture
 
-## Laravel Sponsors
+### Structure MVC
+- **Models** : `app/Models/` - Modèles Eloquent
+- **Controllers** : `app/Http/Controllers/` - Logique des endpoints
+- **Requests** : `app/Http/Requests/` - Validation des données
+- **Resources** : `app/Http/Resources/` - Formatage des réponses API
+- **Services** : `app/Services/` - Logique métier réutilisable
+- **Policies** : `app/Policies/` - Autorisations
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Middleware
+- `auth:sanctum` - Authentification via tokens
+- `role:ADMIN|RESPONSABLE_MARCHE|FOURNISSEUR` - Vérification des rôles
 
-### Premium Partners
+---
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+## 📦 Installation
 
-## Contributing
+### Prérequis
+- PHP >= 8.2
+- Composer
+- PostgreSQL
+- Node.js (pour les assets frontend)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Étapes
 
-## Code of Conduct
+1. **Cloner le projet**
+```bash
+cd dddback
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+2. **Installer les dépendances**
+```bash
+composer install
+```
 
-## Security Vulnerabilities
+3. **Configurer l'environnement**
+```bash
+cp .env.example .env
+php artisan key:generate
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+4. **Configurer la base de données dans `.env`**
+```env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=ddd_db
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
 
-## License
+5. **Exécuter les migrations**
+```bash
+php artisan migrate
+php artisan db:seed
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+6. **Démarrer le serveur**
+```bash
+php artisan serve
+```
+
+Le serveur sera accessible sur `http://localhost:8000`
+
+---
+
+## 📁 Structure du projet
+
+```
+dddback/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/      # Contrôleurs API
+│   │   ├── Middleware/       # Middleware personnalisés
+│   │   ├── Requests/         # Form Requests (validation)
+│   │   └── Resources/        # API Resources (formatage)
+│   ├── Models/               # Modèles Eloquent
+│   ├── Policies/             # Policies d'autorisation
+│   └── Services/             # Services métier
+├── database/
+│   ├── migrations/           # Migrations de base de données
+│   └── seeders/              # Seeders pour données initiales
+├── routes/
+│   └── api.php               # Routes API
+└── config/                   # Fichiers de configuration
+```
+
+---
+
+## 🗄 Modèles de données
+
+### User
+- Gestion des utilisateurs avec rôles
+- Authentification Sanctum
+- Statut actif/inactif
+
+### Role
+- ADMIN
+- RESPONSABLE_MARCHE
+- FOURNISSEUR
+
+### ResponsableMarche
+- Lié à un User
+- Département, fonction, téléphone
+- Gère les appels d'offres
+
+### Fournisseur
+- Lié à un User
+- Informations entreprise (nom, adresse, téléphone, email)
+- Documents légaux (NINEA, RCCM, Quitus Fiscal)
+- Statut : actif, en_attente, rejeté
+
+### AppelOffre
+- Titre, description, référence
+- Dates : publication, limite de dépôt
+- Statut : draft, published, closed, archived
+- Lié à un ResponsableMarche
+
+### Candidature
+- Lié à un AppelOffre et un Fournisseur
+- Montant proposé
+- Date de soumission
+- Statut : submitted, under_review, accepted, rejected
+
+### Document
+- Documents légaux des fournisseurs
+- Catégories : RCCM, NINEA, QUITUS_FISCAL
+- Stockage des fichiers
+
+### Suggestion
+- Suggestions des fournisseurs
+- Sujet, message
+- Statut : pending, read, implemented, rejected
+
+### Notification
+- Notifications utilisateurs
+- Liées aux actions importantes
+
+### LogActivite
+- Journal des activités
+- Traçabilité des actions
+
+---
+
+## ✨ Fonctionnalités développées
+
+### 🔐 Authentification
+- **Inscription** : Création de compte avec rôles
+- **Connexion** : Authentification via email/password
+- **Réinitialisation de mot de passe** : Envoi d'email avec token
+- **Changement de mot de passe** : Pour utilisateurs authentifiés
+- **Déconnexion** : Révocation des tokens
+
+### 👤 Gestion des utilisateurs (Admin)
+- Liste des utilisateurs
+- Activation/Désactivation de comptes
+- Gestion des rôles
+
+### 🏢 Gestion des Responsables Marché (Admin)
+- **Création** : Création de comptes responsables
+- **Modification** : Mise à jour des informations
+- **Suppression** : Suppression de responsables
+- Champs : nom, email, département, fonction, téléphone
+
+### 📋 Gestion des Appels d'Offres
+
+#### Responsable Marché
+- **Création** : Création en brouillon
+- **Publication** : Mise en ligne publique
+- **Clôture** : Fermeture aux candidatures
+- **Consultation** : Liste de ses appels d'offres
+- **Candidatures reçues** : Consultation des candidatures par appel d'offre
+
+#### Public
+- **Consultation** : Liste des appels d'offres publiés
+- **Détails** : Affichage détaillé d'un appel d'offre
+
+### 📝 Gestion des Candidatures
+
+#### Fournisseur
+- **Soumission** : Postuler à un appel d'offre
+- **Modification** : Modifier une candidature (si statut = submitted)
+- **Consultation** : Liste de ses candidatures
+- Contrainte : Un seul candidature par appel d'offre
+
+#### Responsable Marché / Admin
+- **Acceptation** : Accepter une candidature
+- **Rejet** : Rejeter une candidature
+- **Consultation** : Liste des candidatures par appel d'offre
+
+### 🏪 Gestion des Fournisseurs (Admin)
+- **Validation** : Valider un compte fournisseur
+- **Rejet** : Rejeter un compte fournisseur
+- **Consultation** : Liste des fournisseurs avec statuts
+- **Détails** : Affichage détaillé d'un fournisseur
+
+### 📄 Gestion des Documents (Fournisseur)
+- **Upload** : Téléchargement de documents légaux
+- **Consultation** : Liste des documents
+- **Suppression** : Suppression de documents
+- Types : RCCM, NINEA, QUITUS_FISCAL
+
+### 💡 Système de Suggestions (Fournisseur → Admin)
+- **Envoi** : Fournisseurs peuvent envoyer des suggestions
+- **Consultation** : Admin voit toutes les suggestions
+- **Gestion des statuts** : pending, read, implemented, rejected
+
+### 📊 Dashboard Admin
+- **Statistiques globales** :
+  - Total fournisseurs (actifs, en attente)
+  - Total appels d'offres (actifs, clôturés)
+  - Total candidatures (en cours, retenues, rejetées)
+  - Total responsables
+- **Activités récentes** : Journal des dernières actions
+- **Fournisseurs en attente** : Liste des comptes à valider
+
+### 🔔 Notifications
+- Système de notifications pour les utilisateurs
+- Notifications lors d'actions importantes (acceptation/rejet candidature, validation compte, etc.)
+
+---
+
+## 🛣 API Routes
+
+### Routes publiques
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| POST | `/api/register` | Inscription |
+| POST | `/api/login` | Connexion |
+| POST | `/api/forgot-password` | Demande de réinitialisation |
+| POST | `/api/reset-password` | Réinitialisation avec token |
+| GET | `/api/appels-offres` | Liste des appels d'offres (public) |
+| GET | `/api/appels-offres/{id}` | Détails d'un appel d'offre (public) |
+
+### Routes authentifiées
+
+#### Utilisateur
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| POST | `/api/logout` | Déconnexion |
+| GET | `/api/me` | Informations utilisateur connecté |
+| PUT | `/api/update-password` | Changer le mot de passe |
+
+#### Appels d'Offres (Responsable/Admin)
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| POST | `/api/appels-offres` | Créer un appel d'offre |
+| PUT | `/api/appels-offres/{id}` | Modifier un appel d'offre |
+| POST | `/api/appels-offres/{id}/publish` | Publier un appel d'offre |
+| POST | `/api/appels-offres/{id}/close` | Clôturer un appel d'offre |
+| GET | `/api/responsable/mes-appels-offres` | Liste des AO du responsable |
+| GET | `/api/responsable/appels-offres/{id}/candidatures-recues` | Candidatures d'un AO |
+
+#### Candidatures
+| Méthode | Route | Description | Rôle |
+|---------|-------|-------------|------|
+| POST | `/api/appels-offres/{id}/candidatures` | Soumettre une candidature | FOURNISSEUR |
+| PUT | `/api/candidatures/{id}` | Modifier une candidature | FOURNISSEUR |
+| GET | `/api/candidatures` | Liste des candidatures | Tous |
+| GET | `/api/candidatures/{id}` | Détails d'une candidature | Tous |
+| POST | `/api/candidatures/{id}/accept` | Accepter une candidature | RESPONSABLE/ADMIN |
+| POST | `/api/candidatures/{id}/reject` | Rejeter une candidature | RESPONSABLE/ADMIN |
+
+#### Fournisseur
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/api/fournisseur/profile` | Profil du fournisseur |
+| PUT | `/api/fournisseur/profile` | Modifier le profil |
+| GET | `/api/fournisseur/candidatures` | Candidatures du fournisseur |
+| GET | `/api/fournisseur/documents-legaux` | Documents légaux |
+| POST | `/api/fournisseur/documents-legaux` | Uploader un document |
+| DELETE | `/api/fournisseur/documents-legaux/{id}` | Supprimer un document |
+| GET | `/api/suggestions` | Suggestions du fournisseur |
+| POST | `/api/suggestions` | Envoyer une suggestion |
+
+#### Admin
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/api/admin/users` | Liste des utilisateurs |
+| POST | `/api/admin/users/{id}/activate` | Activer un utilisateur |
+| POST | `/api/admin/users/{id}/deactivate` | Désactiver un utilisateur |
+| GET | `/api/admin/logs` | Journal des activités |
+| POST | `/api/admin/responsables` | Créer un responsable |
+| PUT | `/api/admin/responsables/{id}` | Modifier un responsable |
+| DELETE | `/api/admin/responsables/{id}` | Supprimer un responsable |
+| GET | `/api/admin/dashboard-stats` | Statistiques du dashboard |
+| GET | `/api/admin/appels-offres-dashboard` | Liste des AO pour dashboard |
+| GET | `/api/admin/fournisseurs-dashboard` | Liste des fournisseurs |
+| GET | `/api/admin/responsables-dashboard` | Liste des responsables |
+| GET | `/api/admin/recent-activities` | Activités récentes |
+| POST | `/api/admin/fournisseurs/{id}/validate` | Valider un fournisseur |
+| POST | `/api/admin/fournisseurs/{id}/reject` | Rejeter un fournisseur |
+| GET | `/api/admin/suggestions` | Toutes les suggestions |
+| PUT | `/api/admin/suggestions/{id}` | Modifier le statut d'une suggestion |
+
+---
+
+## 🔒 Authentification et autorisation
+
+### Sanctum
+- Tokens d'authentification
+- Middleware `auth:sanctum` pour protéger les routes
+- Tokens stockés en base de données
+
+### Rôles et permissions
+- **ADMIN** : Accès complet
+- **RESPONSABLE_MARCHE** : Gestion de ses appels d'offres
+- **FOURNISSEUR** : Gestion de son profil et candidatures
+
+### Policies
+- `AppelOffrePolicy` : Autorisation sur les appels d'offres
+- `CandidaturePolicy` : Autorisation sur les candidatures
+- `DocumentPolicy` : Autorisation sur les documents
+
+---
+
+## 🔧 Services et logique métier
+
+### AppelOffreService
+- Logique de création/modification des appels d'offres
+- Génération automatique de références uniques
+- Gestion des statuts
+
+### NotificationService
+- Envoi de notifications aux utilisateurs
+- Notifications par email (optionnel)
+- Stockage en base de données
+
+---
+
+## 📝 Notes importantes
+
+- Les fournisseurs sont créés avec `is_active = false` et doivent être validés par l'admin
+- Les appels d'offres sont créés en statut `draft` et doivent être publiés
+- Un fournisseur ne peut soumettre qu'une seule candidature par appel d'offre
+- Les candidatures peuvent être modifiées uniquement si le statut est `submitted`
+- Les références des appels d'offres sont générées automatiquement au format `AO-YYYY-XXXXX`
+
+---
+
+## 🚀 Commandes utiles
+
+```bash
+# Créer une migration
+php artisan make:migration create_table_name
+
+# Exécuter les migrations
+php artisan migrate
+
+# Créer un seeder
+php artisan make:seeder SeederName
+
+# Exécuter les seeders
+php artisan db:seed
+
+# Créer un contrôleur
+php artisan make:controller ControllerName
+
+# Créer un modèle avec migration
+php artisan make:model ModelName -m
+```
+
+---
+
+## 📞 Support
+
+Pour toute question ou problème, consultez la documentation Laravel ou contactez l'équipe de développement.
