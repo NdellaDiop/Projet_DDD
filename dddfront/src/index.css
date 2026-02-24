@@ -1,0 +1,234 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dakar Dem Dikk - Portail des Appels d'Offres
+   Design System: Institutionnel moderne, confiance & transparence
+*/
+
+@layer base {
+  :root {
+    /* Core brand colors - Sénégal inspired */
+    --background: 45 30% 98%;
+    --foreground: 210 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 25% 15%;
+
+    /* Primary - Vert émeraude (confiance, croissance) */
+    --primary: 158 64% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Bleu institutionnel */
+    --secondary: 215 50% 23%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted backgrounds */
+    --muted: 45 20% 94%;
+    --muted-foreground: 210 15% 45%;
+
+    /* Accent - Jaune doré (dynamisme, Sénégal) */
+    --accent: 42 95% 55%;
+    --accent-foreground: 210 25% 15%;
+
+    /* Destructive */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders and inputs */
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 158 64% 32%;
+
+    --radius: 0.625rem;
+
+    /* Custom semantic tokens */
+    --success: 158 64% 40%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 42 95% 55%;
+    --warning-foreground: 210 25% 15%;
+    
+    --info: 215 50% 45%;
+    --info-foreground: 0 0% 100%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(158, 64%, 32%) 0%, hsl(215, 50%, 23%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(42, 95%, 55%) 0%, hsl(42, 85%, 45%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(45, 30%, 98%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(210 25% 15% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(210 25% 15% / 0.08), 0 2px 4px -2px hsl(210 25% 15% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(210 25% 15% / 0.08), 0 4px 6px -4px hsl(210 25% 15% / 0.05);
+    --shadow-xl: 0 20px 25px -5px hsl(210 25% 15% / 0.1), 0 8px 10px -6px hsl(210 25% 15% / 0.05);
+    --shadow-glow: 0 0 40px hsl(158, 64%, 32%, 0.15);
+
+    /* Sidebar (keeping for compatibility) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 210 25% 15%;
+    --sidebar-primary: 158 64% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 45 20% 94%;
+    --sidebar-accent-foreground: 210 25% 15%;
+    --sidebar-border: 210 20% 88%;
+    --sidebar-ring: 158 64% 32%;
+  }
+
+  .dark {
+    --background: 215 35% 10%;
+    --foreground: 45 20% 95%;
+
+    --card: 215 30% 14%;
+    --card-foreground: 45 20% 95%;
+
+    --popover: 215 30% 14%;
+    --popover-foreground: 45 20% 95%;
+
+    --primary: 158 55% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 40% 35%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 215 25% 20%;
+    --muted-foreground: 210 15% 65%;
+
+    --accent: 42 90% 55%;
+    --accent-foreground: 210 25% 10%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 22%;
+    --input: 215 25% 22%;
+    --ring: 158 55% 45%;
+
+    --sidebar-background: 215 35% 12%;
+    --sidebar-foreground: 45 20% 95%;
+    --sidebar-primary: 158 55% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 25% 20%;
+    --sidebar-accent-foreground: 45 20% 95%;
+    --sidebar-border: 215 25% 22%;
+    --sidebar-ring: 158 55% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-accent {
+    background: var(--gradient-accent);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .animate-fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.4s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out forwards;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-soft {
+    animation: pulseSoft 3s ease-in-out infinite;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
