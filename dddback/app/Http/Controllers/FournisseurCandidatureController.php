@@ -124,9 +124,29 @@ class FournisseurCandidatureController extends Controller
             'ninea' => 'nullable|string|max:50',
             'rccm' => 'nullable|string|max:50',
             'quitus_fiscal' => 'nullable|string|max:50',
+            'photo_profil' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $fournisseur->update($request->all());
+        $data = $request->except('photo_profil');
+
+        // Gérer l'upload de la photo de profil
+        if ($request->hasFile('photo_profil')) {
+            // Supprimer l'ancienne photo si elle existe
+            if ($fournisseur->photo_profil) {
+                $oldPhotoPath = public_path('storage/' . $fournisseur->photo_profil);
+                if (file_exists($oldPhotoPath)) {
+                    unlink($oldPhotoPath);
+                }
+            }
+
+            // Uploader la nouvelle photo
+            $photo = $request->file('photo_profil');
+            $photoName = 'fournisseur_' . $fournisseur->id . '_' . time() . '.' . $photo->getClientOriginalExtension();
+            $photoPath = $photo->storeAs('profiles', $photoName, 'public');
+            $data['photo_profil'] = $photoPath;
+        }
+
+        $fournisseur->update($data);
         $this->log('update_fournisseur_profile', "Mise à jour profil fournisseur #{$fournisseur->id}");
 
         return response()->json($fournisseur);

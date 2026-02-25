@@ -22,10 +22,12 @@ class Candidature extends Model
         'date_soumission',
         'statut',
         'commentaires',
+        'montant_propose',
     ];
 
     protected $casts = [
         'date_soumission' => 'datetime',
+        'montant_propose' => 'decimal:2',
     ];
 
     /**

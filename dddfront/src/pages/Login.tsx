@@ -96,15 +96,16 @@ export default function Login() {
         description: `Bienvenue, ${loggedInUser.name}.`,
       });
 
-      // Utilisation de window.location.href pour garantir le rechargement et la redirection
+      // Utiliser navigate au lieu de window.location.href pour éviter le rechargement
+      // et le double chargement
       if (isAdmin) {
-        window.location.href = "/admin"; 
+        navigate("/admin", { replace: true });
       } else if (roleName === "FOURNISSEUR") {
-        window.location.href = "/fournisseur/dashboard";
+        navigate("/fournisseur/dashboard", { replace: true });
       } else if (roleName === "RESPONSABLE_MARCHE") {
-        window.location.href = "/responsable/dashboard";
+        navigate("/responsable/dashboard", { replace: true });
       } else {
-        window.location.href = "/appels-offres";
+        navigate("/appels-offres", { replace: true });
       }
     } catch (error: any) {
       const errorMessage =

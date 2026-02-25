@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AppelOffre;
 use App\Models\User;
+use App\Models\Candidature;
 use Illuminate\Database\Eloquent\Collection;
 
 class AppelOffreService
@@ -79,6 +80,23 @@ class AppelOffreService
     public function closeAppelOffre(AppelOffre $appelOffre): AppelOffre
     {
         $appelOffre->update(['statut' => AppelOffre::STATUS_CLOSED]);
+        
+        // Notifier tous les fournisseurs qui ont postulé à cet appel d'offre
+        $candidatures = Candidature::where('appel_offre_id', $appelOffre->id)
+            ->with('fournisseur.user')
+            ->get();
+        
+        $notificationService = app(\App\Services\NotificationService::class);
+        
+        foreach ($candidatures as $candidature) {
+            if ($candidature->fournisseur && $candidature->fournisseur->user) {
+                $notificationService->notifyUser(
+                    $candidature->fournisseur->user->id,
+                    "L'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference}) a été clôturé. Les candidatures ne sont plus acceptées."
+                );
+            }
+        }
+        
         return $appelOffre;
     }
 }

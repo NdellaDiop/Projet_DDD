@@ -59,6 +59,7 @@ interface Document {
   categorie: string;
   type_fichier: string;
   chemin_fichier: string;
+  url?: string;
   created_at: string;
 }
 
@@ -71,6 +72,7 @@ interface FournisseurProfile {
   ninea?: string;
   rccm?: string;
   quitus_fiscal?: string;
+  photo_profil?: string;
 }
 
 interface Suggestion {
@@ -99,10 +101,9 @@ export default function FournisseurDashboard() {
     adresse: "",
     telephone: "",
     email_contact: "",
-    ninea: "",
-    rccm: "",
-    quitus_fiscal: "",
   });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   // États pour la modification de candidature
   const [editingCandidature, setEditingCandidature] = useState<Candidature | null>(null);
@@ -137,9 +138,6 @@ export default function FournisseurDashboard() {
         adresse: profileRes.data.adresse || "",
         telephone: profileRes.data.telephone || "",
         email_contact: profileRes.data.email_contact || "",
-        ninea: profileRes.data.ninea || "",
-        rccm: profileRes.data.rccm || "",
-        quitus_fiscal: profileRes.data.quitus_fiscal || "",
       });
     } catch (error: any) {
       console.error("Erreur chargement dashboard:", error);
@@ -151,18 +149,117 @@ export default function FournisseurDashboard() {
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!api) return;
+    
+    // Validation côté client
+    const nomEntreprise = profileForm.nom_entreprise?.trim() || '';
+    const adresse = profileForm.adresse?.trim() || '';
+    const telephone = profileForm.telephone?.trim() || '';
+    const emailContact = profileForm.email_contact?.trim() || '';
+    
+    if (!nomEntreprise || !adresse || !telephone || !emailContact) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez remplir tous les champs obligatoires",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailContact)) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez entrer une adresse email valide",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
-      const response = await api.put("/api/fournisseur/profile", profileForm);
+      const formData = new FormData();
+      formData.append('nom_entreprise', nomEntreprise);
+      formData.append('adresse', adresse);
+      formData.append('telephone', telephone);
+      formData.append('email_contact', emailContact);
+      
+      // Debug: Afficher les valeurs dans la console
+      console.log('Données envoyées:', {
+        nom_entreprise: nomEntreprise,
+        adresse: adresse,
+        telephone: telephone,
+        email_contact: emailContact,
+        hasPhoto: !!photoFile
+      });
+      
+      if (photoFile) {
+        // Vérifier que le fichier est bien une image
+        if (!photoFile.type.startsWith('image/')) {
+          toast({
+            title: "Erreur",
+            description: "Le fichier sélectionné doit être une image (JPG, PNG, GIF)",
+            variant: "destructive",
+          });
+          return;
+        }
+        // Vérifier la taille (max 2MB)
+        if (photoFile.size > 2 * 1024 * 1024) {
+          toast({
+            title: "Erreur",
+            description: "L'image ne doit pas dépasser 2MB",
+            variant: "destructive",
+          });
+          return;
+        }
+        formData.append('photo_profil', photoFile);
+      }
+
+      // Ne pas définir Content-Type manuellement, axios le fait automatiquement pour FormData
+      const response = await api.put("/api/fournisseur/profile", formData);
       setProfile(response.data);
       setEditingProfile(false);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      
+      // Recharger le profil
+      try {
+        const profileRes = await api.get("/api/fournisseur/profile");
+        setProfile(profileRes.data);
+      } catch (err) {
+        console.error("Erreur rechargement profil:", err);
+      }
+      
       toast({
         title: "Profil mis à jour",
         description: "Vos informations ont été enregistrées avec succès",
       });
     } catch (error: any) {
+      console.error("Erreur mise à jour profil:", error);
+      console.error("Response data:", error.response?.data);
+      
+      let errorMessage = "Erreur lors de la mise à jour";
+      
+      if (error.response?.data?.errors) {
+        // Afficher toutes les erreurs de validation
+        const errors = error.response.data.errors;
+        const errorList = Object.entries(errors)
+          .map(([field, messages]: [string, any]) => {
+            const fieldName = field === 'nom_entreprise' ? 'Nom de l\'entreprise' :
+                            field === 'email_contact' ? 'Email de contact' :
+                            field === 'telephone' ? 'Téléphone' :
+                            field === 'adresse' ? 'Adresse' :
+                            field === 'photo_profil' ? 'Photo de profil' : field;
+            return `${fieldName}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+          })
+          .join('; ');
+        errorMessage = errorList;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
       toast({
-        title: "Erreur",
-        description: error.response?.data?.message || "Erreur lors de la mise à jour",
+        title: "Erreur de validation",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -335,8 +432,18 @@ export default function FournisseurDashboard() {
         
         {/* EN-TÊTE PROFIL */}
         <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl mb-3">
-              {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
+            <div className="relative mb-3">
+              {profile?.photo_profil ? (
+                <img 
+                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
+                  alt="Photo de profil"
+                  className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
+                  {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
+            </div>
+              )}
             </div>
             <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={profile?.nom_entreprise || user?.name}>
               {profile?.nom_entreprise || user?.name}
@@ -403,9 +510,9 @@ export default function FournisseurDashboard() {
                 onClick={handleLogout}
             >
                 <LogOut className="w-4 h-4 mr-3" />
-                Déconnexion
-            </Button>
-        </div>
+                 Déconnexion
+               </Button>
+            </div>
       </aside>
 
       {/* CONTENU PRINCIPAL */}
@@ -434,82 +541,82 @@ export default function FournisseurDashboard() {
         {/* VUE D'ENSEMBLE */}
         {activeTab === "overview" && (
             <div className="space-y-6 animate-in fade-in duration-500">
-                {/* Cartes statistiques */}
+        {/* Cartes statistiques */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Candidatures totales</CardTitle>
                         <div className="bg-blue-50 p-2 rounded-lg"><FileText className="w-4 h-4 text-blue-600" /></div>
-                      </CardHeader>
-                      <CardContent>
+              </CardHeader>
+              <CardContent>
                         <div className="text-2xl font-bold text-slate-800">{stats.candidatures_total}</div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">En cours</CardTitle>
                         <div className="bg-orange-50 p-2 rounded-lg"><Clock className="w-4 h-4 text-orange-600" /></div>
-                      </CardHeader>
-                      <CardContent>
+              </CardHeader>
+              <CardContent>
                         <div className="text-2xl font-bold text-slate-800">{stats.candidatures_en_cours}</div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Acceptées</CardTitle>
                         <div className="bg-green-50 p-2 rounded-lg"><Award className="w-4 h-4 text-green-600" /></div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{stats.candidatures_acceptees}</div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{stats.candidatures_acceptees}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Documents</CardTitle>
                         <div className="bg-purple-50 p-2 rounded-lg"><Upload className="w-4 h-4 text-purple-600" /></div>
-                      </CardHeader>
-                      <CardContent>
+              </CardHeader>
+              <CardContent>
                         <div className="text-2xl font-bold text-slate-800">{stats.documents_total}</div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
 
                 <Card className="border-none shadow-sm">
-                    <CardHeader>
-                        <CardTitle>Dernières candidatures</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {candidatures.length === 0 ? (
+              <CardHeader>
+                <CardTitle>Dernières candidatures</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {candidatures.length === 0 ? (
                             <p className="text-muted-foreground text-center py-8">Aucune candidature pour le moment.</p>
-                        ) : (
+                ) : (
                             <div className="space-y-3">
-                                {candidatures.slice(0, 5).map((candidature) => (
+                    {candidatures.slice(0, 5).map((candidature) => (
                                     <div key={candidature.id} className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-slate-50 transition-colors">
-                                        <div className="flex-1">
+                        <div className="flex-1">
                                             <h4 className="font-semibold text-slate-800">{candidature.appel_offre.titre}</h4>
                                             <div className="flex gap-4 mt-1">
                                                 <span className="text-xs text-muted-foreground">Réf: {candidature.appel_offre.numero_reference}</span>
                                                 <span className="text-xs text-muted-foreground">Soumis le: {new Date(candidature.date_soumission).toLocaleDateString()}</span>
                                             </div>
-                                        </div>
-                                        <div>{getStatutBadge(candidature.statut)}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                        </div>
+                        <div>{getStatutBadge(candidature.statut)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             </div>
         )}
 
@@ -523,57 +630,69 @@ export default function FournisseurDashboard() {
                 </div>
                 <Card className="border-none shadow-sm">
                     <CardContent className="p-6">
-                        {candidatures.length === 0 ? (
-                            <div className="text-center py-12">
+                {candidatures.length === 0 ? (
+                  <div className="text-center py-12">
                                 <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
                                 <p className="text-muted-foreground">Vous n'avez pas encore postulé à des appels d'offres.</p>
                                 <Button className="mt-4" onClick={() => navigate("/appels-offres")}>
                                     Consulter les offres disponibles
-                                </Button>
-                            </div>
-                        ) : (
+                    </Button>
+                  </div>
+                ) : (
                             <div className="grid gap-4">
-                                {candidatures.map((candidature) => (
+                    {candidatures.map((candidature) => (
                                     <div key={candidature.id} className="border rounded-lg p-6 bg-white hover:shadow-md transition-all">
                                         <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
                                             <div className="flex-1 space-y-3">
-                                                <div>
+                              <div>
                                                     <h3 className="text-lg font-bold text-slate-800">{candidature.appel_offre.titre}</h3>
                                                     <Badge variant="outline" className="mt-1">{candidature.appel_offre.numero_reference}</Badge>
-                                                </div>
+                              </div>
                                                 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                                                     <div className="flex justify-between md:justify-start gap-2">
                                                         <span className="text-muted-foreground">Date limite:</span>
                                                         <span className="font-medium">{new Date(candidature.appel_offre.date_limite).toLocaleDateString()}</span>
-                                                    </div>
+                              </div>
                                                     <div className="flex justify-between md:justify-start gap-2">
                                                         <span className="text-muted-foreground">Soumis le:</span>
                                                         <span className="font-medium">{new Date(candidature.date_soumission).toLocaleDateString()}</span>
-                                                    </div>
-                                                    {candidature.montant_propose && (
+                              </div>
+                                                    {candidature.montant_propose !== null && candidature.montant_propose !== undefined && candidature.montant_propose > 0 && (
                                                         <div className="flex justify-between md:justify-start gap-2">
                                                             <span className="text-muted-foreground">Montant:</span>
                                                             <span className="font-medium text-primary">{candidature.montant_propose.toLocaleString()} FCFA</span>
-                                                        </div>
+                                </div>
+                              )}
+                                                    {(!candidature.montant_propose || candidature.montant_propose === 0) && (
+                                                        <div className="flex justify-between md:justify-start gap-2">
+                                                            <span className="text-muted-foreground">Montant:</span>
+                                                            <span className="font-medium text-orange-600">Non renseigné</span>
+                            </div>
                                                     )}
-                                                </div>
+                          </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
                                                 {getStatutBadge(candidature.statut)}
-                                                {(candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') && (
+                                                {(candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') && 
+                                                 candidature.appel_offre.statut !== 'closed' && (
                                                   <Button variant="outline" size="sm" onClick={() => handleEditClick(candidature)}>
                                                       Modifier
                                                   </Button>
                                                 )}
+                                                {candidature.appel_offre.statut === 'closed' && (
+                                                  <Badge variant="outline" className="text-xs">
+                                                    Appel d'offre clôturé
+                                                  </Badge>
+                                                )}
                                             </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             </div>
         )}
 
@@ -581,11 +700,11 @@ export default function FournisseurDashboard() {
         {activeTab === "documents" && (
             <div className="animate-in fade-in duration-500">
                 <Card className="border-none shadow-sm">
-                    <CardHeader>
+              <CardHeader>
                         <CardTitle>Documents requis</CardTitle>
                         <CardDescription>Maintenez vos documents à jour pour pouvoir postuler.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
+              </CardHeader>
+              <CardContent className="space-y-6">
                         {["RCCM", "NINEA", "QUITUS_FISCAL"].map((typeDoc) => (
                             <div key={typeDoc} className="space-y-3 p-4 border rounded-lg bg-white">
                                 <div className="flex justify-between items-center">
@@ -602,14 +721,14 @@ export default function FournisseurDashboard() {
                                 </div>
                                 
                                 <div className="flex items-center gap-4">
-                                    <Input
-                                        type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png"
+                    <Input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
                                         className="max-w-md bg-slate-50"
                                         onChange={(e) => handleDocumentUpload(e, typeDoc)}
-                                        disabled={uploadingDoc}
-                                    />
-                                </div>
+                      disabled={uploadingDoc}
+                    />
+                  </div>
 
                                 {documents.filter((d) => d.categorie === typeDoc).map((doc) => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 mt-3">
@@ -621,18 +740,59 @@ export default function FournisseurDashboard() {
                                                 <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
                                                 <p className="text-xs text-muted-foreground">Ajouté le {new Date(doc.created_at).toLocaleDateString()}</p>
                                             </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" onClick={() => window.open(`/storage/${doc.chemin_fichier}`, "_blank")}>
-                                                <Eye className="w-4 h-4" />
-                                            </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                                                onClick={async () => {
+                                                    if (!api) return;
+                                                    
+                                                    try {
+                                                        // Télécharger le document via l'API avec authentification
+                                                        const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                                            responseType: 'blob'
+                                                        });
+                                                        
+                                                        // Créer un blob et l'ouvrir
+                                                        const blob = new Blob([response.data]);
+                                                        const url = window.URL.createObjectURL(blob);
+                                                        const link = document.createElement('a');
+                                                        link.href = url;
+                                                        link.target = '_blank';
+                                                        link.rel = 'noopener noreferrer';
+                                                        
+                                                        // Déterminer le type MIME et l'extension
+                                                        const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                                        const extension = contentType.includes('pdf') ? '.pdf' 
+                                                            : contentType.includes('image') ? '.png'
+                                                            : contentType.includes('word') ? '.docx'
+                                                            : '.pdf';
+                                                        
+                                                        link.download = doc.nom_fichier || `document${extension}`;
+                                                        document.body.appendChild(link);
+                                                        link.click();
+                                                        document.body.removeChild(link);
+                                                        window.URL.revokeObjectURL(url);
+                                                    } catch (error: any) {
+                                                        console.error("Erreur ouverture document:", error);
+                                                        toast({
+                                                            title: "Erreur",
+                                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                                            variant: "destructive"
+                                                        });
+                                                    }
+                                                }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                                             <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDocumentDelete(doc.id)}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                         ))}
                     </CardContent>
                 </Card>
@@ -650,16 +810,16 @@ export default function FournisseurDashboard() {
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleCreateSuggestion} className="space-y-4">
-                                <div className="space-y-2">
+                <div className="space-y-2">
                                     <Label htmlFor="sujet">Sujet</Label>
-                                    <Input 
+                    <Input
                                         id="sujet"
                                         value={newSuggestion.sujet}
                                         onChange={(e) => setNewSuggestion({ ...newSuggestion, sujet: e.target.value })}
                                         placeholder="Ex: Amélioration du dashboard..."
                                         required
-                                    />
-                                </div>
+                    />
+                  </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="message">Message</Label>
                                     <Textarea 
@@ -670,15 +830,15 @@ export default function FournisseurDashboard() {
                                         required
                                         className="min-h-[150px]"
                                     />
-                                </div>
+                      </div>
                                 <Button type="submit" className="w-full">
                                     Envoyer ma suggestion
-                                </Button>
+                        </Button>
                             </form>
                         </CardContent>
                     </Card>
                 </div>
-                
+
                 <div className="lg:col-span-2">
                     <Card className="border-none shadow-sm h-full">
                         <CardHeader>
@@ -689,7 +849,7 @@ export default function FournisseurDashboard() {
                                 <div className="text-center py-12 text-muted-foreground">
                                     <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-20" />
                                     <p>Vous n'avez pas encore envoyé de suggestions.</p>
-                                </div>
+                  </div>
                             ) : (
                                 <div className="space-y-4">
                                     {suggestions.map((sug) => (
@@ -699,19 +859,19 @@ export default function FournisseurDashboard() {
                                                 <Badge variant={sug.statut === 'pending' ? 'outline' : 'secondary'}>
                                                     {sug.statut === 'pending' ? 'En attente' : sug.statut}
                                                 </Badge>
-                                            </div>
+                      </div>
                                             <p className="text-sm text-slate-600 whitespace-pre-line">{sug.message}</p>
                                             <p className="text-xs text-muted-foreground pt-2 border-t mt-2">
                                                 Envoyé le {new Date(sug.created_at).toLocaleDateString()}
                                             </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                    </div>
+                  ))}
                 </div>
-            </div>
+                            )}
+              </CardContent>
+            </Card>
+                        </div>
+                      </div>
         )}
 
         {/* MON PROFIL */}
@@ -725,63 +885,145 @@ export default function FournisseurDashboard() {
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-800">Informations de l'entreprise</h3>
                                     <p className="text-sm text-muted-foreground">Ces informations seront utilisées pour vos documents.</p>
-                                </div>
+                        </div>
                                 <Button onClick={() => setEditingProfile(true)}>
                                     Modifier
                                 </Button>
-                            </div>
+                      </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><Building2 className="w-4 h-4 text-blue-600" /></div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Nom de l'entreprise</p>
-                                            <p className="font-medium text-slate-800">{profile?.nom_entreprise || "-"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><Mail className="w-4 h-4 text-blue-600" /></div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Email de contact</p>
-                                            <p className="font-medium text-slate-800">{profile?.email_contact || "-"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><Phone className="w-4 h-4 text-blue-600" /></div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Téléphone</p>
-                                            <p className="font-medium text-slate-800">{profile?.telephone || "-"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><MapPin className="w-4 h-4 text-blue-600" /></div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Adresse</p>
-                                            <p className="font-medium text-slate-800">{profile?.adresse || "-"}</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4 bg-slate-50 p-6 rounded-lg border border-slate-100">
-                                    <h4 className="font-semibold text-sm text-slate-600 mb-2">Identifiants Légaux</h4>
-                                    <div className="grid grid-cols-1 gap-4">
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">NINEA</p>
-                                            <p className="font-mono font-medium">{profile?.ninea || "Non renseigné"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">RCCM</p>
-                                            <p className="font-mono font-medium">{profile?.rccm || "Non renseigné"}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Quitus Fiscal</p>
-                                            <p className="font-mono font-medium">{profile?.quitus_fiscal || "Non renseigné"}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Building2 className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Nom de l'entreprise</p>
+                                        <p className="font-medium text-slate-800">{profile?.nom_entreprise || "-"}</p>
                         </div>
+                      </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Mail className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Email de contact</p>
+                                        <p className="font-medium text-slate-800">{profile?.email_contact || "-"}</p>
+                        </div>
+                      </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Phone className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Téléphone</p>
+                                        <p className="font-medium text-slate-800">{profile?.telephone || "-"}</p>
+                          </div>
+                        </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><MapPin className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">Adresse</p>
+                                        <p className="font-medium text-slate-800">{profile?.adresse || "-"}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Documents légaux uploadés */}
+                            <div className="mt-8">
+                                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-primary" />
+                                    Documents légaux uploadés
+                                </h3>
+                                {documents.length === 0 ? (
+                                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
+                                        <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                                        <p className="text-muted-foreground">Aucun document légal uploadé.</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Allez dans la section "Documents légaux" pour uploader vos documents.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                                            const docs = documents.filter(d => d.categorie === categorie);
+                                            const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
+                                                : categorie === 'NINEA' ? 'NINEA' 
+                                                : 'Quitus Fiscal';
+                                            
+                                            return (
+                                                <div key={categorie} className="border rounded-lg p-4 bg-white">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="font-semibold text-slate-700">{categorieLabel}</h4>
+                                                        {docs.length > 0 ? (
+                                                            <Badge className="bg-green-100 text-green-700 border-none">
+                                                                {docs.length} document{docs.length > 1 ? 's' : ''}
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
+                                                                Aucun document
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    {docs.length > 0 && (
+                                                        <div className="space-y-2 mt-3">
+                                                            {docs.map((doc) => (
+                                                                <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="bg-white p-2 rounded border border-slate-200">
+                                                                            <FileText className="w-4 h-4 text-blue-600" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                Ajouté le {new Date(doc.created_at).toLocaleDateString()}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <Button 
+                                                                        size="sm" 
+                                                                        variant="outline" 
+                                                                        onClick={async () => {
+                                                                            if (!api) return;
+                                                                            
+                                                                            try {
+                                                                                const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                                                                    responseType: 'blob'
+                                                                                });
+                                                                                
+                                                                                const blob = new Blob([response.data]);
+                                                                                const url = window.URL.createObjectURL(blob);
+                                                                                const link = document.createElement('a');
+                                                                                link.href = url;
+                                                                                link.target = '_blank';
+                                                                                link.rel = 'noopener noreferrer';
+                                                                                
+                                                                                const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                                                                const extension = contentType.includes('pdf') ? '.pdf' 
+                                                                                    : contentType.includes('image') ? '.png'
+                                                                                    : contentType.includes('word') ? '.docx'
+                                                                                    : '.pdf';
+                                                                                
+                                                                                link.download = doc.nom_fichier || `document${extension}`;
+                                                                                document.body.appendChild(link);
+                                                                                link.click();
+                                                                                document.body.removeChild(link);
+                                                                                window.URL.revokeObjectURL(url);
+                                                                            } catch (error: any) {
+                                                                                console.error("Erreur téléchargement document:", error);
+                                                                                toast({
+                                                                                    title: "Erreur",
+                                                                                    description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                                                                    variant: "destructive"
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <Eye className="w-4 h-4 mr-2" />
+                                                                        Voir
+                                                                    </Button>
+                          </div>
+                                                            ))}
+                        </div>
+                      )}
+                          </div>
+                                            );
+                                        })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                     </CardContent>
                 </Card>
             </div>
@@ -797,81 +1039,115 @@ export default function FournisseurDashboard() {
           </DialogHeader>
           <form onSubmit={handleProfileUpdate} className="grid gap-4 py-4">
             
+            {/* Photo de profil */}
+            <div className="space-y-2">
+              <Label>Photo de profil</Label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {photoPreview ? (
+                    <img 
+                      src={photoPreview} 
+                      alt="Aperçu" 
+                      className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
+                    />
+                  ) : profile?.photo_profil ? (
+                    <img 
+                      src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
+                      alt="Photo actuelle" 
+                      className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                      {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png,image/jpg,image/gif"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          // Vérifier le type MIME
+                          const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
+                          if (!validTypes.includes(file.type)) {
+                            toast({
+                              title: "Erreur",
+                              description: "Veuillez sélectionner une image valide (JPG, PNG ou GIF)",
+                              variant: "destructive",
+                            });
+                            e.target.value = ''; // Réinitialiser l'input
+                            return;
+                          }
+                          setPhotoFile(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setPhotoPreview(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        } else {
+                          setPhotoFile(null);
+                          setPhotoPreview(null);
+                        }
+                      }}
+                      className="max-w-xs"
+                    />
+                  <p className="text-xs text-muted-foreground mt-1">JPG, PNG ou GIF. Max 2MB</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t my-2"></div>
+            
             {/* Ligne 1 */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                     <Label>Nom de l'entreprise</Label>
-                    <Input 
-                        value={profileForm.nom_entreprise} 
+                        <Input
+                          value={profileForm.nom_entreprise}
                         onChange={(e) => setProfileForm({ ...profileForm, nom_entreprise: e.target.value })} 
-                        required 
-                    />
-                </div>
+                          required
+                        />
+                      </div>
                 <div className="grid gap-2">
                     <Label>Email de contact</Label>
-                    <Input 
-                        type="email" 
-                        value={profileForm.email_contact} 
+                        <Input
+                          type="email"
+                          value={profileForm.email_contact}
                         onChange={(e) => setProfileForm({ ...profileForm, email_contact: e.target.value })} 
-                        required 
-                    />
+                          required
+                        />
                 </div>
-            </div>
+                      </div>
 
             {/* Ligne 2 */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                     <Label>Téléphone</Label>
-                    <Input 
-                        value={profileForm.telephone} 
+                        <Input
+                          value={profileForm.telephone}
                         onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })} 
-                        required 
-                    />
-                </div>
+                          required
+                        />
+                      </div>
                 <div className="grid gap-2">
                     <Label>Adresse</Label>
-                    <Input 
-                        value={profileForm.adresse} 
+                        <Input
+                          value={profileForm.adresse}
                         onChange={(e) => setProfileForm({ ...profileForm, adresse: e.target.value })} 
-                        required 
-                    />
-                </div>
-            </div>
+                          required
+                        />
+                      </div>
+                      </div>
 
-            <div className="border-t my-2"></div>
-            <p className="text-sm font-medium text-slate-500 mb-2">Identifiants légaux</p>
-
-            {/* Ligne 3 */}
-            <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                    <Label>NINEA</Label>
-                    <Input 
-                        value={profileForm.ninea} 
-                        onChange={(e) => setProfileForm({ ...profileForm, ninea: e.target.value })} 
-                    />
-                </div>
-                <div className="grid gap-2">
-                    <Label>RCCM</Label>
-                    <Input 
-                        value={profileForm.rccm} 
-                        onChange={(e) => setProfileForm({ ...profileForm, rccm: e.target.value })} 
-                    />
-                </div>
-            </div>
-
-            {/* Ligne 4 */}
-            <div className="grid grid-cols-2 gap-4">
-                 <div className="grid gap-2">
-                    <Label>Quitus Fiscal</Label>
-                    <Input 
-                        value={profileForm.quitus_fiscal} 
-                        onChange={(e) => setProfileForm({ ...profileForm, quitus_fiscal: e.target.value })} 
-                    />
-                </div>
-            </div>
 
             <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditingProfile(false)}>Annuler</Button>
+                <Button type="button" variant="outline" onClick={() => {
+                  setEditingProfile(false);
+                  setPhotoFile(null);
+                  setPhotoPreview(null);
+                }}>Annuler</Button>
                 <Button type="submit">Enregistrer</Button>
             </DialogFooter>
           </form>
@@ -885,16 +1161,16 @@ export default function FournisseurDashboard() {
             <DialogTitle>Modifier ma candidature</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpdateCandidature} className="space-y-4 py-4">
-            <div className="space-y-2">
+                      <div className="space-y-2">
               <Label>Appel d'offre</Label>
               <div className="p-3 bg-slate-50 border rounded-md text-sm font-medium">
                 {editingCandidature?.appel_offre.titre}
               </div>
-            </div>
-            
-            <div className="space-y-2">
+                      </div>
+
+                      <div className="space-y-2">
               <Label htmlFor="edit-montant">Montant de votre offre (FCFA)</Label>
-              <Input
+                        <Input
                 id="edit-montant"
                 type="number"
                 min="0"
@@ -902,13 +1178,13 @@ export default function FournisseurDashboard() {
                 onChange={(e) => setEditMontant(e.target.value)}
                 required
               />
-            </div>
+                    </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingCandidature(null)}>Annuler</Button>
               <Button type="submit">Mettre à jour</Button>
             </DialogFooter>
-          </form>
+                  </form>
         </DialogContent>
       </Dialog>
 

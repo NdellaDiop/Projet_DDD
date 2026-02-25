@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AppelOffre;
 use App\Models\Candidature;
+use App\Models\Document;
 use App\Models\LogActivite;
 use App\Http\Requests\StoreCandidatureRequest;
 use App\Http\Requests\UpdateCandidatureStatusRequest;
@@ -51,7 +52,7 @@ class CandidatureController extends Controller
     public function show(Candidature $candidature)
     {
         $this->authorize('view', $candidature);
-        return new CandidatureResource($candidature->load(['appelOffre','fournisseur.user']));
+        return new CandidatureResource($candidature->load(['appelOffre','fournisseur.user','documents']));
     }
 
     public function store(StoreCandidatureRequest $request, AppelOffre $appelOffre)
@@ -69,6 +70,30 @@ class CandidatureController extends Controller
 
         if ($existingCandidature) {
             return response()->json(['message' => 'Vous avez déjà postulé à cet appel d\'offre.'], 409);
+        }
+
+        // Vérifier que le fournisseur a bien uploadé tous ses documents légaux
+        $user = Auth::user();
+        $requiredDocs = ['RCCM', 'NINEA', 'QUITUS_FISCAL'];
+        $userDocuments = Document::where('user_id', $user->id)
+            ->whereIn('categorie', $requiredDocs)
+            ->pluck('categorie')
+            ->unique()
+            ->toArray();
+        
+        $missingDocs = array_diff($requiredDocs, $userDocuments);
+        
+        if (!empty($missingDocs)) {
+            $docNames = [
+                'RCCM' => 'RCCM (Registre du Commerce)',
+                'NINEA' => 'NINEA',
+                'QUITUS_FISCAL' => 'Quitus Fiscal'
+            ];
+            $missingNames = array_map(fn($doc) => $docNames[$doc], $missingDocs);
+            return response()->json([
+                'message' => 'Documents légaux manquants. Veuillez uploader les documents suivants avant de postuler : ' . implode(', ', $missingNames),
+                'missing_documents' => $missingDocs
+            ], 422);
         }
 
         $candidature = Candidature::create([
@@ -94,6 +119,12 @@ class CandidatureController extends Controller
         // On ne peut modifier que si le statut est soumis
         if ($candidature->statut !== \App\Models\Candidature::STATUS_SUBMITTED) {
             return response()->json(['message' => 'Impossible de modifier une candidature déjà traitée.'], 403);
+        }
+
+        // Vérifier que l'appel d'offre n'est pas clôturé
+        $candidature->load('appelOffre');
+        if ($candidature->appelOffre->statut === \App\Models\AppelOffre::STATUS_CLOSED) {
+            return response()->json(['message' => 'Impossible de modifier une candidature pour un appel d\'offre clôturé.'], 403);
         }
 
         $candidature->update([

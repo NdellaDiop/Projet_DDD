@@ -26,8 +26,19 @@ class DocumentPolicy
         }
 
         // Un RESPONSABLE_MARCHE peut voir les documents liés à ses appels d'offres
-        if ($user->role->name === 'RESPONSABLE_MARCHE' && $document->appelOffre && $user->id === $document->appelOffre->responsableMarche->user_id) {
-            return true;
+        if ($user->role->name === 'RESPONSABLE_MARCHE') {
+            // Si le document est lié à un appel d'offre
+            if ($document->appelOffre && $user->id === $document->appelOffre->responsableMarche->user_id) {
+                return true;
+            }
+            // Si le document est lié à une candidature d'un de ses appels d'offres
+            if ($document->candidature) {
+                $document->load('candidature.appelOffre.responsableMarche');
+                if ($document->candidature->appelOffre && 
+                    $document->candidature->appelOffre->responsable_marche_id === $user->responsableMarche->id) {
+                    return true;
+                }
+            }
         }
 
         // Un FOURNISSEUR peut voir les documents liés à ses candidatures ou qu'il a uploadés

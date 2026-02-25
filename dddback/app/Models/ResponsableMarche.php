@@ -18,6 +18,7 @@ class ResponsableMarche extends Model
         'departement',
         'fonction',
         'telephone',
+        'photo_profil',
     ];
 
     /**

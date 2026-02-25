@@ -44,7 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('notifications', NotificationController::class)->only(['index','show','update','destroy']);
     Route::put('update-password', [AuthController::class, 'updatePassword']);
 
-    // APPELS D’OFFRES (RESPONSABLE + ADMIN)
+    // APPELS D'OFFRES (RESPONSABLE + ADMIN)
     Route::middleware('role:RESPONSABLE_MARCHE,ADMIN')->group(function () {
         Route::post('appels-offres', [AppelOffreController::class, 'store']);
         Route::put('appels-offres/{appel_offre}', [AppelOffreController::class, 'update']);
@@ -52,16 +52,27 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('appels-offres/{appel_offre}/close', [AppelOffreController::class, 'close']);
         Route::get('responsable/mes-appels-offres', [AppelOffreController::class, 'indexForResponsable']);
         Route::get('responsable/appels-offres/{appel_offre}/candidatures-recues', [AppelOffreController::class, 'getCandidatures']);
+        Route::get('responsable/candidatures/{candidature}/documents-legaux', [DocumentController::class, 'getFournisseurLegalDocuments']);
         
+        // Profil responsable
+        Route::get('responsable/profile', [ResponsableCandidatureController::class, 'showProfile']);
+        Route::put('responsable/profile', [ResponsableCandidatureController::class, 'updateProfile']);
     });
 
     // CANDIDATURES
     Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware('role:FOURNISSEUR');
-Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware('role:FOURNISSEUR');
+    Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware('role:FOURNISSEUR');
     Route::get('candidatures', [CandidatureController::class, 'index']);
     Route::get('candidatures/{candidature}', [CandidatureController::class, 'show']);
     Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
     Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
+
+    // DOCUMENTS
+    Route::post('documents', [DocumentController::class, 'store']);
+    Route::get('documents', [DocumentController::class, 'index']);
+    Route::get('documents/{document}', [DocumentController::class, 'show']);
+    Route::get('documents/{document}/download', [DocumentController::class, 'download']);
+    Route::delete('documents/{document}', [DocumentController::class, 'destroy']);
 
     // ADMIN
     Route::middleware('role:ADMIN')->prefix('admin')->group(function () {

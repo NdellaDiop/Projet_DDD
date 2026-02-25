@@ -34,7 +34,14 @@ import {
   Users,
   BarChart3,
   Briefcase,
-  Settings
+  Settings,
+  FileText,
+  Download,
+  Building2,
+  Mail,
+  Phone,
+  MapPin,
+  AlertCircle
 } from "lucide-react";
 
 interface AppelOffre {
@@ -59,6 +66,16 @@ interface Candidature {
   montant_propose?: number;
 }
 
+interface DocumentLegal {
+  id: number;
+  nom_fichier: string;
+  categorie: string;
+  type_fichier?: string;
+  chemin_fichier: string;
+  url?: string;
+  created_at: string;
+}
+
 export default function ResponsableDashboard() {
   const { api, user, logout } = useAuth();
   const navigate = useNavigate();
@@ -79,9 +96,26 @@ export default function ResponsableDashboard() {
   // État pour voir les candidatures d'un AO
   const [isViewCandidatesOpen, setIsViewCandidatesOpen] = useState(false);
 
+  // État pour voir le dossier d'une candidature
+  const [isViewDossierOpen, setIsViewDossierOpen] = useState(false);
+  const [selectedCandidature, setSelectedCandidature] = useState<Candidature | null>(null);
+  const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+
   // État pour les paramètres
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
+
+  // État pour le profil responsable
+  const [profile, setProfile] = useState<any>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    departement: "",
+    fonction: "",
+    telephone: "",
+  });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -92,8 +126,19 @@ export default function ResponsableDashboard() {
     if (!api) return;
     try {
       setLoading(true);
-      const response = await api.get("/api/responsable/mes-appels-offres");
-      setAppelsOffres(response.data);
+      const [appelsOffresRes, profileRes] = await Promise.all([
+        api.get("/api/responsable/mes-appels-offres"),
+        api.get("/api/responsable/profile").catch(() => ({ data: null }))
+      ]);
+      setAppelsOffres(appelsOffresRes.data);
+      if (profileRes.data) {
+        setProfile(profileRes.data);
+        setProfileForm({
+          departement: profileRes.data.departement || "",
+          fonction: profileRes.data.fonction || "",
+          telephone: profileRes.data.telephone || "",
+        });
+      }
     } catch (error) {
       console.error("Erreur chargement:", error);
     } finally {
@@ -176,6 +221,56 @@ export default function ResponsableDashboard() {
     }
   };
 
+  const [candidatureDocuments, setCandidatureDocuments] = useState<DocumentLegal[]>([]);
+
+  const handleViewDossier = async (candidature: Candidature) => {
+    if (!api) return;
+    
+    // Réinitialiser les états
+    setSelectedCandidature(candidature);
+    setLegalDocuments([]);
+    setCandidatureDocuments([]);
+    setLoadingDocuments(true);
+    setIsViewDossierOpen(true);
+    
+    try {
+      const [legalDocsRes, candidatureDocsRes] = await Promise.all([
+        api.get(`/api/responsable/candidatures/${candidature.id}/documents-legaux`).catch((err) => {
+          console.error("Erreur chargement documents légaux:", err);
+          console.error("Détails erreur:", err.response?.data);
+          return { data: { data: [] } };
+        }),
+        api.get(`/api/candidatures/${candidature.id}`).catch((err) => {
+          console.error("Erreur chargement candidature:", err);
+          return { data: { data: null } };
+        })
+      ]);
+      
+      // La réponse peut être un objet avec une propriété data ou directement un tableau
+      const legalDocsData = legalDocsRes.data?.data || legalDocsRes.data;
+      setLegalDocuments(Array.isArray(legalDocsData) ? legalDocsData : []);
+      
+      // Récupérer les documents de la candidature (offre technique et financière)
+      const candidatureData = candidatureDocsRes.data?.data || candidatureDocsRes.data;
+      if (candidatureData?.documents && Array.isArray(candidatureData.documents)) {
+        setCandidatureDocuments(candidatureData.documents);
+      } else {
+        setCandidatureDocuments([]);
+      }
+    } catch (error: any) {
+      console.error("Erreur chargement documents:", error);
+      toast({ 
+        title: "Erreur", 
+        description: error.response?.data?.message || "Impossible de charger les documents.", 
+        variant: "destructive" 
+      });
+      setLegalDocuments([]);
+      setCandidatureDocuments([]);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const getStatutBadge = (statut: string) => {
     const map: Record<string, any> = {
       draft: { label: "Brouillon", variant: "secondary" },
@@ -194,6 +289,103 @@ export default function ResponsableDashboard() {
       navigate("/connexion");
     } catch (error) {
       window.location.href = "/connexion";
+    }
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!api) return;
+    
+    // Validation côté client
+    if (!profileForm.departement || !profileForm.fonction || !profileForm.telephone) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez remplir tous les champs obligatoires",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      const formData = new FormData();
+      formData.append('departement', profileForm.departement.trim());
+      formData.append('fonction', profileForm.fonction.trim());
+      formData.append('telephone', profileForm.telephone.trim());
+      
+      if (photoFile) {
+        // Vérifier que le fichier est bien une image
+        if (!photoFile.type.startsWith('image/')) {
+          toast({
+            title: "Erreur",
+            description: "Le fichier sélectionné doit être une image (JPG, PNG, GIF)",
+            variant: "destructive",
+          });
+          return;
+        }
+        // Vérifier la taille (max 2MB)
+        if (photoFile.size > 2 * 1024 * 1024) {
+          toast({
+            title: "Erreur",
+            description: "L'image ne doit pas dépasser 2MB",
+            variant: "destructive",
+          });
+          return;
+        }
+        formData.append('photo_profil', photoFile);
+      }
+
+      // Ne pas définir Content-Type manuellement, axios le fait automatiquement pour FormData
+      const response = await api.put("/api/responsable/profile", formData);
+      setProfile(response.data);
+      setEditingProfile(false);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      
+      // Recharger le profil
+      try {
+        const profileRes = await api.get("/api/responsable/profile");
+        setProfile(profileRes.data);
+        setProfileForm({
+          departement: profileRes.data.departement || "",
+          fonction: profileRes.data.fonction || "",
+          telephone: profileRes.data.telephone || "",
+        });
+      } catch (err) {
+        console.error("Erreur rechargement profil:", err);
+      }
+      
+      toast({
+        title: "Profil mis à jour",
+        description: "Vos informations ont été enregistrées avec succès",
+      });
+    } catch (error: any) {
+      console.error("Erreur mise à jour profil:", error);
+      console.error("Response data:", error.response?.data);
+      
+      let errorMessage = "Erreur lors de la mise à jour";
+      
+      if (error.response?.data?.errors) {
+        // Afficher toutes les erreurs de validation
+        const errors = error.response.data.errors;
+        const errorList = Object.entries(errors)
+          .map(([field, messages]: [string, any]) => {
+            const fieldName = field === 'departement' ? 'Département' :
+                            field === 'fonction' ? 'Fonction' :
+                            field === 'telephone' ? 'Téléphone' :
+                            field === 'photo_profil' ? 'Photo de profil' : field;
+            return `${fieldName}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+          })
+          .join('; ');
+        errorMessage = errorList;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      toast({
+        title: "Erreur de validation",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 
@@ -241,8 +433,18 @@ export default function ResponsableDashboard() {
         
         {/* EN-TÊTE PROFIL */}
         <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl mb-3">
-              {user?.name?.charAt(0).toUpperCase()}
+            <div className="relative mb-3">
+              {profile?.photo_profil ? (
+                <img 
+                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
+                  alt="Photo de profil"
+                  className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
+                  {user?.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
             <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={user?.name}>
               {user?.name}
@@ -540,7 +742,7 @@ export default function ResponsableDashboard() {
                                     <div className="flex items-center gap-2">
                                         <h4 className="font-bold text-lg text-slate-800">{cand.fournisseur.nom_entreprise}</h4>
                                         <Badge variant={cand.statut === 'accepted' ? 'default' : cand.statut === 'rejected' ? 'destructive' : 'secondary'}>
-                                            {cand.statut}
+                                            {cand.statut === 'submitted' ? 'Soumise' : cand.statut === 'accepted' ? 'Acceptée' : cand.statut === 'rejected' ? 'Rejetée' : cand.statut}
                                         </Badge>
                                     </div>
                                     <p className="text-sm text-slate-600 flex items-center gap-2">
@@ -567,7 +769,7 @@ export default function ResponsableDashboard() {
                                             </Button>
                                         </>
                                     )}
-                                    <Button size="sm" variant="outline">
+                                    <Button size="sm" variant="outline" onClick={() => handleViewDossier(cand)}>
                                         <Eye className="w-4 h-4 mr-1" /> Voir dossier
                                     </Button>
                                 </div>
@@ -582,12 +784,431 @@ export default function ResponsableDashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Modale Voir Dossier */}
+      <Dialog open={isViewDossierOpen} onOpenChange={(open) => {
+        setIsViewDossierOpen(open);
+        if (!open) {
+          setSelectedCandidature(null);
+          setLegalDocuments([]);
+          setCandidatureDocuments([]);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dossier de candidature</DialogTitle>
+          </DialogHeader>
+          
+          {loadingDocuments ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                <p className="text-sm text-muted-foreground">Chargement du dossier...</p>
+              </div>
+            </div>
+          ) : selectedCandidature ? (
+            <div className="py-4 space-y-6">
+              {/* Informations du fournisseur */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    Informations du fournisseur
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Nom de l'entreprise</p>
+                        <p className="font-medium text-slate-800">{selectedCandidature.fournisseur.nom_entreprise}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Email de contact</p>
+                        <p className="font-medium text-slate-800">{selectedCandidature.fournisseur.email_contact}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Montant proposé */}
+              {selectedCandidature.montant_propose && (
+                <Card className="border-none shadow-sm">
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant de l'offre</h3>
+                    <p className="text-2xl font-bold text-primary">
+                      {selectedCandidature.montant_propose.toLocaleString()} FCFA
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Soumis le {new Date(selectedCandidature.date_soumission).toLocaleDateString()} à {new Date(selectedCandidature.date_soumission).toLocaleTimeString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Documents légaux */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Documents légaux
+                  </h3>
+                  
+                  {loadingDocuments ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                        <p className="text-sm text-muted-foreground">Chargement des documents...</p>
+                      </div>
+                    </div>
+                  ) : legalDocuments.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
+                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-muted-foreground">Aucun document légal disponible pour ce fournisseur.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                        const docs = legalDocuments.filter(d => d.categorie === categorie);
+                        const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
+                          : categorie === 'NINEA' ? 'NINEA' 
+                          : 'Quitus Fiscal';
+                        
+                        return (
+                          <div key={categorie} className="border rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold text-slate-700">{categorieLabel}</h4>
+                              {docs.length > 0 ? (
+                                <Badge className="bg-green-100 text-green-700 border-none">
+                                  {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
+                                  Manquant
+                                </Badge>
+                              )}
+                            </div>
+                            {docs.length > 0 && (
+                              <div className="space-y-2 mt-3">
+                                {docs.map((doc) => (
+                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                      <div className="bg-white p-2 rounded border border-slate-200">
+                                        <FileText className="w-4 h-4 text-blue-600" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Ajouté le {new Date(doc.created_at).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={async () => {
+                                        if (!api) return;
+                                        
+                                        try {
+                                          // Télécharger le document via l'API avec authentification
+                                          const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                            responseType: 'blob'
+                                          });
+                                          
+                                          // Créer un blob et l'ouvrir
+                                          const blob = new Blob([response.data]);
+                                          const url = window.URL.createObjectURL(blob);
+                                          const link = document.createElement('a');
+                                          link.href = url;
+                                          link.target = '_blank';
+                                          link.rel = 'noopener noreferrer';
+                                          
+                                          // Déterminer le type MIME et l'extension
+                                          const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                          const extension = contentType.includes('pdf') ? '.pdf' 
+                                            : contentType.includes('image') ? '.png'
+                                            : contentType.includes('word') ? '.docx'
+                                            : '.pdf';
+                                          
+                                          link.download = doc.nom_fichier || `document${extension}`;
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          document.body.removeChild(link);
+                                          window.URL.revokeObjectURL(url);
+                                        } catch (error: any) {
+                                          console.error("Erreur téléchargement document:", error);
+                                          toast({
+                                            title: "Erreur",
+                                            description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Download className="w-4 h-4 mr-2" />
+                                      Télécharger
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Documents de candidature (Offre technique et financière) */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Documents de la candidature
+                  </h3>
+                  
+                  {candidatureDocuments.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
+                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-muted-foreground">Aucun document de candidature disponible.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {['OFFRE_TECHNIQUE', 'OFFRE_FINANCIERE'].map((categorie) => {
+                        const docs = candidatureDocuments.filter(d => d.categorie === categorie);
+                        const categorieLabel = categorie === 'OFFRE_TECHNIQUE' ? 'Offre technique' : 'Offre financière';
+                        
+                        return (
+                          <div key={categorie} className="border rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold text-slate-700">{categorieLabel}</h4>
+                              {docs.length > 0 ? (
+                                <Badge className="bg-green-100 text-green-700 border-none">
+                                  {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
+                                  Manquant
+                                </Badge>
+                              )}
+                            </div>
+                            {docs.length > 0 && (
+                              <div className="space-y-2 mt-3">
+                                {docs.map((doc) => (
+                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                      <div className="bg-white p-2 rounded border border-slate-200">
+                                        <FileText className="w-4 h-4 text-blue-600" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Ajouté le {new Date(doc.created_at).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={async () => {
+                                        if (!api) return;
+                                        
+                                        try {
+                                          // Télécharger le document via l'API avec authentification
+                                          const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                            responseType: 'blob'
+                                          });
+                                          
+                                          // Créer un blob et l'ouvrir
+                                          const blob = new Blob([response.data]);
+                                          const url = window.URL.createObjectURL(blob);
+                                          const link = document.createElement('a');
+                                          link.href = url;
+                                          link.target = '_blank';
+                                          link.rel = 'noopener noreferrer';
+                                          
+                                          // Déterminer le type MIME et l'extension
+                                          const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                          const extension = contentType.includes('pdf') ? '.pdf' 
+                                            : contentType.includes('image') ? '.png'
+                                            : contentType.includes('word') ? '.docx'
+                                            : '.pdf';
+                                          
+                                          link.download = doc.nom_fichier || `document${extension}`;
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          document.body.removeChild(link);
+                                          window.URL.revokeObjectURL(url);
+                                        } catch (error: any) {
+                                          console.error("Erreur téléchargement document:", error);
+                                          toast({
+                                            title: "Erreur",
+                                            description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Download className="w-4 h-4 mr-2" />
+                                      Télécharger
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Avertissement si documents légaux manquants */}
+              {legalDocuments.length < 3 && (
+                <Card className="border-none shadow-sm bg-orange-50 border-orange-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-orange-800 mb-1">Documents légaux incomplets</p>
+                        <p className="text-xs text-orange-700">
+                          Ce fournisseur n'a pas uploadé tous les documents légaux requis (RCCM, NINEA, Quitus Fiscal). 
+                          Il est recommandé de rejeter cette candidature ou de demander la complétion des documents.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Aucune information disponible.</p>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewDossierOpen(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modale Paramètres */}
-      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={isSettingsOpen} onOpenChange={(open) => {
+        setIsSettingsOpen(open);
+        if (!open) {
+          setPasswordData({ current: "", new: "", confirm: "" });
+          setPhotoFile(null);
+          setPhotoPreview(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Paramètres du compte</DialogTitle>
           </DialogHeader>
+          
+          {/* Section Profil */}
+          <div className="space-y-4 py-4 border-b">
+            <h3 className="font-semibold text-sm">Profil</h3>
+            <form onSubmit={handleProfileUpdate} className="grid gap-4">
+              {/* Photo de profil */}
+              <div className="space-y-2">
+                <Label>Photo de profil</Label>
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    {photoPreview ? (
+                      <img 
+                        src={photoPreview} 
+                        alt="Aperçu" 
+                        className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
+                      />
+                    ) : profile?.photo_profil ? (
+                      <img 
+                        src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
+                        alt="Photo actuelle" 
+                        className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                        {user?.name?.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png,image/jpg,image/gif"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          // Vérifier le type MIME
+                          const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
+                          if (!validTypes.includes(file.type)) {
+                            toast({
+                              title: "Erreur",
+                              description: "Veuillez sélectionner une image valide (JPG, PNG ou GIF)",
+                              variant: "destructive",
+                            });
+                            e.target.value = ''; // Réinitialiser l'input
+                            return;
+                          }
+                          setPhotoFile(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setPhotoPreview(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        } else {
+                          setPhotoFile(null);
+                          setPhotoPreview(null);
+                        }
+                      }}
+                      className="max-w-xs"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG ou GIF. Max 2MB</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Département</Label>
+                  <Input
+                    value={profileForm.departement}
+                    onChange={(e) => setProfileForm({ ...profileForm, departement: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Fonction</Label>
+                  <Input
+                    value={profileForm.fonction}
+                    onChange={(e) => setProfileForm({ ...profileForm, fonction: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Téléphone</Label>
+                <Input
+                  value={profileForm.telephone}
+                  onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })}
+                  required
+                />
+              </div>
+              <Button type="submit" size="sm">Enregistrer le profil</Button>
+            </form>
+          </div>
+
+          {/* Section Mot de passe */}
           <form onSubmit={handleUpdatePassword} className="grid gap-4 py-4">
              <div className="grid gap-2">
               <Label>Mot de passe actuel</Label>

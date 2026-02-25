@@ -25,7 +25,7 @@ const LoadingScreen = () => (
 );
 
 function App() {
-  const { isAuthenticated, user, loading, isAdmin } = useAuth();
+  const { isAuthenticated, user, loading, isReady, isAdmin } = useAuth();
 
   return (
     <>
@@ -43,10 +43,10 @@ function App() {
         <Route
           path="/admin"
           element={
-            isAuthenticated && isAdmin ? (
-              <AdminDashboard />
-            ) : loading ? (
+            !isReady ? (
               <LoadingScreen />
+            ) : isAuthenticated && isAdmin ? (
+              <AdminDashboard />
             ) : (
               <Navigate to="/connexion" replace />
             )
@@ -56,10 +56,10 @@ function App() {
         <Route
           path="/fournisseur/dashboard"
           element={
-            isAuthenticated && user?.role?.name === 'FOURNISSEUR' ? (
-              <FournisseurDashboard />
-            ) : loading ? (
+            !isReady ? (
               <LoadingScreen />
+            ) : isAuthenticated && user?.role?.name === 'FOURNISSEUR' ? (
+              <FournisseurDashboard />
             ) : (
               <Navigate to="/connexion" replace />
             )
@@ -69,10 +69,10 @@ function App() {
       <Route
           path="/responsable/dashboard"
           element={
-            isAuthenticated && (user?.role?.name === 'RESPONSABLE_MARCHE' || isAdmin) ? (
-              <ResponsableDashboard />
-            ) : loading ? (
+            !isReady ? (
               <LoadingScreen />
+            ) : isAuthenticated && (user?.role?.name === 'RESPONSABLE_MARCHE' || isAdmin) ? (
+              <ResponsableDashboard />
             ) : (
               <Navigate to="/connexion" replace />
             )

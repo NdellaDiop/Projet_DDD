@@ -134,7 +134,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []); // ← Pas de dépendances pour éviter les boucles
 
   const login = async (email: string, password: string): Promise<User> => {
-    setLoading(true);
+    // Ne pas mettre loading à true ici pour éviter le double chargement
+    // Le dashboard affichera son propre chargement
     try {
       console.log('📡 Récupération du cookie CSRF...');
       await api.get('/sanctum/csrf-cookie');

@@ -58,6 +58,8 @@ const AppelOffreDetails = () => {
   const [submissionData, setSubmissionData] = useState({
     montant_propose: "",
   });
+  const [offreTechnique, setOffreTechnique] = useState<File | null>(null);
+  const [offreFinanciere, setOffreFinanciere] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Calcul des jours restants
@@ -105,25 +107,80 @@ const AppelOffreDetails = () => {
     try {
         setSubmitting(true);
         
-        await api.post(`/api/appels-offres/${appelOffre.id}/candidatures`, {
-            montant_propose: parseFloat(submissionData.montant_propose),
-            // Le fournisseur_id est normalement géré par le backend via Auth::user()->fournisseur
-            // Mais si le Request l'exige explicitement :
+        const montant = parseFloat(submissionData.montant_propose);
+        if (isNaN(montant) || montant < 0) {
+            setSubmitting(false);
+            toast({
+                title: "Erreur",
+                description: "Veuillez entrer un montant valide.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        // Créer la candidature
+        const candidatureResponse = await api.post(`/api/appels-offres/${appelOffre.id}/candidatures`, {
+            montant_propose: montant,
             fournisseur_id: (user as any).fournisseur?.id || (user as any).id, 
         });
+
+        const candidatureId = candidatureResponse.data.data?.id || candidatureResponse.data.id;
+
+        // Upload des documents si fournis
+        const uploadPromises = [];
+        
+        if (offreTechnique) {
+            const formDataTech = new FormData();
+            formDataTech.append('file', offreTechnique);
+            formDataTech.append('categorie', 'OFFRE_TECHNIQUE');
+            formDataTech.append('candidature_id', candidatureId.toString());
+            uploadPromises.push(
+                api.post('/api/documents', formDataTech, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                })
+            );
+        }
+
+        if (offreFinanciere) {
+            const formDataFin = new FormData();
+            formDataFin.append('file', offreFinanciere);
+            formDataFin.append('categorie', 'OFFRE_FINANCIERE');
+            formDataFin.append('candidature_id', candidatureId.toString());
+            uploadPromises.push(
+                api.post('/api/documents', formDataFin, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                })
+            );
+        }
+
+        // Attendre que tous les uploads soient terminés
+        if (uploadPromises.length > 0) {
+            await Promise.all(uploadPromises);
+        }
 
         toast({
             title: "Candidature envoyée",
             description: "Votre candidature a été soumise avec succès.",
         });
         setIsPostulerOpen(false);
+        setSubmissionData({ montant_propose: "" });
+        setOffreTechnique(null);
+        setOffreFinanciere(null);
         navigate("/fournisseur/dashboard");
 
     } catch (error: any) {
         console.error("Erreur soumission:", error);
+        const errorMessage = error.response?.data?.message || "Impossible de soumettre la candidature.";
+        const missingDocs = error.response?.data?.missing_documents;
+        
+        let description = errorMessage;
+        if (missingDocs && Array.isArray(missingDocs)) {
+            description = errorMessage + " Veuillez les uploader dans votre dashboard (section Documents légaux).";
+        }
+        
         toast({
             title: "Erreur",
-            description: error.response?.data?.message || "Impossible de soumettre la candidature.",
+            description: description,
             variant: "destructive"
         });
     } finally {
@@ -343,12 +400,52 @@ const AppelOffreDetails = () => {
                     />
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-4">
                     <Label>Documents de l'offre</Label>
-                    <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center text-sm text-muted-foreground bg-slate-50">
-                        <Upload className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                        <p>L'upload de documents (offre technique & financière) sera disponible à l'étape suivante.</p>
+                    
+                    <div className="space-y-3">
+                        <div className="space-y-2">
+                            <Label htmlFor="offre-technique" className="text-sm font-medium">
+                                Offre technique (PDF)
+                            </Label>
+                            <Input
+                                id="offre-technique"
+                                type="file"
+                                accept=".pdf,.doc,.docx"
+                                onChange={(e) => setOffreTechnique(e.target.files?.[0] || null)}
+                                className="cursor-pointer"
+                            />
+                            {offreTechnique && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <FileText className="w-3 h-3" />
+                                    {offreTechnique.name}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="offre-financiere" className="text-sm font-medium">
+                                Offre financière (PDF)
+                            </Label>
+                            <Input
+                                id="offre-financiere"
+                                type="file"
+                                accept=".pdf,.doc,.docx"
+                                onChange={(e) => setOffreFinanciere(e.target.files?.[0] || null)}
+                                className="cursor-pointer"
+                            />
+                            {offreFinanciere && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <FileText className="w-3 h-3" />
+                                    {offreFinanciere.name}
+                                </p>
+                            )}
+                        </div>
                     </div>
+                    
+                    <p className="text-xs text-muted-foreground">
+                        <strong>Note :</strong> Assurez-vous d'avoir uploadé tous vos documents légaux (RCCM, NINEA, Quitus Fiscal) dans votre dashboard avant de postuler.
+                    </p>
                 </div>
 
                 <DialogFooter>

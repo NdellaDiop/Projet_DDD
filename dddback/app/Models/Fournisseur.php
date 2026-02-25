@@ -20,6 +20,7 @@ class Fournisseur extends Model
         'ninea',
         'rccm',
         'quitus_fiscal',
+        'photo_profil',
     ];
 
     /**

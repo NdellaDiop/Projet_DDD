@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\Candidature;
 use App\Models\LogActivite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -132,6 +133,23 @@ class DocumentController extends Controller
         return new DocumentResource($document);
     }
 
+    public function download(Document $document)
+    {
+        // Charger les relations nécessaires pour la vérification des permissions
+        $document->load(['candidature.appelOffre.responsableMarche', 'appelOffre.responsableMarche']);
+        
+        $this->authorize('view', $document);
+        
+        if (!Storage::disk('public')->exists($document->chemin_fichier)) {
+            return response()->json(['message' => 'Document non trouvé.'], 404);
+        }
+        
+        return Storage::disk('public')->download(
+            $document->chemin_fichier,
+            $document->nom_fichier
+        );
+    }
+
     public function destroy(Document $document)
     {
         $this->authorize('delete', $document);
@@ -142,6 +160,48 @@ class DocumentController extends Controller
         $this->log('delete_document', "Suppression document #{$document->id}");
 
         return response()->json(null, 204);
+    }
+
+    public function getFournisseurLegalDocuments(Candidature $candidature)
+    {
+        // Vérifier que l'utilisateur peut voir cette candidature
+        $user = auth()->user();
+        
+        // Vérifier que c'est un responsable de marché ou admin
+        if (!$user->isResponsableMarche() && !$user->isAdmin()) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+        
+        // Vérifier que le responsable a accès à cette candidature (via l'appel d'offre)
+        if ($user->isResponsableMarche()) {
+            $candidature->load('appelOffre.responsableMarche');
+            if ($candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
+                return response()->json(['message' => 'Non autorisé.'], 403);
+            }
+        }
+        
+        // Charger le fournisseur
+        $candidature->load('fournisseur');
+        
+        // Vérifier que le fournisseur existe
+        if (!$candidature->fournisseur) {
+            return DocumentResource::collection(collect());
+        }
+        
+        // Récupérer les documents légaux du fournisseur via son user_id
+        // Le fournisseur a un champ user_id qui référence l'utilisateur
+        $userId = $candidature->fournisseur->user_id;
+        
+        if (!$userId) {
+            return DocumentResource::collection(collect());
+        }
+        
+        $documents = Document::where('user_id', $userId)
+            ->whereIn('categorie', ['RCCM', 'NINEA', 'QUITUS_FISCAL'])
+            ->latest()
+            ->get();
+        
+        return DocumentResource::collection($documents);
     }
 
     private function log(string $action, string $details): void
