@@ -13,6 +13,7 @@ import NotFound from "./pages/NotFound";
 import { Toaster } from "@/components/ui/toaster";
 import FournisseurDashboard from "./pages/FournisseurDashboard";
 import ResponsableDashboard from "./pages/ResponsableDashboard";
+import Contact from "./pages/Contact";
 
 // Composant de chargement réutilisable
 const LoadingScreen = () => (
@@ -38,6 +39,7 @@ function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/inscription" element={<Register />} />
         <Route path="/comment-ca-marche" element={<CommentCaMarche />} />
+        <Route path="/contact" element={<Contact />} />
         
         {/* Route protégée pour l'administrateur */}
         <Route

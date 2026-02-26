@@ -114,8 +114,6 @@ export default function ResponsableDashboard() {
     fonction: "",
     telephone: "",
   });
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -312,34 +310,9 @@ export default function ResponsableDashboard() {
       formData.append('fonction', profileForm.fonction.trim());
       formData.append('telephone', profileForm.telephone.trim());
       
-      if (photoFile) {
-        // Vérifier que le fichier est bien une image
-        if (!photoFile.type.startsWith('image/')) {
-          toast({
-            title: "Erreur",
-            description: "Le fichier sélectionné doit être une image (JPG, PNG, GIF)",
-            variant: "destructive",
-          });
-          return;
-        }
-        // Vérifier la taille (max 2MB)
-        if (photoFile.size > 2 * 1024 * 1024) {
-          toast({
-            title: "Erreur",
-            description: "L'image ne doit pas dépasser 2MB",
-            variant: "destructive",
-          });
-          return;
-        }
-        formData.append('photo_profil', photoFile);
-      }
-
-      // Ne pas définir Content-Type manuellement, axios le fait automatiquement pour FormData
       const response = await api.put("/api/responsable/profile", formData);
       setProfile(response.data);
       setEditingProfile(false);
-      setPhotoFile(null);
-      setPhotoPreview(null);
       
       // Recharger le profil
       try {
@@ -372,7 +345,7 @@ export default function ResponsableDashboard() {
             const fieldName = field === 'departement' ? 'Département' :
                             field === 'fonction' ? 'Fonction' :
                             field === 'telephone' ? 'Téléphone' :
-                            field === 'photo_profil' ? 'Photo de profil' : field;
+                            field;
             return `${fieldName}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
           })
           .join('; ');
@@ -434,17 +407,9 @@ export default function ResponsableDashboard() {
         {/* EN-TÊTE PROFIL */}
         <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
             <div className="relative mb-3">
-              {profile?.photo_profil ? (
-                <img 
-                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
-                  alt="Photo de profil"
-                  className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
-                  {user?.name?.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
+                {user?.name?.charAt(0).toUpperCase()}
+              </div>
             </div>
             <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={user?.name}>
               {user?.name}
@@ -1106,8 +1071,6 @@ export default function ResponsableDashboard() {
         setIsSettingsOpen(open);
         if (!open) {
           setPasswordData({ current: "", new: "", confirm: "" });
-          setPhotoFile(null);
-          setPhotoPreview(null);
         }
       }}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -1119,64 +1082,6 @@ export default function ResponsableDashboard() {
           <div className="space-y-4 py-4 border-b">
             <h3 className="font-semibold text-sm">Profil</h3>
             <form onSubmit={handleProfileUpdate} className="grid gap-4">
-              {/* Photo de profil */}
-              <div className="space-y-2">
-                <Label>Photo de profil</Label>
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    {photoPreview ? (
-                      <img 
-                        src={photoPreview} 
-                        alt="Aperçu" 
-                        className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
-                      />
-                    ) : profile?.photo_profil ? (
-                      <img 
-                        src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
-                        alt="Photo actuelle" 
-                        className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
-                      />
-                    ) : (
-                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                        {user?.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      type="file"
-                      accept="image/jpeg,image/png,image/jpg,image/gif"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          // Vérifier le type MIME
-                          const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
-                          if (!validTypes.includes(file.type)) {
-                            toast({
-                              title: "Erreur",
-                              description: "Veuillez sélectionner une image valide (JPG, PNG ou GIF)",
-                              variant: "destructive",
-                            });
-                            e.target.value = ''; // Réinitialiser l'input
-                            return;
-                          }
-                          setPhotoFile(file);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setPhotoPreview(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        } else {
-                          setPhotoFile(null);
-                          setPhotoPreview(null);
-                        }
-                      }}
-                      className="max-w-xs"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG ou GIF. Max 2MB</p>
-                  </div>
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">

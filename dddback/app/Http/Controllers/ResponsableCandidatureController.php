@@ -79,27 +79,9 @@ class ResponsableCandidatureController extends Controller
             'departement' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'telephone' => 'required|string|max:20',
-            'photo_profil' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $data = $request->except('photo_profil');
-
-        // Gérer l'upload de la photo de profil
-        if ($request->hasFile('photo_profil')) {
-            // Supprimer l'ancienne photo si elle existe
-            if ($responsable->photo_profil) {
-                $oldPhotoPath = public_path('storage/' . $responsable->photo_profil);
-                if (file_exists($oldPhotoPath)) {
-                    unlink($oldPhotoPath);
-                }
-            }
-
-            // Uploader la nouvelle photo
-            $photo = $request->file('photo_profil');
-            $photoName = 'responsable_' . $responsable->id . '_' . time() . '.' . $photo->getClientOriginalExtension();
-            $photoPath = $photo->storeAs('profiles', $photoName, 'public');
-            $data['photo_profil'] = $photoPath;
-        }
+        $data = $request->all();
 
         $responsable->update($data);
         

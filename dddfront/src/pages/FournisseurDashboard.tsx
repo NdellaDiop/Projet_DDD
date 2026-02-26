@@ -72,7 +72,6 @@ interface FournisseurProfile {
   ninea?: string;
   rccm?: string;
   quitus_fiscal?: string;
-  photo_profil?: string;
 }
 
 interface Suggestion {
@@ -84,7 +83,7 @@ interface Suggestion {
 }
 
 export default function FournisseurDashboard() {
-  const { api, user, logout } = useAuth();
+  const { api, user, logout, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -102,8 +101,6 @@ export default function FournisseurDashboard() {
     telephone: "",
     email_contact: "",
   });
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   // États pour la modification de candidature
   const [editingCandidature, setEditingCandidature] = useState<Candidature | null>(null);
@@ -177,61 +174,87 @@ export default function FournisseurDashboard() {
     }
     
     try {
-      const formData = new FormData();
-      formData.append('nom_entreprise', nomEntreprise);
-      formData.append('adresse', adresse);
-      formData.append('telephone', telephone);
-      formData.append('email_contact', emailContact);
-      
-      // Debug: Afficher les valeurs dans la console
-      console.log('Données envoyées:', {
+      // Utiliser JSON au lieu de FormData car on n'envoie plus de fichiers
+      const data = {
         nom_entreprise: nomEntreprise,
         adresse: adresse,
         telephone: telephone,
         email_contact: emailContact,
-        hasPhoto: !!photoFile
+      };
+      
+      console.log('Données envoyées:', data);
+      
+      const response = await api.put("/api/fournisseur/profile", data);
+      
+      // Fermer le modal
+      setEditingProfile(false);
+      
+      // Utiliser directement les données de la réponse pour mettre à jour le state immédiatement
+      const updatedProfile = response.data;
+      console.log('Profil mis à jour - données reçues:', updatedProfile);
+      
+      // Créer un nouvel objet pour forcer React à détecter le changement
+      const newProfile = {
+        ...updatedProfile,
+        nom_entreprise: updatedProfile.nom_entreprise || "",
+        adresse: updatedProfile.adresse || "",
+        telephone: updatedProfile.telephone || "",
+        email_contact: updatedProfile.email_contact || "",
+      };
+      
+      // Mettre à jour le state immédiatement avec les données de la réponse
+      setProfile(newProfile);
+      
+      // Mettre à jour le formulaire avec les nouvelles valeurs
+      setProfileForm({
+        nom_entreprise: updatedProfile.nom_entreprise || "",
+        adresse: updatedProfile.adresse || "",
+        telephone: updatedProfile.telephone || "",
+        email_contact: updatedProfile.email_contact || "",
       });
       
-      if (photoFile) {
-        // Vérifier que le fichier est bien une image
-        if (!photoFile.type.startsWith('image/')) {
-          toast({
-            title: "Erreur",
-            description: "Le fichier sélectionné doit être une image (JPG, PNG, GIF)",
-            variant: "destructive",
-          });
-          return;
-        }
-        // Vérifier la taille (max 2MB)
-        if (photoFile.size > 2 * 1024 * 1024) {
-          toast({
-            title: "Erreur",
-            description: "L'image ne doit pas dépasser 2MB",
-            variant: "destructive",
-          });
-          return;
-        }
-        formData.append('photo_profil', photoFile);
+      // Rafraîchir les données utilisateur dans le contexte d'authentification
+      // pour mettre à jour l'email si il a été modifié
+      const emailChanged = updatedProfile?.email_changed || false;
+      if (refreshUser) {
+        await refreshUser();
       }
-
-      // Ne pas définir Content-Type manuellement, axios le fait automatiquement pour FormData
-      const response = await api.put("/api/fournisseur/profile", formData);
-      setProfile(response.data);
-      setEditingProfile(false);
-      setPhotoFile(null);
-      setPhotoPreview(null);
       
-      // Recharger le profil
-      try {
-        const profileRes = await api.get("/api/fournisseur/profile");
-        setProfile(profileRes.data);
-      } catch (err) {
-        console.error("Erreur rechargement profil:", err);
-      }
+      // Recharger le profil depuis le serveur après un court délai pour garantir la cohérence
+      setTimeout(async () => {
+        try {
+          const profileRes = await api.get("/api/fournisseur/profile");
+          const serverProfile = profileRes.data;
+          console.log('Profil rechargé depuis serveur:', serverProfile);
+          // Créer un nouvel objet pour forcer React à détecter le changement
+          const refreshedProfile = {
+            ...serverProfile,
+            nom_entreprise: serverProfile.nom_entreprise || "",
+            adresse: serverProfile.adresse || "",
+            telephone: serverProfile.telephone || "",
+            email_contact: serverProfile.email_contact || "",
+          };
+          // Mettre à jour avec les données du serveur pour garantir la cohérence
+          setProfile(refreshedProfile);
+          setProfileForm({
+            nom_entreprise: refreshedProfile.nom_entreprise || "",
+            adresse: refreshedProfile.adresse || "",
+            telephone: refreshedProfile.telephone || "",
+            email_contact: refreshedProfile.email_contact || "",
+          });
+        } catch (err) {
+          console.error("Erreur rechargement profil:", err);
+        }
+      }, 500);
+      
+      // Message de succès adapté selon si l'email a changé
+      const successMessage = emailChanged 
+        ? "Vos informations ont été enregistrées avec succès. Vous pouvez maintenant vous connecter avec votre nouvel email."
+        : "Vos informations ont été enregistrées avec succès.";
       
       toast({
         title: "Profil mis à jour",
-        description: "Vos informations ont été enregistrées avec succès",
+        description: successMessage,
       });
     } catch (error: any) {
       console.error("Erreur mise à jour profil:", error);
@@ -248,7 +271,7 @@ export default function FournisseurDashboard() {
                             field === 'email_contact' ? 'Email de contact' :
                             field === 'telephone' ? 'Téléphone' :
                             field === 'adresse' ? 'Adresse' :
-                            field === 'photo_profil' ? 'Photo de profil' : field;
+                            field;
             return `${fieldName}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
           })
           .join('; ');
@@ -433,17 +456,9 @@ export default function FournisseurDashboard() {
         {/* EN-TÊTE PROFIL */}
         <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
             <div className="relative mb-3">
-              {profile?.photo_profil ? (
-                <img 
-                  src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
-                  alt="Photo de profil"
-                  className="h-16 w-16 rounded-full object-cover border-2 border-primary/20"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
-                  {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
-            </div>
-              )}
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
+                {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
+              </div>
             </div>
             <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={profile?.nom_entreprise || user?.name}>
               {profile?.nom_entreprise || user?.name}
@@ -1032,72 +1047,27 @@ export default function FournisseurDashboard() {
       </main>
 
       {/* MODALE DE MODIFICATION DU PROFIL (NOUVEAU) */}
-      <Dialog open={editingProfile} onOpenChange={setEditingProfile}>
+      <Dialog 
+        open={editingProfile} 
+        onOpenChange={(open) => {
+          setEditingProfile(open);
+          // Réinitialiser le formulaire avec les valeurs actuelles du profil quand on ouvre le modal
+          if (open && profile) {
+            setProfileForm({
+              nom_entreprise: profile.nom_entreprise || "",
+              adresse: profile.adresse || "",
+              telephone: profile.telephone || "",
+              email_contact: profile.email_contact || "",
+            });
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Modifier le profil entreprise</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleProfileUpdate} className="grid gap-4 py-4">
             
-            {/* Photo de profil */}
-            <div className="space-y-2">
-              <Label>Photo de profil</Label>
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  {photoPreview ? (
-                    <img 
-                      src={photoPreview} 
-                      alt="Aperçu" 
-                      className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
-                    />
-                  ) : profile?.photo_profil ? (
-                    <img 
-                      src={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${profile.photo_profil}`}
-                      alt="Photo actuelle" 
-                      className="h-20 w-20 rounded-full object-cover border-2 border-primary/20"
-                    />
-                  ) : (
-                    <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                      {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                    <Input
-                      type="file"
-                      accept="image/jpeg,image/png,image/jpg,image/gif"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          // Vérifier le type MIME
-                          const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
-                          if (!validTypes.includes(file.type)) {
-                            toast({
-                              title: "Erreur",
-                              description: "Veuillez sélectionner une image valide (JPG, PNG ou GIF)",
-                              variant: "destructive",
-                            });
-                            e.target.value = ''; // Réinitialiser l'input
-                            return;
-                          }
-                          setPhotoFile(file);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setPhotoPreview(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        } else {
-                          setPhotoFile(null);
-                          setPhotoPreview(null);
-                        }
-                      }}
-                      className="max-w-xs"
-                    />
-                  <p className="text-xs text-muted-foreground mt-1">JPG, PNG ou GIF. Max 2MB</p>
-                </div>
-              </div>
-            </div>
-
             <div className="border-t my-2"></div>
             
             {/* Ligne 1 */}
@@ -1145,8 +1115,6 @@ export default function FournisseurDashboard() {
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => {
                   setEditingProfile(false);
-                  setPhotoFile(null);
-                  setPhotoPreview(null);
                 }}>Annuler</Button>
                 <Button type="submit">Enregistrer</Button>
             </DialogFooter>

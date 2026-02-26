@@ -20,6 +20,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AdminDashboardController; 
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\SuggestionController;
+use App\Http\Controllers\ContactController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -37,6 +38,9 @@ Route::post('reset-password', [ForgotPasswordController::class, 'resetPassword']
 // PUBLIC
 Route::get('appels-offres', [AppelOffreController::class, 'index']);
 Route::get('appels-offres/{appel_offre}', [AppelOffreController::class, 'show']);
+
+// Contact (accessible à tous)
+Route::post('contact', [ContactController::class, 'store']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
@@ -94,6 +98,11 @@ Route::middleware('auth:sanctum')->group(function () {
         // Gestion des suggestions
         Route::get('suggestions', [SuggestionController::class, 'indexAdmin']);
         Route::put('suggestions/{suggestion}', [SuggestionController::class, 'updateStatus']);
+        
+        // Gestion des messages de contact
+        Route::get('contact', [ContactController::class, 'index']);
+        Route::put('contact/{contactMessage}/read', [ContactController::class, 'markAsRead']);
+        Route::put('contact/{contactMessage}/archive', [ContactController::class, 'archive']);
     });
     // FOURNISSEUR
     Route::middleware('role:FOURNISSEUR')->group(function () {

@@ -21,6 +21,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   register: (data: any) => Promise<User>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   loading: boolean;
   isReady: boolean;
   api: AxiosInstance;
@@ -50,6 +51,11 @@ api.interceptors.request.use(
       console.log('✅ X-XSRF-TOKEN ajouté au header');
     } else {
       console.warn('⚠️ XSRF-TOKEN non trouvé dans les cookies');
+    }
+    
+    // Si c'est un FormData, ne pas définir Content-Type (Axios le fera automatiquement avec le bon boundary)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
     }
     
     return config;
@@ -240,6 +246,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await api.get('/api/me');
+      const userData = response.data;
+      setUser(userData);
+      console.log('✅ Utilisateur rafraîchi:', userData);
+    } catch (error: any) {
+      console.error('❌ Erreur lors du rafraîchissement de l\'utilisateur:', error.response?.data || error.message);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     try {
@@ -274,6 +291,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     login,
     register,  
     logout,
+    refreshUser,
     loading,
     isReady,
     api,

@@ -73,6 +73,10 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        footer: {
+          DEFAULT: "#060D1F",
+          foreground: "#E8EDF8",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

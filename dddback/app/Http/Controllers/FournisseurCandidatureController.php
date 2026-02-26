@@ -116,7 +116,8 @@ class FournisseurCandidatureController extends Controller
             return response()->json(['message' => 'Profil fournisseur introuvable.'], 404);
         }
 
-        $request->validate([
+        // Valider les données (maintenant en JSON, plus simple)
+        $validated = $request->validate([
             'nom_entreprise' => 'required|string|max:255',
             'adresse' => 'required|string|max:255',
             'telephone' => 'required|string|max:50',
@@ -124,31 +125,79 @@ class FournisseurCandidatureController extends Controller
             'ninea' => 'nullable|string|max:50',
             'rccm' => 'nullable|string|max:50',
             'quitus_fiscal' => 'nullable|string|max:50',
-            'photo_profil' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $data = $request->except('photo_profil');
-
-        // Gérer l'upload de la photo de profil
-        if ($request->hasFile('photo_profil')) {
-            // Supprimer l'ancienne photo si elle existe
-            if ($fournisseur->photo_profil) {
-                $oldPhotoPath = public_path('storage/' . $fournisseur->photo_profil);
-                if (file_exists($oldPhotoPath)) {
-                    unlink($oldPhotoPath);
-                }
-            }
-
-            // Uploader la nouvelle photo
-            $photo = $request->file('photo_profil');
-            $photoName = 'fournisseur_' . $fournisseur->id . '_' . time() . '.' . $photo->getClientOriginalExtension();
-            $photoPath = $photo->storeAs('profiles', $photoName, 'public');
-            $data['photo_profil'] = $photoPath;
+        // Utiliser les valeurs validées directement
+        $data = [
+            'nom_entreprise' => trim($validated['nom_entreprise']),
+            'adresse' => trim($validated['adresse']),
+            'telephone' => trim($validated['telephone']),
+            'email_contact' => trim($validated['email_contact']),
+        ];
+        
+        // Ajouter les champs optionnels s'ils sont présents
+        if (isset($validated['ninea']) && $validated['ninea'] !== null && $validated['ninea'] !== '') {
+            $data['ninea'] = trim($validated['ninea']);
+        }
+        if (isset($validated['rccm']) && $validated['rccm'] !== null && $validated['rccm'] !== '') {
+            $data['rccm'] = trim($validated['rccm']);
+        }
+        if (isset($validated['quitus_fiscal']) && $validated['quitus_fiscal'] !== null && $validated['quitus_fiscal'] !== '') {
+            $data['quitus_fiscal'] = trim($validated['quitus_fiscal']);
+        }
+        
+        // Log pour déboguer
+        \Log::info('Données validées et à sauvegarder', [
+            'validated' => $validated,
+            'data' => $data,
+            'ancien_nom' => $fournisseur->nom_entreprise,
+        ]);
+        
+        // Ajouter les champs optionnels s'ils sont fournis
+        if ($request->has('ninea') && $request->input('ninea') !== null && $request->input('ninea') !== '') {
+            $data['ninea'] = trim($request->input('ninea'));
+        }
+        if ($request->has('rccm') && $request->input('rccm') !== null && $request->input('rccm') !== '') {
+            $data['rccm'] = trim($request->input('rccm'));
+        }
+        if ($request->has('quitus_fiscal') && $request->input('quitus_fiscal') !== null && $request->input('quitus_fiscal') !== '') {
+            $data['quitus_fiscal'] = trim($request->input('quitus_fiscal'));
         }
 
-        $fournisseur->update($data);
-        $this->log('update_fournisseur_profile', "Mise à jour profil fournisseur #{$fournisseur->id}");
+        // Si l'email_contact change, mettre à jour aussi l'email dans la table users
+        $emailChanged = false;
+        if ($data['email_contact'] !== $fournisseur->email_contact) {
+            $emailChanged = true;
+            // Vérifier que le nouvel email n'est pas déjà utilisé par un autre utilisateur
+            $existingUser = \App\Models\User::where('email', $data['email_contact'])
+                ->where('id', '!=', $user->id)
+                ->first();
+            
+            if ($existingUser) {
+                return response()->json([
+                    'message' => 'Cet email est déjà utilisé par un autre compte.'
+                ], 422);
+            }
 
+            // Mettre à jour l'email dans la table users
+            $user->update(['email' => $data['email_contact']]);
+        }
+
+        // Mettre à jour le fournisseur avec toutes les données
+        $fournisseur->update($data);
+        
+        // Recharger le modèle depuis la base de données pour avoir les données à jour
+        $fournisseur->refresh();
+        
+        // Recharger les relations pour retourner les données à jour
+        $fournisseur->load('user');
+        
+        // Ajouter un indicateur dans la réponse pour savoir si l'email a changé
+        $fournisseur->email_changed = $emailChanged;
+        
+        $this->log('update_fournisseur_profile', "Mise à jour profil fournisseur #{$fournisseur->id} - nom_entreprise: {$data['nom_entreprise']}, adresse: {$data['adresse']}, telephone: {$data['telephone']}, email_contact: {$data['email_contact']}");
+
+        // Retourner les données mises à jour
         return response()->json($fournisseur);
     }
 
