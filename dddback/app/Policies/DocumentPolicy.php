@@ -28,14 +28,31 @@ class DocumentPolicy
         // Un RESPONSABLE_MARCHE peut voir les documents liés à ses appels d'offres
         if ($user->role->name === 'RESPONSABLE_MARCHE') {
             // Si le document est lié à un appel d'offre
-            if ($document->appelOffre && $user->id === $document->appelOffre->responsableMarche->user_id) {
-                return true;
+            if ($document->appelOffre) {
+                $document->load('appelOffre.responsableMarche');
+                if ($document->appelOffre->responsable_marche_id === $user->responsableMarche->id) {
+                    return true;
+                }
             }
             // Si le document est lié à une candidature d'un de ses appels d'offres
             if ($document->candidature) {
                 $document->load('candidature.appelOffre.responsableMarche');
                 if ($document->candidature->appelOffre && 
                     $document->candidature->appelOffre->responsable_marche_id === $user->responsableMarche->id) {
+                    return true;
+                }
+            }
+            // Si le document est un document légal d'un fournisseur qui a postulé à un de ses appels d'offres
+            // (documents légaux : RCCM, NINEA, QUITUS_FISCAL)
+            if (in_array($document->categorie, ['RCCM', 'NINEA', 'QUITUS_FISCAL'])) {
+                // Vérifier si ce fournisseur a des candidatures pour les appels d'offres du responsable
+                $hasCandidature = \App\Models\Candidature::whereHas('appelOffre', function ($q) use ($user) {
+                    $q->where('responsable_marche_id', $user->responsableMarche->id);
+                })->whereHas('fournisseur', function ($q) use ($document) {
+                    $q->where('user_id', $document->user_id);
+                })->exists();
+                
+                if ($hasCandidature) {
                     return true;
                 }
             }

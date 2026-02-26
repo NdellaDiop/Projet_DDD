@@ -26,7 +26,7 @@ const LoadingScreen = () => (
 );
 
 function App() {
-  const { isAuthenticated, user, loading, isReady, isAdmin } = useAuth();
+  const { isAuthenticated, user, isReady, isAdmin } = useAuth();
 
   return (
     <>

@@ -51,6 +51,7 @@ interface Candidature {
     date_limite: string;
     statut: string;
   };
+  documents?: Document[];
 }
 
 interface Document {
@@ -122,7 +123,26 @@ export default function FournisseurDashboard() {
       ]);
 
       const candData = candidaturesRes.data;
-      setCandidatures(Array.isArray(candData) ? candData : candData.data || []);
+      const candidaturesList = Array.isArray(candData) ? candData : candData.data || [];
+      
+      // Charger les documents pour chaque candidature
+      const candidaturesWithDocs = await Promise.all(
+        candidaturesList.map(async (cand: Candidature) => {
+          try {
+            const candidatureDetail = await api.get(`/api/candidatures/${cand.id}`);
+            const candidatureData = candidatureDetail.data?.data || candidatureDetail.data;
+            return {
+              ...cand,
+              documents: candidatureData?.documents || []
+            };
+          } catch (err) {
+            console.error(`Erreur chargement documents pour candidature ${cand.id}:`, err);
+            return { ...cand, documents: [] };
+          }
+        })
+      );
+      
+      setCandidatures(candidaturesWithDocs);
 
       const docsData = documentsRes.data;
       setDocuments(Array.isArray(docsData) ? docsData : docsData.data || []);
@@ -458,7 +478,7 @@ export default function FournisseurDashboard() {
             <div className="relative mb-3">
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
                 {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
-              </div>
+            </div>
             </div>
             <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={profile?.nom_entreprise || user?.name}>
               {profile?.nom_entreprise || user?.name}
@@ -686,7 +706,80 @@ export default function FournisseurDashboard() {
                             </div>
                                                     )}
                           </div>
-                                            </div>
+                                                
+                                                {/* Documents déposés pour cette candidature */}
+                                                {candidature.documents && candidature.documents.length > 0 && (
+                                                  <div className="mt-4 pt-4 border-t border-slate-200">
+                                                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                                                      <FileText className="w-4 h-4" />
+                                                      Documents déposés ({candidature.documents.length})
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                      {candidature.documents.map((doc: Document) => (
+                                                        <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100">
+                                                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                                                            <span className="text-xs text-slate-700 truncate" title={doc.nom_fichier}>
+                                                              {doc.nom_fichier}
+                                  </span>
+                                                          </div>
+                                                          <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-7 px-2 shrink-0"
+                                                            onClick={async () => {
+                                                              if (!api) return;
+                                                              try {
+                                                                const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                                                  responseType: 'blob'
+                                                                });
+                                                                
+                                                                const blob = new Blob([response.data]);
+                                                                const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                                                
+                                                                // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                                                if (contentType.includes('pdf') || contentType.includes('image')) {
+                                                                  const url = window.URL.createObjectURL(blob);
+                                                                  window.open(url, '_blank', 'noopener,noreferrer');
+                                                                  // Nettoyer l'URL après un délai
+                                                                  setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                                } else {
+                                                                  // Pour les autres types, télécharger
+                                                                  const url = window.URL.createObjectURL(blob);
+                                                                  const link = document.createElement('a');
+                                                                  link.href = url;
+                                                                  link.target = '_blank';
+                                                                  link.rel = 'noopener noreferrer';
+                                                                  
+                                                                  const extension = contentType.includes('word') ? '.docx'
+                                                                    : contentType.includes('excel') ? '.xlsx'
+                                                                    : '.pdf';
+                                                                  
+                                                                  link.download = doc.nom_fichier || `document${extension}`;
+                                                                  document.body.appendChild(link);
+                                                                  link.click();
+                                                                  document.body.removeChild(link);
+                                                                  window.URL.revokeObjectURL(url);
+                                                                }
+                                                              } catch (error: any) {
+                                                                console.error("Erreur ouverture document:", error);
+                                                                toast({
+                                                                  title: "Erreur",
+                                                                  description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                                                  variant: "destructive"
+                                                                });
+                                                              }
+                                                            }}
+                                                          >
+                                                            <Eye className="w-3 h-3 mr-1" />
+                                                            Voir
+                                                          </Button>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                </div>
+                              )}
+                            </div>
                                             <div className="flex flex-col items-end gap-2">
                                                 {getStatutBadge(candidature.statut)}
                                                 {(candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') && 
@@ -700,7 +793,7 @@ export default function FournisseurDashboard() {
                                                     Appel d'offre clôturé
                                                   </Badge>
                                                 )}
-                                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -764,31 +857,38 @@ export default function FournisseurDashboard() {
                                                     if (!api) return;
                                                     
                                                     try {
-                                                        // Télécharger le document via l'API avec authentification
+                                                        // Récupérer le document via l'API avec authentification
                                                         const response = await api.get(`/api/documents/${doc.id}/download`, {
                                                             responseType: 'blob'
                                                         });
                                                         
-                                                        // Créer un blob et l'ouvrir
                                                         const blob = new Blob([response.data]);
-                                                        const url = window.URL.createObjectURL(blob);
-                                                        const link = document.createElement('a');
-                                                        link.href = url;
-                                                        link.target = '_blank';
-                                                        link.rel = 'noopener noreferrer';
-                                                        
-                                                        // Déterminer le type MIME et l'extension
                                                         const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                                        const extension = contentType.includes('pdf') ? '.pdf' 
-                                                            : contentType.includes('image') ? '.png'
-                                                            : contentType.includes('word') ? '.docx'
-                                                            : '.pdf';
                                                         
-                                                        link.download = doc.nom_fichier || `document${extension}`;
-                                                        document.body.appendChild(link);
-                                                        link.click();
-                                                        document.body.removeChild(link);
-                                                        window.URL.revokeObjectURL(url);
+                                                        // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                                        if (contentType.includes('pdf') || contentType.includes('image')) {
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            window.open(url, '_blank', 'noopener,noreferrer');
+                                                            // Nettoyer l'URL après un délai
+                                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                        } else {
+                                                            // Pour les autres types, télécharger
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const link = document.createElement('a');
+                                                            link.href = url;
+                                                            link.target = '_blank';
+                                                            link.rel = 'noopener noreferrer';
+                                                            
+                                                            const extension = contentType.includes('word') ? '.docx'
+                                                              : contentType.includes('excel') ? '.xlsx'
+                                                              : '.pdf';
+                                                            
+                                                            link.download = doc.nom_fichier || `document${extension}`;
+                                                            document.body.appendChild(link);
+                                                            link.click();
+                                                            document.body.removeChild(link);
+                                                            window.URL.revokeObjectURL(url);
+                                                        }
                                                     } catch (error: any) {
                                                         console.error("Erreur ouverture document:", error);
                                                         toast({
@@ -998,28 +1098,37 @@ export default function FournisseurDashboard() {
                                                                                 });
                                                                                 
                                                                                 const blob = new Blob([response.data]);
-                                                                                const url = window.URL.createObjectURL(blob);
-                                                                                const link = document.createElement('a');
-                                                                                link.href = url;
-                                                                                link.target = '_blank';
-                                                                                link.rel = 'noopener noreferrer';
-                                                                                
                                                                                 const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                                                                const extension = contentType.includes('pdf') ? '.pdf' 
-                                                                                    : contentType.includes('image') ? '.png'
-                                                                                    : contentType.includes('word') ? '.docx'
-                                                                                    : '.pdf';
                                                                                 
-                                                                                link.download = doc.nom_fichier || `document${extension}`;
-                                                                                document.body.appendChild(link);
-                                                                                link.click();
-                                                                                document.body.removeChild(link);
-                                                                                window.URL.revokeObjectURL(url);
+                                                                                // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                                                                if (contentType.includes('pdf') || contentType.includes('image')) {
+                                                                                    const url = window.URL.createObjectURL(blob);
+                                                                                    window.open(url, '_blank', 'noopener,noreferrer');
+                                                                                    // Nettoyer l'URL après un délai
+                                                                                    setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                                                } else {
+                                                                                    // Pour les autres types, télécharger
+                                                                                    const url = window.URL.createObjectURL(blob);
+                                                                                    const link = document.createElement('a');
+                                                                                    link.href = url;
+                                                                                    link.target = '_blank';
+                                                                                    link.rel = 'noopener noreferrer';
+                                                                                    
+                                                                                    const extension = contentType.includes('word') ? '.docx'
+                                                                                      : contentType.includes('excel') ? '.xlsx'
+                                                                                      : '.pdf';
+                                                                                    
+                                                                                    link.download = doc.nom_fichier || `document${extension}`;
+                                                                                    document.body.appendChild(link);
+                                                                                    link.click();
+                                                                                    document.body.removeChild(link);
+                                                                                    window.URL.revokeObjectURL(url);
+                                                                                }
                                                                             } catch (error: any) {
-                                                                                console.error("Erreur téléchargement document:", error);
+                                                                                console.error("Erreur ouverture document:", error);
                                                                                 toast({
                                                                                     title: "Erreur",
-                                                                                    description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                                                                    description: error.response?.data?.message || "Impossible d'ouvrir le document.",
                                                                                     variant: "destructive"
                                                                                 });
                                                                             }

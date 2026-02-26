@@ -881,43 +881,50 @@ export default function ResponsableDashboard() {
                                         if (!api) return;
                                         
                                         try {
-                                          // Télécharger le document via l'API avec authentification
+                                          // Récupérer le document via l'API avec authentification
                                           const response = await api.get(`/api/documents/${doc.id}/download`, {
                                             responseType: 'blob'
                                           });
                                           
-                                          // Créer un blob et l'ouvrir
                                           const blob = new Blob([response.data]);
-                                          const url = window.URL.createObjectURL(blob);
-                                          const link = document.createElement('a');
-                                          link.href = url;
-                                          link.target = '_blank';
-                                          link.rel = 'noopener noreferrer';
-                                          
-                                          // Déterminer le type MIME et l'extension
                                           const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                          const extension = contentType.includes('pdf') ? '.pdf' 
-                                            : contentType.includes('image') ? '.png'
-                                            : contentType.includes('word') ? '.docx'
-                                            : '.pdf';
                                           
-                                          link.download = doc.nom_fichier || `document${extension}`;
-                                          document.body.appendChild(link);
-                                          link.click();
-                                          document.body.removeChild(link);
-                                          window.URL.revokeObjectURL(url);
+                                          // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                          if (contentType.includes('pdf') || contentType.includes('image')) {
+                                            const url = window.URL.createObjectURL(blob);
+                                            window.open(url, '_blank', 'noopener,noreferrer');
+                                            // Nettoyer l'URL après un délai
+                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                          } else {
+                                            // Pour les autres types, télécharger
+                                            const url = window.URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.target = '_blank';
+                                            link.rel = 'noopener noreferrer';
+                                            
+                                            const extension = contentType.includes('word') ? '.docx'
+                                              : contentType.includes('excel') ? '.xlsx'
+                                              : '.pdf';
+                                            
+                                            link.download = doc.nom_fichier || `document${extension}`;
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                          }
                                         } catch (error: any) {
-                                          console.error("Erreur téléchargement document:", error);
+                                          console.error("Erreur ouverture document:", error);
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
                                             variant: "destructive"
                                           });
                                         }
                                       }}
                                     >
-                                      <Download className="w-4 h-4 mr-2" />
-                                      Télécharger
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Voir
                                     </Button>
                                   </div>
                                 ))}
@@ -986,43 +993,50 @@ export default function ResponsableDashboard() {
                                         if (!api) return;
                                         
                                         try {
-                                          // Télécharger le document via l'API avec authentification
+                                          // Récupérer le document via l'API avec authentification
                                           const response = await api.get(`/api/documents/${doc.id}/download`, {
                                             responseType: 'blob'
                                           });
                                           
-                                          // Créer un blob et l'ouvrir
                                           const blob = new Blob([response.data]);
-                                          const url = window.URL.createObjectURL(blob);
-                                          const link = document.createElement('a');
-                                          link.href = url;
-                                          link.target = '_blank';
-                                          link.rel = 'noopener noreferrer';
-                                          
-                                          // Déterminer le type MIME et l'extension
                                           const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                          const extension = contentType.includes('pdf') ? '.pdf' 
-                                            : contentType.includes('image') ? '.png'
-                                            : contentType.includes('word') ? '.docx'
-                                            : '.pdf';
                                           
-                                          link.download = doc.nom_fichier || `document${extension}`;
-                                          document.body.appendChild(link);
-                                          link.click();
-                                          document.body.removeChild(link);
-                                          window.URL.revokeObjectURL(url);
+                                          // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                          if (contentType.includes('pdf') || contentType.includes('image')) {
+                                            const url = window.URL.createObjectURL(blob);
+                                            window.open(url, '_blank', 'noopener,noreferrer');
+                                            // Nettoyer l'URL après un délai
+                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                          } else {
+                                            // Pour les autres types, télécharger
+                                            const url = window.URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.target = '_blank';
+                                            link.rel = 'noopener noreferrer';
+                                            
+                                            const extension = contentType.includes('word') ? '.docx'
+                                              : contentType.includes('excel') ? '.xlsx'
+                                              : '.pdf';
+                                            
+                                            link.download = doc.nom_fichier || `document${extension}`;
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                          }
                                         } catch (error: any) {
-                                          console.error("Erreur téléchargement document:", error);
+                                          console.error("Erreur ouverture document:", error);
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible de télécharger le document.",
+                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
                                             variant: "destructive"
                                           });
                                         }
                                       }}
                                     >
-                                      <Download className="w-4 h-4 mr-2" />
-                                      Télécharger
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Voir
                                     </Button>
                                   </div>
                                 ))}
