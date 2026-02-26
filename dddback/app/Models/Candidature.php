@@ -53,4 +53,12 @@ class Candidature extends Model
     {
         return $this->hasMany(Document::class);
     }
+
+    /**
+     * Get the comments for the candidature.
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(CandidatureComment::class);
+    }
 }

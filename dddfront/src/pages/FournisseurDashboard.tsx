@@ -26,7 +26,8 @@ import {
   LayoutDashboard,
   Settings,
   User as UserIcon,
-  MessageSquare
+  MessageSquare,
+  Send
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -106,6 +107,12 @@ export default function FournisseurDashboard() {
   // États pour la modification de candidature
   const [editingCandidature, setEditingCandidature] = useState<Candidature | null>(null);
   const [editMontant, setEditMontant] = useState("");
+  
+  // États pour les commentaires
+  const [candidatureComments, setCandidatureComments] = useState<Record<number, any[]>>({});
+  const [expandedCandidatureId, setExpandedCandidatureId] = useState<number | null>(null);
+  const [newComments, setNewComments] = useState<Record<number, string>>({});
+  const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     loadDashboardData();
@@ -125,12 +132,23 @@ export default function FournisseurDashboard() {
       const candData = candidaturesRes.data;
       const candidaturesList = Array.isArray(candData) ? candData : candData.data || [];
       
-      // Charger les documents pour chaque candidature
+      // Charger les documents et commentaires pour chaque candidature
       const candidaturesWithDocs = await Promise.all(
         candidaturesList.map(async (cand: Candidature) => {
           try {
-            const candidatureDetail = await api.get(`/api/candidatures/${cand.id}`);
+            const [candidatureDetail, commentsRes] = await Promise.all([
+              api.get(`/api/candidatures/${cand.id}`),
+              api.get(`/api/candidatures/${cand.id}/comments`).catch(() => ({ data: [] }))
+            ]);
             const candidatureData = candidatureDetail.data?.data || candidatureDetail.data;
+            const commentsData = commentsRes.data || [];
+            
+            // Stocker les commentaires dans l'état
+            setCandidatureComments(prev => ({
+              ...prev,
+              [cand.id]: Array.isArray(commentsData) ? commentsData : []
+            }));
+            
             return {
               ...cand,
               documents: candidatureData?.documents || []
@@ -779,6 +797,129 @@ export default function FournisseurDashboard() {
                                                     </div>
                                 </div>
                               )}
+                                                
+                                                {/* Section Commentaires */}
+                                                <div className="mt-4 pt-4 border-t border-slate-200">
+                                                  <div className="flex items-center justify-between mb-3">
+                                                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                      <MessageSquare className="w-4 h-4" />
+                                                      Commentaires ({candidatureComments[candidature.id]?.length || 0})
+                                                    </h4>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      onClick={() => {
+                                                        if (expandedCandidatureId === candidature.id) {
+                                                          setExpandedCandidatureId(null);
+                                                        } else {
+                                                          setExpandedCandidatureId(candidature.id);
+                                                          // Charger les commentaires si pas encore chargés
+                                                          if (!candidatureComments[candidature.id] && api) {
+                                                            api.get(`/api/candidatures/${candidature.id}/comments`)
+                                                              .then(res => {
+                                                                setCandidatureComments(prev => ({
+                                                                  ...prev,
+                                                                  [candidature.id]: Array.isArray(res.data) ? res.data : []
+                                                                }));
+                                                              })
+                                                              .catch(err => console.error("Erreur chargement commentaires:", err));
+                                                          }
+                                                        }
+                                                      }}
+                                                    >
+                                                      {expandedCandidatureId === candidature.id ? "Masquer" : "Voir"}
+                                                    </Button>
+                                                  </div>
+                                                  
+                                                  {expandedCandidatureId === candidature.id && (
+                                                    <div className="space-y-3">
+                                                      {/* Liste des commentaires */}
+                                                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                        {candidatureComments[candidature.id]?.length === 0 ? (
+                                                          <p className="text-xs text-muted-foreground text-center py-2">
+                                                            Aucun commentaire pour le moment.
+                                                          </p>
+                                                        ) : (
+                                                          candidatureComments[candidature.id]?.map((comment: any) => (
+                                                            <div key={comment.id} className={`p-2 rounded-lg border text-xs ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
+                                                              <div className="flex items-start justify-between mb-1">
+                                                                <span className="font-semibold text-slate-700">
+                                                                  {comment.user?.name || 'Utilisateur'}
+                                                                </span>
+                                                                <span className="text-muted-foreground">
+                                                                  {new Date(comment.created_at).toLocaleString()}
+                                                                </span>
+                                                              </div>
+                                                              <p className="text-slate-600 whitespace-pre-wrap">{comment.message}</p>
+                                                            </div>
+                                                          ))
+                                                        )}
+                                                      </div>
+                                                      
+                                                      {/* Formulaire de réponse */}
+                                                      <div className="space-y-2 border-t pt-2">
+                                                        <Textarea
+                                                          placeholder="Répondre au responsable..."
+                                                          value={newComments[candidature.id] || ""}
+                                                          onChange={(e) => setNewComments(prev => ({
+                                                            ...prev,
+                                                            [candidature.id]: e.target.value
+                                                          }))}
+                                                          rows={2}
+                                                          className="resize-none text-xs"
+                                                        />
+                                                        <div className="flex justify-end">
+                                                          <Button
+                                                            size="sm"
+                                                            onClick={async () => {
+                                                              if (!api || !newComments[candidature.id]?.trim()) return;
+                                                              
+                                                              setSubmittingComments(prev => ({ ...prev, [candidature.id]: true }));
+                                                              try {
+                                                                const response = await api.post(`/api/candidatures/${candidature.id}/comments`, {
+                                                                  message: newComments[candidature.id].trim()
+                                                                });
+                                                                
+                                                                setCandidatureComments(prev => ({
+                                                                  ...prev,
+                                                                  [candidature.id]: [...(prev[candidature.id] || []), response.data]
+                                                                }));
+                                                                setNewComments(prev => ({ ...prev, [candidature.id]: "" }));
+                                                                toast({
+                                                                  title: "Commentaire envoyé",
+                                                                  description: "Votre réponse a été envoyée au responsable.",
+                                                                });
+                                                              } catch (error: any) {
+                                                                console.error("Erreur envoi commentaire:", error);
+                                                                toast({
+                                                                  title: "Erreur",
+                                                                  description: error.response?.data?.message || "Impossible d'envoyer le commentaire.",
+                                                                  variant: "destructive"
+                                                                });
+                                                              } finally {
+                                                                setSubmittingComments(prev => ({ ...prev, [candidature.id]: false }));
+                                                              }
+                                                            }}
+                                                            disabled={!newComments[candidature.id]?.trim() || submittingComments[candidature.id]}
+                                                            className="h-7 text-xs"
+                                                          >
+                                                            {submittingComments[candidature.id] ? (
+                                                              <>
+                                                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent mr-1"></div>
+                                                                Envoi...
+                                                              </>
+                                                            ) : (
+                                                              <>
+                                                                <Send className="w-3 h-3 mr-1" />
+                                                                Envoyer
+                                                              </>
+                                                            )}
+                                                          </Button>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
                             </div>
                                             <div className="flex flex-col items-end gap-2">
                                                 {getStatutBadge(candidature.statut)}

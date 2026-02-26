@@ -41,7 +41,9 @@ import {
   Mail,
   Phone,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  MessageSquare,
+  Send
 } from "lucide-react";
 
 interface AppelOffre {
@@ -101,6 +103,11 @@ export default function ResponsableDashboard() {
   const [selectedCandidature, setSelectedCandidature] = useState<Candidature | null>(null);
   const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   // État pour les paramètres
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -228,11 +235,15 @@ export default function ResponsableDashboard() {
     setSelectedCandidature(candidature);
     setLegalDocuments([]);
     setCandidatureDocuments([]);
+    setComments([]);
+    setNewComment("");
+    setSelectedDocumentId(null);
     setLoadingDocuments(true);
+    setLoadingComments(true);
     setIsViewDossierOpen(true);
     
     try {
-      const [legalDocsRes, candidatureDocsRes] = await Promise.all([
+      const [legalDocsRes, candidatureDocsRes, commentsRes] = await Promise.all([
         api.get(`/api/responsable/candidatures/${candidature.id}/documents-legaux`).catch((err) => {
           console.error("Erreur chargement documents légaux:", err);
           console.error("Détails erreur:", err.response?.data);
@@ -241,6 +252,10 @@ export default function ResponsableDashboard() {
         api.get(`/api/candidatures/${candidature.id}`).catch((err) => {
           console.error("Erreur chargement candidature:", err);
           return { data: { data: null } };
+        }),
+        api.get(`/api/candidatures/${candidature.id}/comments`).catch((err) => {
+          console.error("Erreur chargement commentaires:", err);
+          return { data: [] };
         })
       ]);
       
@@ -255,6 +270,10 @@ export default function ResponsableDashboard() {
       } else {
         setCandidatureDocuments([]);
       }
+      
+      // Charger les commentaires
+      const commentsData = commentsRes.data;
+      setComments(Array.isArray(commentsData) ? commentsData : []);
     } catch (error: any) {
       console.error("Erreur chargement documents:", error);
       toast({ 
@@ -264,8 +283,39 @@ export default function ResponsableDashboard() {
       });
       setLegalDocuments([]);
       setCandidatureDocuments([]);
+      setComments([]);
     } finally {
       setLoadingDocuments(false);
+      setLoadingComments(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!api || !selectedCandidature || !newComment.trim()) return;
+    
+    setSubmittingComment(true);
+    try {
+      const response = await api.post(`/api/candidatures/${selectedCandidature.id}/comments`, {
+        message: newComment.trim(),
+        document_id: selectedDocumentId
+      });
+      
+      setComments([...comments, response.data]);
+      setNewComment("");
+      setSelectedDocumentId(null);
+      toast({
+        title: "Commentaire ajouté",
+        description: "Votre commentaire a été envoyé au fournisseur.",
+      });
+    } catch (error: any) {
+      console.error("Erreur ajout commentaire:", error);
+      toast({
+        title: "Erreur",
+        description: error.response?.data?.message || "Impossible d'ajouter le commentaire.",
+        variant: "destructive"
+      });
+    } finally {
+      setSubmittingComment(false);
     }
   };
 
@@ -1067,6 +1117,85 @@ export default function ResponsableDashboard() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Section Commentaires */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    Commentaires et communication
+                  </h3>
+                  
+                  {/* Liste des commentaires */}
+                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                    {loadingComments ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Aucun commentaire pour le moment.
+                      </p>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className={`p-3 rounded-lg border ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex items-start justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-700">
+                                {comment.user?.name || 'Utilisateur'}
+                              </span>
+                              {comment.document && (
+                                <Badge variant="outline" className="text-xs">
+                                  Document: {comment.document.nom_fichier}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(comment.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{comment.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  
+                  {/* Formulaire d'ajout de commentaire */}
+                  <div className="space-y-2 border-t pt-4">
+                    <Label htmlFor="new-comment">Ajouter un commentaire</Label>
+                    <Textarea
+                      id="new-comment"
+                      placeholder="Écrivez votre commentaire ici..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={3}
+                      className="resize-none"
+                    />
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-muted-foreground">
+                        Le fournisseur sera notifié de votre commentaire
+                      </div>
+                      <Button 
+                        onClick={handleSubmitComment}
+                        disabled={!newComment.trim() || submittingComment}
+                        size="sm"
+                      >
+                        {submittingComment ? (
+                          <>
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2"></div>
+                            Envoi...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Envoyer
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           ) : (
             <div className="text-center py-12">
@@ -1075,7 +1204,12 @@ export default function ResponsableDashboard() {
           )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDossierOpen(false)}>Fermer</Button>
+            <Button variant="outline" onClick={() => {
+              setIsViewDossierOpen(false);
+              setComments([]);
+              setNewComment("");
+              setSelectedDocumentId(null);
+            }}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

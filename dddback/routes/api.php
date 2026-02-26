@@ -21,6 +21,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\SuggestionController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\CandidatureCommentController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -70,6 +71,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('candidatures/{candidature}', [CandidatureController::class, 'show']);
     Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
     Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
+    
+    // COMMENTAIRES SUR CANDIDATURES
+    Route::get('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'index']);
+    Route::post('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'store']);
+    Route::get('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'show']);
+    Route::put('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'update']);
+    Route::delete('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'destroy']);
 
     // DOCUMENTS
     Route::post('documents', [DocumentController::class, 'store']);
