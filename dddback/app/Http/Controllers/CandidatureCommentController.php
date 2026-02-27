@@ -32,8 +32,14 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif ($user->isResponsableMarche()) {
-            if (!$candidature->appelOffre || !$candidature->appelOffre->responsableMarche || 
-                $candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
+            // Les responsables peuvent voir les commentaires des candidatures liées à leurs appels d'offres
+            // ET ceux des appels d'offres créés par l'admin (responsable_marche_id = null)
+            if (!$candidature->appelOffre) {
+                return response()->json(['message' => 'Non autorisé.'], 403);
+            }
+            $appelOffre = $candidature->appelOffre;
+            // Vérifier si c'est un appel d'offre créé par l'admin (null) OU son propre appel d'offre
+            if ($appelOffre->responsable_marche_id !== null && $appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif (!$user->isAdmin()) {
@@ -64,8 +70,14 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif ($user->isResponsableMarche()) {
-            if (!$candidature->appelOffre || !$candidature->appelOffre->responsableMarche || 
-                $candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
+            // Les responsables peuvent commenter les candidatures liées à leurs appels d'offres
+            // ET ceux des appels d'offres créés par l'admin (responsable_marche_id = null)
+            if (!$candidature->appelOffre) {
+                return response()->json(['message' => 'Non autorisé.'], 403);
+            }
+            $appelOffre = $candidature->appelOffre;
+            // Vérifier si c'est un appel d'offre créé par l'admin (null) OU son propre appel d'offre
+            if ($appelOffre->responsable_marche_id !== null && $appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif (!$user->isAdmin()) {
@@ -87,9 +99,9 @@ class CandidatureCommentController extends Controller
         $comment->load(['user.role', 'document']);
 
         // Notifier l'autre partie
-        $candidature->load(['fournisseur.user', 'appelOffre']);
+        $candidature->load(['fournisseur.user', 'appelOffre.responsableMarche.user']);
         if ($user->isResponsableMarche() || $user->isAdmin()) {
-            // Le responsable commente, notifier le fournisseur
+            // Le responsable ou l'admin commente, notifier le fournisseur
             if ($candidature->fournisseur && $candidature->fournisseur->user && $candidature->appelOffre) {
                 $appelOffre = $candidature->appelOffre;
                 $message = "Nouveau commentaire sur votre candidature pour l'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference})";
@@ -99,8 +111,9 @@ class CandidatureCommentController extends Controller
                 );
             }
         } elseif ($user->isFournisseur()) {
-            // Le fournisseur commente, notifier le responsable
-            $candidature->load('appelOffre.responsableMarche.user');
+            // Le fournisseur commente, notifier le responsable (si l'appel d'offre a un responsable)
+            // Si l'appel d'offre a été créé par l'admin (responsable_marche_id = null), on ne notifie personne
+            // car l'admin verra le commentaire de toute façon
             if ($candidature->appelOffre && $candidature->appelOffre->responsableMarche && $candidature->appelOffre->responsableMarche->user) {
                 $appelOffre = $candidature->appelOffre;
                 $message = "Nouveau commentaire du fournisseur sur la candidature pour l'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference})";
@@ -137,8 +150,14 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif ($user->isResponsableMarche()) {
-            if (!$candidature->appelOffre || !$candidature->appelOffre->responsableMarche || 
-                $candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
+            // Les responsables peuvent voir les commentaires des candidatures liées à leurs appels d'offres
+            // ET ceux des appels d'offres créés par l'admin (responsable_marche_id = null)
+            if (!$candidature->appelOffre) {
+                return response()->json(['message' => 'Non autorisé.'], 403);
+            }
+            $appelOffre = $candidature->appelOffre;
+            // Vérifier si c'est un appel d'offre créé par l'admin (null) OU son propre appel d'offre
+            if ($appelOffre->responsable_marche_id !== null && $appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
         } elseif (!$user->isAdmin()) {

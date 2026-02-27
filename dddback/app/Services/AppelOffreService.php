@@ -16,7 +16,9 @@ class AppelOffreService
      */
     public function getAllAppelsOffres(): Collection
     {
-        return AppelOffre::all();
+        return AppelOffre::where('statut', AppelOffre::STATUS_PUBLISHED)
+            ->orderBy('date_publication', 'desc')
+            ->get();
     }
 
     /**

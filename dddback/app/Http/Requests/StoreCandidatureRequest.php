@@ -18,7 +18,7 @@ class StoreCandidatureRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'montant_propose' => 'nullable|numeric|min:0',
+            'montant_propose' => 'required|numeric|min:0',
             'fournisseur_id' => 'required|exists:fournisseurs,id',
             'statut' => 'required|string',
             'date_soumission' => 'required|date',

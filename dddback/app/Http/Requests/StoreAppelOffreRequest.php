@@ -28,12 +28,15 @@ class StoreAppelOffreRequest extends FormRequest
      */
     public function rules(): array
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->role->name === 'ADMIN';
+        
         return [
             'titre' => 'required|string|max:255',
             'description' => 'required|string',
             'date_publication' => 'nullable|date',
             'date_limite_depot' => 'required|date|after_or_equal:now',
-            'responsable_marche_id' => 'required|exists:responsables_marche,id',
+            'responsable_marche_id' => $isAdmin ? 'nullable|exists:responsables_marche,id' : 'required|exists:responsables_marche,id',
             'statut' => 'required|in:draft,published,closed,archived',
         ];
     }
@@ -41,10 +44,14 @@ class StoreAppelOffreRequest extends FormRequest
     protected function prepareForValidation()
     {
         $mergeData = [];
+        $user = Auth::user();
 
-        if (auth()->user()?->responsableMarche) {
-            $mergeData['responsable_marche_id'] = auth()->user()->responsableMarche->id;
+        // Si c'est un responsable, on ajoute automatiquement son responsable_marche_id
+        if ($user?->responsableMarche) {
+            $mergeData['responsable_marche_id'] = $user->responsableMarche->id;
         }
+        // Si c'est un admin et qu'il n'a pas fourni de responsable_marche_id, on le laisse null
+        // (l'admin peut créer un appel d'offre sans responsable assigné)
 
         // Si date_publication n'est pas fournie, on met la date actuelle
         if (!$this->has('date_publication')) {

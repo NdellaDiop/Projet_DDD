@@ -112,7 +112,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('contact/{contactMessage}/read', [ContactController::class, 'markAsRead']);
         Route::put('contact/{contactMessage}/archive', [ContactController::class, 'archive']);
     });
-    // FOURNISSEUR
+    // FOURNISSEUR (uniquement pour les fournisseurs)
     Route::middleware('role:FOURNISSEUR')->group(function () {
         Route::get('fournisseur/profile', [FournisseurCandidatureController::class, 'showProfile']);
         Route::put('fournisseur/profile', [FournisseurCandidatureController::class, 'updateProfile']);

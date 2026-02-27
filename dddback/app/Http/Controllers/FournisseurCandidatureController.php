@@ -98,23 +98,34 @@ class FournisseurCandidatureController extends Controller
     public function showProfile()
     {
         $user = auth()->user();
+        
+        // L'admin ne peut pas accéder au profil fournisseur via cette route
+        // Il doit utiliser les routes admin pour voir les informations
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Accès non autorisé.'], 403);
+        }
+        
         $fournisseur = $user->fournisseur;
-
         if (!$fournisseur) {
             return response()->json(['message' => 'Profil fournisseur introuvable.'], 404);
         }
-
         return response()->json($fournisseur->load('user'));
     }
 
     public function updateProfile(Request $request)
     {
         $user = auth()->user();
+        
+        // L'admin ne peut pas modifier le profil d'un fournisseur
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Vous n\'êtes pas autorisé à modifier le profil d\'un fournisseur.'], 403);
+        }
+        
         $fournisseur = $user->fournisseur;
-
         if (!$fournisseur) {
             return response()->json(['message' => 'Profil fournisseur introuvable.'], 404);
         }
+        $targetUser = $user;
 
         // Valider les données (maintenant en JSON, plus simple)
         $validated = $request->validate([
@@ -170,7 +181,7 @@ class FournisseurCandidatureController extends Controller
             $emailChanged = true;
             // Vérifier que le nouvel email n'est pas déjà utilisé par un autre utilisateur
             $existingUser = \App\Models\User::where('email', $data['email_contact'])
-                ->where('id', '!=', $user->id)
+                ->where('id', '!=', $targetUser->id)
                 ->first();
             
             if ($existingUser) {
@@ -180,7 +191,7 @@ class FournisseurCandidatureController extends Controller
             }
 
             // Mettre à jour l'email dans la table users
-            $user->update(['email' => $data['email_contact']]);
+            $targetUser->update(['email' => $data['email_contact']]);
         }
 
         // Mettre à jour le fournisseur avec toutes les données
@@ -214,8 +225,14 @@ class FournisseurCandidatureController extends Controller
     public function getOwnCandidatures()
     {
         $user = auth()->user();
+        
+        // L'admin ne peut pas accéder aux candidatures via cette route
+        // Il doit utiliser les routes admin pour voir les candidatures
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Accès non autorisé.'], 403);
+        }
+        
         $fournisseur = $user->fournisseur;
-
         if (!$fournisseur) {
             return response()->json([]);
         }
@@ -229,7 +246,7 @@ class FournisseurCandidatureController extends Controller
                     'id' => $c->id,
                     'statut' => $c->statut,
                     'date_soumission' => $c->date_soumission,
-                    'montant_propose' => 0, // À implémenter si géré
+                    'montant_propose' => $c->montant_propose, // Récupérer le vrai montant depuis la base de données
                     'appel_offre' => [
                         'id' => $c->appelOffre->id,
                         'titre' => $c->appelOffre->titre,

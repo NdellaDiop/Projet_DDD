@@ -25,12 +25,35 @@ class AppelOffreController extends Controller
         $this->appelOffreService = $appelOffreService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $appelsOffres = $this->appelOffreService
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        $statut = $request->get('statut', '');
+        
+        $query = $this->appelOffreService
             ->getAllAppelsOffres()
             ->load('responsableMarche.user')
             ->loadCount('candidatures');
+        
+        // Recherche
+        if ($search) {
+            $query = $query->filter(function ($ao) use ($search) {
+                return stripos($ao->titre, $search) !== false 
+                    || stripos($ao->description, $search) !== false
+                    || stripos($ao->reference, $search) !== false;
+            });
+        }
+        
+        // Filtre par statut
+        if ($statut) {
+            $query = $query->filter(function ($ao) use ($statut) {
+                return $ao->statut === $statut;
+            });
+        }
+        
+        // Pagination
+        $appelsOffres = $query->paginate($perPage);
     
         return AppelOffreResource::collection($appelsOffres);
     }
@@ -82,25 +105,52 @@ class AppelOffreController extends Controller
 
         /**
      * Récupère les appels d'offres créés par le responsable connecté.
+     * Les responsables voient leurs propres appels d'offres + ceux créés par l'admin (responsable_marche_id = null).
+     * L'admin voit tous les appels d'offres.
      */
-    public function indexForResponsable()
+    public function indexForResponsable(Request $request)
     {
         $user = auth()->user();
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        $statut = $request->get('statut', '');
         
-        // Si c'est l'admin, il voit tout (optionnel, pour debug)
+        $query = AppelOffre::query();
+        
+        // Si c'est l'admin, il voit tout
         if ($user->role->name === 'ADMIN') {
-            return $this->index();
-        }
+            $query->with('responsableMarche.user')
+                ->withCount('candidatures');
+        } else {
+            $responsable = $user->responsableMarche;
+            if (!$responsable) {
+                return response()->json(['message' => 'Non autorisé'], 403);
+            }
 
-        $responsable = $user->responsableMarche;
-        if (!$responsable) {
-            return response()->json(['message' => 'Non autorisé'], 403);
+            // Les responsables voient leurs propres appels d'offres + ceux créés par l'admin
+            $query->where(function($q) use ($responsable) {
+                    $q->where('responsable_marche_id', $responsable->id)
+                      ->orWhereNull('responsable_marche_id');
+                })
+                ->with('responsableMarche.user')
+                ->withCount('candidatures');
         }
-
-        $appelsOffres = AppelOffre::where('responsable_marche_id', $responsable->id)
-            ->withCount('candidatures')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        
+        // Recherche
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('titre', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%")
+                  ->orWhere('reference', 'ilike', "%{$search}%");
+            });
+        }
+        
+        // Filtre par statut
+        if ($statut) {
+            $query->where('statut', $statut);
+        }
+        
+        $appelsOffres = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json($appelsOffres);
     }
@@ -108,22 +158,30 @@ class AppelOffreController extends Controller
     /**
      * Récupère les candidatures pour un appel d'offre donné (pour le responsable).
      */
-    public function getCandidatures(AppelOffre $appelOffre)
+    public function getCandidatures(Request $request, AppelOffre $appelOffre)
     {
         $user = auth()->user();
+        $perPage = $request->get('per_page', 15);
+        $statut = $request->get('statut', '');
         
         // Vérification que c'est bien son appel d'offre (ou admin)
         if ($user->role->name !== 'ADMIN') {
             $responsable = $user->responsableMarche;
-            if (!$responsable || $appelOffre->responsable_marche_id !== $responsable->id) {
+            if (!$responsable || ($appelOffre->responsable_marche_id !== $responsable->id && $appelOffre->responsable_marche_id !== null)) {
                 return response()->json(['message' => 'Accès refusé'], 403);
             }
         }
 
-        $candidatures = $appelOffre->candidatures()
-            ->with('fournisseur')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = $appelOffre->candidatures()
+            ->with('fournisseur.user')
+            ->orderBy('created_at', 'desc');
+        
+        // Filtre par statut
+        if ($statut) {
+            $query->where('statut', $statut);
+        }
+
+        $candidatures = $query->paginate($perPage);
 
         return response()->json($candidatures);
     }

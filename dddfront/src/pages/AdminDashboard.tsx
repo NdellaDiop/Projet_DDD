@@ -47,7 +47,14 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
-  MessageSquare
+  MessageSquare,
+  Megaphone,
+  Archive,
+  Mail,
+  Phone,
+  MapPin,
+  Send,
+  Download
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -58,6 +65,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 
 // ============================================\n
@@ -139,6 +147,45 @@ interface Suggestion {
   };
 }
 
+interface AppelOffreAdmin {
+  id: number;
+  reference: string;
+  titre: string;
+  description: string;
+  date_limite_depot: string;
+  statut: 'draft' | 'published' | 'closed' | 'archived';
+  candidatures_count?: number;
+}
+
+interface CandidatureAdmin {
+  id: number;
+  fournisseur: {
+    id: number;
+    nom_entreprise: string;
+    email_contact: string;
+  };
+  date_soumission: string;
+  statut: string;
+  montant_propose?: number;
+  appel_offre?: {
+    id: number;
+    titre: string;
+    numero_reference: string;
+    date_limite: string;
+    statut: string;
+  };
+}
+
+interface DocumentLegal {
+  id: number;
+  nom_fichier: string;
+  categorie: string;
+  type_fichier?: string;
+  chemin_fichier: string;
+  url?: string;
+  created_at: string;
+}
+
 // ============================================
 // COMPOSANT PRINCIPAL
 // ============================================
@@ -161,6 +208,28 @@ const AdminDashboard: React.FC = () => {
   });
   const [selectedAppelOffre, setSelectedAppelOffre] = useState<AppelOffre | null>(null);
   const [isViewAppelOffreOpen, setIsViewAppelOffreOpen] = useState(false);
+  
+  // États pour la gestion des appels d'offres (comme responsable)
+  const [mesAppelsOffres, setMesAppelsOffres] = useState<AppelOffreAdmin[]>([]);
+  const [isCreateAOOpen, setIsCreateAOOpen] = useState(false);
+  const [newTender, setNewTender] = useState({
+    titre: "",
+    description: "",
+    date_limite_depot: "",
+  });
+  const [selectedAOForCandidatures, setSelectedAOForCandidatures] = useState<AppelOffreAdmin | null>(null);
+  const [candidaturesAO, setCandidaturesAO] = useState<CandidatureAdmin[]>([]);
+  const [isViewCandidatesOpen, setIsViewCandidatesOpen] = useState(false);
+  const [isViewDossierOpen, setIsViewDossierOpen] = useState(false);
+  const [selectedCandidature, setSelectedCandidature] = useState<CandidatureAdmin | null>(null);
+  const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
+  const [candidatureDocuments, setCandidatureDocuments] = useState<DocumentLegal[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const { user: authUser, api, logout } = useAuth();
   const navigate = useNavigate();  
@@ -251,6 +320,26 @@ const AdminDashboard: React.FC = () => {
   
     fetchDashboardData();
   }, [authUser, fetchDashboardData]);
+
+  // Effet pour rendre l'overlay transparent pour la modale "Voir Dossier"
+  useEffect(() => {
+    if (isViewDossierOpen) {
+      // Utiliser un délai pour s'assurer que l'overlay est dans le DOM
+      const timer = setTimeout(() => {
+        const overlay = document.querySelector('[data-radix-dialog-overlay]');
+        if (overlay) {
+          (overlay as HTMLElement).style.backgroundColor = 'transparent';
+        }
+      }, 10);
+      return () => clearTimeout(timer);
+    } else {
+      // Réinitialiser l'overlay quand la modale est fermée
+      const overlay = document.querySelector('[data-radix-dialog-overlay]');
+      if (overlay) {
+        (overlay as HTMLElement).style.backgroundColor = '';
+      }
+    }
+  }, [isViewDossierOpen]);
 
   // ============================================
   // FONCTIONS UTILITAIRES
@@ -439,6 +528,195 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Fonctions pour la gestion des appels d'offres (comme responsable)
+  const loadMesAppelsOffres = async () => {
+    if (!api) return;
+    try {
+      const res = await api.get("/api/responsable/mes-appels-offres");
+      // S'assurer que nous avons toujours un tableau
+      const data = res.data;
+      if (Array.isArray(data)) {
+        setMesAppelsOffres(data);
+      } else if (data && Array.isArray(data.data)) {
+        setMesAppelsOffres(data.data);
+      } else {
+        setMesAppelsOffres([]);
+      }
+    } catch (error: any) {
+      console.error("Erreur chargement appels d'offres:", error);
+      setMesAppelsOffres([]); // S'assurer que c'est toujours un tableau même en cas d'erreur
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les appels d'offres.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCreateTender = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!api) return;
+    try {
+      await api.post("/api/appels-offres", {
+        ...newTender,
+        statut: 'draft'
+      });
+      toast({ title: "Succès", description: "Appel d'offre créé en brouillon." });
+      setIsCreateAOOpen(false);
+      setNewTender({ titre: "", description: "", date_limite_depot: "" });
+      loadMesAppelsOffres();
+    } catch (error: any) {
+      console.error("Erreur création:", error);
+      const message = error.response?.data?.message || "Erreur lors de la création.";
+      if (error.response?.data?.errors) {
+         const errors = Object.values(error.response.data.errors).flat().join('\n');
+         toast({ title: "Erreur de validation", description: errors, variant: "destructive" });
+      } else {
+         toast({ title: "Erreur", description: message, variant: "destructive" });
+      }
+    }
+  };
+
+  const handlePublish = async (id: number) => {
+    if (!api) return;
+    try {
+      await api.post(`/api/appels-offres/${id}/publish`);
+      toast({ title: "Publié", description: "L'appel d'offre est maintenant visible." });
+      loadMesAppelsOffres();
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible de publier.", variant: "destructive" });
+    }
+  };
+
+  const handleClose = async (id: number) => {
+    if (!api) return;
+    try {
+      await api.post(`/api/appels-offres/${id}/close`);
+      toast({ title: "Clôturé", description: "L'appel d'offre est fermé aux candidatures." });
+      loadMesAppelsOffres();
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible de clôturer.", variant: "destructive" });
+    }
+  };
+
+  const handleViewCandidatures = async (ao: AppelOffreAdmin) => {
+    if (!api) return;
+    setSelectedAOForCandidatures(ao);
+    try {
+      const res = await api.get(`/api/responsable/appels-offres/${ao.id}/candidatures-recues`); 
+      setCandidaturesAO(res.data || []);
+      setIsViewCandidatesOpen(true);
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible de charger les candidatures.", variant: "destructive" });
+    }
+  };
+
+  const handleEvaluateCandidature = async (candidatureId: number, decision: 'accept' | 'reject') => {
+    if (!api) return;
+    try {
+      await api.post(`/api/candidatures/${candidatureId}/${decision}`);
+      toast({ 
+        title: decision === 'accept' ? "Candidature acceptée" : "Candidature rejetée",
+        variant: decision === 'accept' ? "default" : "destructive"
+      });
+      setCandidaturesAO(prev => prev.map(c => c.id === candidatureId ? { ...c, statut: decision === 'accept' ? 'accepted' : 'rejected' } : c));
+      loadMesAppelsOffres();
+    } catch (error: any) {
+      console.error("Erreur évaluation:", error);
+      const message = error.response?.data?.message || "Action impossible.";
+      toast({ title: "Erreur", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleViewDossier = async (candidature: CandidatureAdmin) => {
+    if (!api) return;
+    
+    setSelectedCandidature(candidature);
+    setLegalDocuments([]);
+    setCandidatureDocuments([]);
+    setComments([]);
+    setNewComment("");
+    setSelectedDocumentId(null);
+    setLoadingDocuments(true);
+    setLoadingComments(true);
+    setIsViewDossierOpen(true);
+    
+    try {
+      const [legalDocsRes, candidatureDocsRes, commentsRes] = await Promise.all([
+        api.get(`/api/responsable/candidatures/${candidature.id}/documents-legaux`).catch(() => ({ data: { data: [] } })),
+        api.get(`/api/candidatures/${candidature.id}`).catch(() => ({ data: { data: null } })),
+        api.get(`/api/candidatures/${candidature.id}/comments`).catch(() => ({ data: [] }))
+      ]);
+      
+      const legalDocsData = legalDocsRes.data?.data || legalDocsRes.data;
+      setLegalDocuments(Array.isArray(legalDocsData) ? legalDocsData : []);
+      
+      const candidatureData = candidatureDocsRes.data?.data || candidatureDocsRes.data;
+      if (candidatureData?.documents && Array.isArray(candidatureData.documents)) {
+        setCandidatureDocuments(candidatureData.documents);
+      } else {
+        setCandidatureDocuments([]);
+      }
+      
+      const commentsData = commentsRes.data;
+      setComments(Array.isArray(commentsData) ? commentsData : []);
+    } catch (error: any) {
+      console.error("Erreur chargement documents:", error);
+      toast({ 
+        title: "Erreur", 
+        description: error.response?.data?.message || "Impossible de charger les documents.", 
+        variant: "destructive" 
+      });
+      setLegalDocuments([]);
+      setCandidatureDocuments([]);
+      setComments([]);
+    } finally {
+      setLoadingDocuments(false);
+      setLoadingComments(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!api || !selectedCandidature || !newComment.trim()) return;
+    
+    setSubmittingComment(true);
+    try {
+      const response = await api.post(`/api/candidatures/${selectedCandidature.id}/comments`, {
+        message: newComment.trim(),
+        document_id: selectedDocumentId
+      });
+      
+      setComments([...comments, response.data]);
+      setNewComment("");
+      setSelectedDocumentId(null);
+      toast({
+        title: "Commentaire ajouté",
+        description: "Votre commentaire a été envoyé au fournisseur.",
+      });
+    } catch (error: any) {
+      console.error("Erreur ajout commentaire:", error);
+      toast({
+        title: "Erreur",
+        description: error.response?.data?.message || "Impossible d'ajouter le commentaire.",
+        variant: "destructive"
+      });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const getStatutBadgeAO = (statut: string) => {
+    const map: Record<string, any> = {
+      draft: { label: "Brouillon", variant: "secondary" },
+      published: { label: "Publié", variant: "default" },
+      closed: { label: "Clôturé", variant: "destructive" },
+      archived: { label: "Archivé", variant: "outline" },
+    };
+    const config = map[statut] || { label: statut, variant: "outline" };
+    return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+
   // ============================================
   // RENDU CONDITIONNEL (Loading / Error)
   // ============================================
@@ -571,6 +849,18 @@ const AdminDashboard: React.FC = () => {
             <MessageSquare className="w-4 h-4 mr-3" />
             Suggestions
           </Button>
+
+          <Button
+            variant={activeTab === "gestion-ao" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "gestion-ao" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            onClick={() => {
+              setActiveTab("gestion-ao");
+              loadMesAppelsOffres();
+            }}
+          >
+            <Megaphone className="w-4 h-4 mr-3" />
+            Gestion Appels d'Offres
+          </Button>
         </nav>
  {/* PIED DE PAGE : PARAMÈTRES ET DÉCONNEXION */}
  <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2">
@@ -605,6 +895,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'fournisseurs' && "Annuaire Fournisseurs"}
                 {activeTab === 'responsables' && "Équipe Responsables Marché"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
+                {activeTab === 'gestion-ao' && "Gestion Appels d'Offres"}
               </h1>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'vue-ensemble' && "Métriques clés et activités récentes"}
@@ -612,6 +903,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
                 {activeTab === 'responsables' && "Administrez les comptes des responsables de marché"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
+                {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres et candidatures"}
               </p>
            </div>
            
@@ -627,6 +919,12 @@ const AdminDashboard: React.FC = () => {
                   <Button variant="outline" onClick={fetchDashboardData}>
                     <Activity className="w-4 h-4 mr-2" />
                     Actualiser
+                  </Button>
+              )}
+              {activeTab === 'gestion-ao' && (
+                  <Button onClick={() => setIsCreateAOOpen(true)}>
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    Nouveau Appel d'Offre
                   </Button>
               )}
            </div>
@@ -1004,6 +1302,75 @@ const AdminDashboard: React.FC = () => {
             </div>
         )}
 
+        {/* 6. GESTION APPELS D'OFFRES */}
+        {activeTab === "gestion-ao" && (
+          <div className="animate-in fade-in duration-500">
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-0">
+                <div className="rounded-lg border border-slate-100 overflow-hidden bg-white">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-semibold">Référence</TableHead>
+                        <TableHead className="font-semibold">Titre</TableHead>
+                        <TableHead className="font-semibold">Date Limite</TableHead>
+                        <TableHead className="font-semibold">Statut</TableHead>
+                        <TableHead className="font-semibold">Candidatures</TableHead>
+                        <TableHead className="text-right font-semibold">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {!Array.isArray(mesAppelsOffres) || mesAppelsOffres.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                            <div className="flex flex-col items-center gap-2">
+                              <Briefcase className="w-8 h-8 text-slate-300" />
+                              <p>Aucun appel d'offre créé pour le moment.</p>
+                              <Button variant="link" onClick={() => setIsCreateAOOpen(true)} className="text-primary">
+                                Créer votre premier appel d'offre
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : mesAppelsOffres.map((ao) => (
+                        <TableRow key={ao.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono text-xs font-medium text-slate-600">{ao.reference}</TableCell>
+                          <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
+                          <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
+                          <TableCell>{getStatutBadgeAO(ao.statut)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Users className="w-3 h-3 text-slate-400" />
+                              <span className="text-sm font-medium">{ao.candidatures_count || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {ao.statut === 'draft' && (
+                                <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handlePublish(ao.id)} title="Publier">
+                                  <Megaphone className="w-3 h-3 mr-1" /> Publier
+                                </Button>
+                              )}
+                              {ao.statut === 'published' && (
+                                <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id)} title="Clôturer">
+                                  <Archive className="w-3 h-3 mr-1" /> Clôturer
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" className="h-8" onClick={() => handleViewCandidatures(ao)} title="Voir les candidatures">
+                                <Eye className="w-3 h-3 mr-1" /> Candidatures
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
       </main>
 
       {/* Modale Création Responsable */}
@@ -1255,6 +1622,513 @@ const AdminDashboard: React.FC = () => {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Création Appel d'Offre */}
+      <Dialog open={isCreateAOOpen} onOpenChange={setIsCreateAOOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Créer un Appel d'Offre</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateTender} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Titre de l'appel d'offre</Label>
+                <Input 
+                  value={newTender.titre} 
+                  onChange={e => setNewTender({...newTender, titre: e.target.value})} 
+                  required 
+                  placeholder="Ex: Acquisition..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Date limite de dépôt</Label>
+                <Input 
+                  type="datetime-local" 
+                  value={newTender.date_limite_depot} 
+                  onChange={e => setNewTender({...newTender, date_limite_depot: e.target.value})} 
+                  required 
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description détaillée</Label>
+              <Textarea 
+                value={newTender.description} 
+                onChange={e => setNewTender({...newTender, description: e.target.value})} 
+                required 
+                placeholder="Détails du besoin, contexte..."
+                className="min-h-[100px]"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateAOOpen(false)}>Annuler</Button>
+              <Button type="submit">Créer le brouillon</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Candidatures */}
+      <Dialog open={isViewCandidatesOpen} onOpenChange={setIsViewCandidatesOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Candidatures reçues
+              {selectedAOForCandidatures && (
+                <Badge variant="outline" className="font-normal text-muted-foreground">
+                  {selectedAOForCandidatures.reference}
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {candidaturesAO.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-lg">
+                <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                <p className="text-muted-foreground">Aucune candidature reçue pour le moment.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {candidaturesAO.map(cand => (
+                  <div key={cand.id} className="flex flex-col md:flex-row md:items-center justify-between border p-4 rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
+                    <div className="space-y-1 mb-4 md:mb-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-lg text-slate-800">{cand.fournisseur.nom_entreprise}</h4>
+                        <Badge variant={cand.statut === 'accepted' ? 'default' : cand.statut === 'rejected' ? 'destructive' : 'secondary'}>
+                          {cand.statut === 'submitted' ? 'Soumise' : cand.statut === 'accepted' ? 'Acceptée' : cand.statut === 'rejected' ? 'Rejetée' : cand.statut}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-slate-600 flex items-center gap-2">
+                        <span className="font-medium">Contact:</span> {cand.fournisseur.email_contact}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Soumis le {new Date(cand.date_soumission).toLocaleDateString()} à {new Date(cand.date_soumission).toLocaleTimeString()}
+                      </p>
+                      {cand.montant_propose && (
+                        <p className="text-sm font-medium text-primary">
+                          Offre: {cand.montant_propose.toLocaleString()} FCFA
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {cand.statut === 'submitted' && (
+                        <>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleEvaluateCandidature(cand.id, 'accept')}>
+                            <CheckCircle className="w-4 h-4 mr-1" /> Retenir
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleEvaluateCandidature(cand.id, 'reject')}>
+                            <XCircle className="w-4 h-4 mr-1" /> Rejeter
+                          </Button>
+                        </>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => handleViewDossier(cand)}>
+                        <Eye className="w-4 h-4 mr-1" /> Voir dossier
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewCandidatesOpen(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Voir Dossier */}
+      <Dialog open={isViewDossierOpen} onOpenChange={(open) => {
+        setIsViewDossierOpen(open);
+        if (!open) {
+          setSelectedCandidature(null);
+          setLegalDocuments([]);
+          setCandidatureDocuments([]);
+          setComments([]);
+          setNewComment("");
+          setSelectedDocumentId(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dossier de candidature</DialogTitle>
+          </DialogHeader>
+          
+          {loadingDocuments ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                <p className="text-sm text-muted-foreground">Chargement du dossier...</p>
+              </div>
+            </div>
+          ) : selectedCandidature ? (
+            <div className="py-4 space-y-6">
+              {/* Informations du fournisseur */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-primary" />
+                    Informations du fournisseur
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Nom de l'entreprise</p>
+                        <p className="font-medium text-slate-800">{selectedCandidature.fournisseur.nom_entreprise}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Mail className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Email de contact</p>
+                        <p className="font-medium text-slate-800">{selectedCandidature.fournisseur.email_contact}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Montant proposé */}
+              {selectedCandidature.montant_propose && (
+                <Card className="border-none shadow-sm">
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant de l'offre</h3>
+                    <p className="text-2xl font-bold text-primary">
+                      {selectedCandidature.montant_propose.toLocaleString()} FCFA
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Soumis le {new Date(selectedCandidature.date_soumission).toLocaleDateString()} à {new Date(selectedCandidature.date_soumission).toLocaleTimeString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Documents légaux */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Documents légaux
+                  </h3>
+                  
+                  {loadingDocuments ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                        <p className="text-sm text-muted-foreground">Chargement des documents...</p>
+                      </div>
+                    </div>
+                  ) : legalDocuments.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
+                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-muted-foreground">Aucun document légal disponible pour ce fournisseur.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                        const docs = legalDocuments.filter(d => d.categorie === categorie);
+                        const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
+                          : categorie === 'NINEA' ? 'NINEA' 
+                          : 'Quitus Fiscal';
+                        
+                        return (
+                          <div key={categorie} className="border rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold text-slate-700">{categorieLabel}</h4>
+                              {docs.length > 0 ? (
+                                <Badge className="bg-green-100 text-green-700 border-none">
+                                  {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
+                                  Manquant
+                                </Badge>
+                              )}
+                            </div>
+                            {docs.length > 0 && (
+                              <div className="space-y-2 mt-3">
+                                {docs.map((doc) => (
+                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                      <div className="bg-white p-2 rounded border border-slate-200">
+                                        <FileText className="w-4 h-4 text-blue-600" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Ajouté le {new Date(doc.created_at).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={async () => {
+                                        if (!api) return;
+                                        try {
+                                          const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                            responseType: 'blob'
+                                          });
+                                          const blob = new Blob([response.data]);
+                                          const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                          if (contentType.includes('pdf') || contentType.includes('image')) {
+                                            const url = window.URL.createObjectURL(blob);
+                                            window.open(url, '_blank', 'noopener,noreferrer');
+                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                          } else {
+                                            const url = window.URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.target = '_blank';
+                                            link.rel = 'noopener noreferrer';
+                                            const extension = contentType.includes('word') ? '.docx' : contentType.includes('excel') ? '.xlsx' : '.pdf';
+                                            link.download = doc.nom_fichier || `document${extension}`;
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                          }
+                                        } catch (error: any) {
+                                          toast({
+                                            title: "Erreur",
+                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Voir
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Documents de candidature */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Documents de la candidature
+                  </h3>
+                  
+                  {candidatureDocuments.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
+                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="text-muted-foreground">Aucun document de candidature disponible.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {['OFFRE_TECHNIQUE', 'OFFRE_FINANCIERE'].map((categorie) => {
+                        const docs = candidatureDocuments.filter(d => d.categorie === categorie);
+                        const categorieLabel = categorie === 'OFFRE_TECHNIQUE' ? 'Offre technique' : 'Offre financière';
+                        
+                        return (
+                          <div key={categorie} className="border rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-semibold text-slate-700">{categorieLabel}</h4>
+                              {docs.length > 0 ? (
+                                <Badge className="bg-green-100 text-green-700 border-none">
+                                  {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
+                                  Manquant
+                                </Badge>
+                              )}
+                            </div>
+                            {docs.length > 0 && (
+                              <div className="space-y-2 mt-3">
+                                {docs.map((doc) => (
+                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                      <div className="bg-white p-2 rounded border border-slate-200">
+                                        <FileText className="w-4 h-4 text-blue-600" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-800">{doc.nom_fichier}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Ajouté le {new Date(doc.created_at).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={async () => {
+                                        if (!api) return;
+                                        try {
+                                          const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                            responseType: 'blob'
+                                          });
+                                          const blob = new Blob([response.data]);
+                                          const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                          if (contentType.includes('pdf') || contentType.includes('image')) {
+                                            const url = window.URL.createObjectURL(blob);
+                                            window.open(url, '_blank', 'noopener,noreferrer');
+                                            setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                          } else {
+                                            const url = window.URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.target = '_blank';
+                                            link.rel = 'noopener noreferrer';
+                                            const extension = contentType.includes('word') ? '.docx' : contentType.includes('excel') ? '.xlsx' : '.pdf';
+                                            link.download = doc.nom_fichier || `document${extension}`;
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                          }
+                                        } catch (error: any) {
+                                          toast({
+                                            title: "Erreur",
+                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Voir
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Avertissement si documents légaux manquants */}
+              {legalDocuments.length < 3 && (
+                <Card className="border-none shadow-sm bg-orange-50 border-orange-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-orange-800 mb-1">Documents légaux incomplets</p>
+                        <p className="text-xs text-orange-700">
+                          Ce fournisseur n'a pas uploadé tous les documents légaux requis (RCCM, NINEA, Quitus Fiscal). 
+                          Il est recommandé de rejeter cette candidature ou de demander la complétion des documents.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Section Commentaires */}
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    Commentaires et communication
+                  </h3>
+                  
+                  {/* Liste des commentaires */}
+                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                    {loadingComments ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Aucun commentaire pour le moment.
+                      </p>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className={`p-3 rounded-lg border ${comment.user?.id === authUser?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex items-start justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-slate-700">
+                                {comment.user?.name || 'Utilisateur'}
+                              </span>
+                              {comment.document && (
+                                <Badge variant="outline" className="text-xs">
+                                  Document: {comment.document.nom_fichier}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(comment.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{comment.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  
+                  {/* Formulaire d'ajout de commentaire */}
+                  <div className="space-y-2 border-t pt-4">
+                    <Label htmlFor="new-comment">Ajouter un commentaire</Label>
+                    <Textarea
+                      id="new-comment"
+                      placeholder="Écrivez votre commentaire ici..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={3}
+                      className="resize-none"
+                    />
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-muted-foreground">
+                        Le fournisseur sera notifié de votre commentaire
+                      </div>
+                      <Button 
+                        onClick={handleSubmitComment}
+                        disabled={!newComment.trim() || submittingComment}
+                        size="sm"
+                      >
+                        {submittingComment ? (
+                          <>
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2"></div>
+                            Envoi...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Envoyer
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Aucune information disponible.</p>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsViewDossierOpen(false);
+              setComments([]);
+              setNewComment("");
+              setSelectedDocumentId(null);
+            }}>Fermer</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

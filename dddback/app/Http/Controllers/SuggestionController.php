@@ -15,7 +15,15 @@ class SuggestionController extends Controller
 
     public function index()
     {
-        // Retourne les suggestions de l'utilisateur connecté
+        $user = Auth::user();
+        
+        // L'admin ne peut pas accéder aux suggestions via cette route
+        // Il doit utiliser indexAdmin pour voir toutes les suggestions
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Accès non autorisé.'], 403);
+        }
+        
+        // Suggestions de l'utilisateur connecté
         return Suggestion::where('user_id', Auth::id())
             ->orderBy('created_at', 'desc')
             ->get();
@@ -23,6 +31,13 @@ class SuggestionController extends Controller
 
     public function store(Request $request)
     {
+        $user = Auth::user();
+        
+        // L'admin ne peut pas créer de suggestions via cette route
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Vous n\'êtes pas autorisé à créer des suggestions.'], 403);
+        }
+        
         $request->validate([
             'sujet' => 'required|string|max:255',
             'message' => 'required|string',

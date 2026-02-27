@@ -43,8 +43,16 @@ class DocumentController extends Controller
     public function indexLegal()
     {
         $this->authorize('viewAny', Document::class);
-
-        $documents = Document::where('user_id', auth()->id())
+        
+        $user = auth()->user();
+        
+        // L'admin ne peut pas accéder aux documents légaux via cette route
+        // Il doit utiliser getFournisseurLegalDocuments via une candidature
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Accès non autorisé.'], 403);
+        }
+        
+        $documents = Document::where('user_id', $user->id)
             ->whereIn('categorie', ['RCCM', 'NINEA', 'QUITUS_FISCAL'])
             ->latest()
             ->get();
@@ -56,6 +64,13 @@ class DocumentController extends Controller
     {
         $this->authorize('create', Document::class);
 
+        $user = auth()->user();
+        
+        // L'admin ne peut pas uploader de documents légaux pour un fournisseur
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'Vous n\'êtes pas autorisé à uploader des documents légaux.'], 403);
+        }
+
         $request->validate([
             'file' => 'required|file|max:10240',
             'categorie' => 'required|in:RCCM,NINEA,QUITUS_FISCAL',
@@ -65,7 +80,7 @@ class DocumentController extends Controller
         $path = $file->store('documents', 'public');
 
         $doc = Document::create([
-            'user_id' => auth()->id(),
+            'user_id' => $user->id,
             'candidature_id' => null,
             'appel_offre_id' => null,
             'nom_fichier' => $file->getClientOriginalName(),

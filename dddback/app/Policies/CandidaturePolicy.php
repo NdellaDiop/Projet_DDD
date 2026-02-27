@@ -35,6 +35,7 @@ class CandidaturePolicy
 
     public function create(User $user): bool
     {
+        // Seuls les fournisseurs actifs peuvent créer des candidatures
         return $user->isFournisseur() && $user->is_active === true;
     }
 

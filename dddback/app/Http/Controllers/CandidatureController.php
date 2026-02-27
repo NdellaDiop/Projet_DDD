@@ -60,12 +60,21 @@ class CandidatureController extends Controller
         $this->authorize('create', Candidature::class);
 
         if ($appelOffre->statut !== \App\Models\AppelOffre::STATUS_PUBLISHED) {
-            return response()->json(['message' => 'Appel d’offre non ouvert à la candidature.'], 403);
+            return response()->json(['message' => 'Appel d\'offre non ouvert à la candidature.'], 403);
         }
+        
+        $user = Auth::user();
+        
+        // Seuls les fournisseurs peuvent créer des candidatures
+        if (!$user->fournisseur) {
+            return response()->json(['message' => 'Utilisateur non reconnu comme fournisseur.'], 403);
+        }
+        
+        $fournisseurId = $user->fournisseur->id;
         
         // Vérifier si une candidature existe déjà pour ce fournisseur et cet appel d'offre
         $existingCandidature = Candidature::where('appel_offre_id', $appelOffre->id)
-            ->where('fournisseur_id', $request->fournisseur_id)
+            ->where('fournisseur_id', $fournisseurId)
             ->first();
 
         if ($existingCandidature) {
@@ -73,7 +82,6 @@ class CandidatureController extends Controller
         }
 
         // Vérifier que le fournisseur a bien uploadé tous ses documents légaux
-        $user = Auth::user();
         $requiredDocs = ['RCCM', 'NINEA', 'QUITUS_FISCAL'];
         $userDocuments = Document::where('user_id', $user->id)
             ->whereIn('categorie', $requiredDocs)
@@ -96,13 +104,17 @@ class CandidatureController extends Controller
             ], 422);
         }
 
+        $validated = $request->validated();
+        
         $candidature = Candidature::create([
             'appel_offre_id' => $appelOffre->id,
-            'fournisseur_id' => $request->fournisseur_id,
+            'fournisseur_id' => $fournisseurId,
             'date_soumission' => now(),
-            'montant_propose' => $request->montant_propose,
+            'montant_propose' => $validated['montant_propose'],
             'statut' => \App\Models\Candidature::STATUS_SUBMITTED,
         ]);
+
+        $candidature->refresh();
 
         $this->log('submit_candidature', "Soumission candidature #{$candidature->id}");
 
@@ -111,7 +123,7 @@ class CandidatureController extends Controller
 
     public function update(StoreCandidatureRequest $request, Candidature $candidature)
     {
-        // On vérifie si c'est le propriétaire (via fournisseur lié au user connecté)
+        // Seul le fournisseur propriétaire peut modifier sa candidature
         if (!auth()->user()->fournisseur || $candidature->fournisseur_id !== auth()->user()->fournisseur->id) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
@@ -128,8 +140,10 @@ class CandidatureController extends Controller
         }
 
         $candidature->update([
-            'montant_propose' => $request->montant_propose,
+            'montant_propose' => $request->validated()['montant_propose'],
         ]);
+
+        $candidature->refresh();
 
         return new CandidatureResource($candidature);
     }
