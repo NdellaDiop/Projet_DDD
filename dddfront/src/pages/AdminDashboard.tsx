@@ -68,6 +68,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { exportData } from "@/lib/exportUtils";
 
 
 // ============================================\n
@@ -78,9 +79,11 @@ interface DashboardStats {
   totalFournisseurs: number;
   fournisseursActifs: number;
   fournisseursEnAttente: number;
+  fournisseursRejetes: number;
   totalAppelsOffres: number;
   appelsOffresActifs: number;
   appelsOffresClotures: number;
+  appelsOffresBrouillon: number;
   totalCandidatures: number;
   candidaturesEnCours: number;
   candidaturesRetenues: number;
@@ -259,9 +262,11 @@ const AdminDashboard: React.FC = () => {
     totalFournisseurs: 0,
     fournisseursActifs: 0,
     fournisseursEnAttente: 0,
+    fournisseursRejetes: 0,
     totalAppelsOffres: 0,
     appelsOffresActifs: 0,
     appelsOffresClotures: 0,
+    appelsOffresBrouillon: 0,
     totalCandidatures: 0,
     candidaturesEnCours: 0,
     candidaturesRetenues: 0,
@@ -620,11 +625,28 @@ const AdminDashboard: React.FC = () => {
       }
 
       // Mapper les données pour assurer la compatibilité avec l'interface AppelOffreAdmin
-      // Notamment pour le champ 'responsable' qui peut arriver comme 'responsable_marche'
-      const mappedData = rawData.map((item: any) => ({
-        ...item,
-        responsable: item.responsable || (item.responsable_marche?.user ? { name: item.responsable_marche.user.name } : null)
-      }));
+      // La ressource API renvoie responsable.user.name, alors que l'interface attend responsable.name
+      const mappedData = rawData.map((item: any) => {
+        let responsableObj = null;
+        
+        // Cas 1 : Structure Resource (responsable.user.name)
+        if (item.responsable && item.responsable.user) {
+            responsableObj = { name: item.responsable.user.name };
+        }
+        // Cas 2 : Structure directe (responsable.name) - rare ici mais possible
+        else if (item.responsable && item.responsable.name) {
+            responsableObj = item.responsable;
+        }
+        // Cas 3 : Fallback sur responsable_marche
+        else if (item.responsable_marche && item.responsable_marche.user) {
+            responsableObj = { name: item.responsable_marche.user.name };
+        }
+
+        return {
+            ...item,
+            responsable: responsableObj
+        };
+      });
 
       setMesAppelsOffres(mappedData);
     } catch (error: any) {
@@ -842,6 +864,99 @@ const AdminDashboard: React.FC = () => {
     setIsAssignAOOpen(true);
   };
 
+  const handleExportData = async (type: 'appelsOffres' | 'fournisseurs' | 'responsables', format: 'excel' | 'pdf') => {
+    if (!api) return;
+
+    try {
+      let endpoint = '';
+      let fileName = '';
+      let title = '';
+      let columns: any[] = [];
+
+      switch (type) {
+        case 'appelsOffres':
+          endpoint = '/api/admin/appels-offres-dashboard';
+          fileName = 'appels_offres_export';
+          title = 'Liste des Appels d\'Offres';
+          columns = [
+            { header: 'ID', key: 'id' },
+            { header: 'Titre', key: 'titre' },
+            { header: 'Référence', key: 'reference' },
+            { header: 'Statut', key: 'statut' },
+            { header: 'Date Publication', key: 'date_publication', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+            { header: 'Date Clôture', key: 'date_cloture', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+            { header: 'Candidatures', key: 'nombre_candidatures' },
+            { header: 'Responsable', key: 'responsable.name' },
+          ];
+          break;
+        case 'fournisseurs':
+          endpoint = '/api/admin/fournisseurs-dashboard';
+          fileName = 'fournisseurs_export';
+          title = 'Liste des Fournisseurs';
+          columns = [
+            { header: 'ID', key: 'id' },
+            { header: 'Raison Sociale', key: 'raison_sociale' },
+            { header: 'NINEA', key: 'ninea' },
+            { header: 'Email', key: 'email' },
+            { header: 'Téléphone', key: 'telephone' },
+            { header: 'Statut', key: 'statut' },
+            { header: 'Date Inscription', key: 'date_inscription', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+            { header: 'Candidatures', key: 'nombre_candidatures' },
+          ];
+          break;
+        case 'responsables':
+          endpoint = '/api/admin/responsables-dashboard';
+          fileName = 'responsables_export';
+          title = 'Liste des Responsables de Marché';
+          columns = [
+            { header: 'ID', key: 'id' },
+            { header: 'Nom', key: 'user.name' },
+            { header: 'Email', key: 'user.email' },
+            { header: 'Département', key: 'departement' },
+            { header: 'Fonction', key: 'fonction' },
+            { header: 'Téléphone', key: 'telephone' },
+            { header: 'Appels d\'Offres', key: 'nombre_appels_offres' },
+          ];
+          break;
+      }
+
+      // Préparation des paramètres
+      const params: any = {
+        all: true,
+        search: searchTerm
+      };
+
+      // Ne pas envoyer "tous" comme filtre de statut
+      if (filterStatut && filterStatut !== 'tous') {
+        params.statut = filterStatut;
+      }
+
+      const response = await api.get(endpoint, { params });
+      
+      const data = response.data;
+
+      exportData(format, {
+        fileName,
+        title,
+        columns,
+        data
+      });
+
+      toast({
+        title: "Export réussi",
+        description: `Le fichier ${format.toUpperCase()} a été généré avec succès.`,
+      });
+
+    } catch (error) {
+      console.error("Erreur lors de l'export:", error);
+      toast({
+        title: "Erreur d'export",
+        description: "Impossible de générer le fichier d'export.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // ============================================
   // PAGINATION HANDLERS
   // ============================================
@@ -939,7 +1054,7 @@ const AdminDashboard: React.FC = () => {
     {
       title: "Fournisseurs",
       value: stats.totalFournisseurs,
-      subtitle: `${stats.fournisseursActifs} actifs • ${stats.fournisseursEnAttente} en attente`,
+      subtitle: `${stats.fournisseursActifs} actifs • ${stats.fournisseursEnAttente} en attente • ${stats.fournisseursRejetes} rejetés`,
       icon: Building2,
       color: "text-blue-600",
       bgColor: "bg-blue-50",
@@ -947,7 +1062,7 @@ const AdminDashboard: React.FC = () => {
     {
       title: "Appels d'offres",
       value: stats.totalAppelsOffres,
-      subtitle: `${stats.appelsOffresActifs} actifs • ${stats.appelsOffresClotures} clôturés`,
+      subtitle: `${stats.appelsOffresActifs} actifs • ${stats.appelsOffresClotures} clôturés • ${stats.appelsOffresBrouillon} brouillons`,
       icon: FileText,
       color: "text-green-600",
       bgColor: "bg-green-50",
@@ -1250,6 +1365,14 @@ const AdminDashboard: React.FC = () => {
             <Card className="border-none shadow-sm">
               <CardHeader className="pb-3">
                  <div className="flex flex-col md:flex-row gap-4 justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleExportData('appelsOffres', 'excel')}>
+                        <Download className="mr-2 h-4 w-4" /> Excel
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleExportData('appelsOffres', 'pdf')}>
+                        <Download className="mr-2 h-4 w-4" /> PDF
+                      </Button>
+                    </div>
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input 
@@ -1346,6 +1469,18 @@ const AdminDashboard: React.FC = () => {
         {activeTab === "fournisseurs" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <Card className="border-none shadow-sm">
+              <CardHeader className="pb-3">
+                  <div className="flex flex-col md:flex-row gap-4 justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleExportData('fournisseurs', 'excel')}>
+                        <Download className="mr-2 h-4 w-4" /> Excel
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleExportData('fournisseurs', 'pdf')}>
+                        <Download className="mr-2 h-4 w-4" /> PDF
+                      </Button>
+                    </div>
+                  </div>
+              </CardHeader>
               <CardContent className="p-0">
                 <div className="rounded-lg border border-slate-100 overflow-hidden">
                   <Table>
@@ -1401,6 +1536,14 @@ const AdminDashboard: React.FC = () => {
         {/* 4. RESPONSABLES */}
         {activeTab === "responsables" && (
           <div className="space-y-6 animate-in fade-in duration-500">
+             <div className="flex justify-end gap-2 mb-4">
+                <Button variant="outline" size="sm" onClick={() => handleExportData('responsables', 'excel')}>
+                  <Download className="mr-2 h-4 w-4" /> Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleExportData('responsables', 'pdf')}>
+                  <Download className="mr-2 h-4 w-4" /> PDF
+                </Button>
+             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {responsables.map((r) => (
                      <Card key={r.id} className="hover:shadow-md transition-shadow border-slate-200">

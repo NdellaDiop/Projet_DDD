@@ -18,17 +18,14 @@ class AdminDashboardController extends Controller
     public function getDashboardStats()
     {
         $totalFournisseurs = Fournisseur::count();
-        $fournisseursActifs = Fournisseur::whereHas('user', function ($query) {
-            $query->where('is_active', true);
-        })->count();
-
-        $fournisseursEnAttente = Fournisseur::whereHas('user', function ($query) {
-            $query->where('is_active', false);
-        })->count();
+        $fournisseursActifs = Fournisseur::where('statut', 'actif')->count();
+        $fournisseursEnAttente = Fournisseur::where('statut', 'en_attente')->count();
+        $fournisseursRejetes = Fournisseur::where('statut', 'rejete')->count();
 
         $totalAppelsOffres = AppelOffre::count();
         $appelsOffresActifs = AppelOffre::where('statut', AppelOffre::STATUS_PUBLISHED)->count();
         $appelsOffresClotures = AppelOffre::where('statut', AppelOffre::STATUS_CLOSED)->count();
+        $appelsOffresBrouillon = AppelOffre::where('statut', AppelOffre::STATUS_DRAFT)->count();
 
         $totalCandidatures = Candidature::count();
         $candidaturesEnCours = Candidature::where('statut', Candidature::STATUS_SUBMITTED)->count();
@@ -41,9 +38,11 @@ class AdminDashboardController extends Controller
             'totalFournisseurs' => $totalFournisseurs,
             'fournisseursActifs' => $fournisseursActifs,
             'fournisseursEnAttente' => $fournisseursEnAttente,
+            'fournisseursRejetes' => $fournisseursRejetes,
             'totalAppelsOffres' => $totalAppelsOffres,
             'appelsOffresActifs' => $appelsOffresActifs,
             'appelsOffresClotures' => $appelsOffresClotures,
+            'appelsOffresBrouillon' => $appelsOffresBrouillon,
             'totalCandidatures' => $totalCandidatures,
             'candidaturesEnCours' => $candidaturesEnCours,
             'candidaturesRetenues' => $candidaturesRetenues,
@@ -78,27 +77,40 @@ class AdminDashboardController extends Controller
             $query->where('statut', $statut);
         }
         
-        $appelsOffres = $query->orderBy('date_publication', 'desc')
-            ->paginate($perPage)
-            ->through(function ($ao) {
-                return [
-                    'id' => $ao->id,
-                    'titre' => $ao->titre,
-                    'reference' => $ao->reference,
-                    'statut' => $ao->statut,
-                    'date_publication' => $ao->date_publication,
-                    'date_cloture' => $ao->date_limite_depot,
-                    'nombre_candidatures' => $ao->candidatures_count,
-                    'responsable_marche_id' => $ao->responsable_marche_id,
-                    'responsable' => $ao->responsableMarche
-                        ? [
-                            'name' => $ao->responsableMarche->user ? $ao->responsableMarche->user->name : 'Responsable inconnu',
-                        ]
-                        : null,
-                ];
-            });
+        if ($request->has('all')) {
+            $appelsOffres = $query->orderBy('date_publication', 'desc')
+                ->get()
+                ->map(function ($ao) {
+                    return $this->formatAppelOffre($ao);
+                });
+        } else {
+            $appelsOffres = $query->orderBy('date_publication', 'desc')
+                ->paginate($perPage)
+                ->through(function ($ao) {
+                    return $this->formatAppelOffre($ao);
+                });
+        }
 
         return response()->json($appelsOffres);
+    }
+
+    private function formatAppelOffre($ao)
+    {
+        return [
+            'id' => $ao->id,
+            'titre' => $ao->titre,
+            'reference' => $ao->reference,
+            'statut' => $ao->statut,
+            'date_publication' => $ao->date_publication,
+            'date_cloture' => $ao->date_limite_depot,
+            'nombre_candidatures' => $ao->candidatures_count,
+            'responsable_marche_id' => $ao->responsable_marche_id,
+            'responsable' => $ao->responsableMarche
+                ? [
+                    'name' => $ao->responsableMarche->user ? $ao->responsableMarche->user->name : 'Responsable inconnu',
+                ]
+                : null,
+        ];
     }
 
     /**
@@ -128,33 +140,40 @@ class AdminDashboardController extends Controller
         }
         
         // Filtre par statut
-        if ($statut === 'actif') {
-            $query->whereHas('user', function($q) {
-                $q->where('is_active', true);
-            });
-        } elseif ($statut === 'en_attente') {
-            $query->whereHas('user', function($q) {
-                $q->where('is_active', false);
-            });
+        if ($statut) {
+            $query->where('statut', $statut);
         }
         
-        $fournisseurs = $query->orderBy('created_at', 'desc')
-            ->paginate($perPage)
-            ->through(function ($f) {
-                return [
-                    'id' => $f->id,
-                    'raison_sociale' => $f->nom_entreprise,
-                    'ninea' => $f->ninea ?? 'N/A',
-                    'email' => $f->email_contact,
-                    'telephone' => $f->telephone,
-                    'statut' => $f->user->is_active ? 'actif' : 'en_attente',
-                    'date_inscription' => $f->created_at->format('Y-m-d'),
-                    'nombre_candidatures' => $f->candidatures_count,
-                    'domaines_activite' => [],
-                ];
-            });
+        if ($request->has('all')) {
+            $fournisseurs = $query->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($f) {
+                    return $this->formatFournisseur($f);
+                });
+        } else {
+            $fournisseurs = $query->orderBy('created_at', 'desc')
+                ->paginate($perPage)
+                ->through(function ($f) {
+                    return $this->formatFournisseur($f);
+                });
+        }
 
         return response()->json($fournisseurs);
+    }
+
+    private function formatFournisseur($f)
+    {
+        return [
+            'id' => $f->id,
+            'raison_sociale' => $f->nom_entreprise,
+            'ninea' => $f->ninea ?? 'N/A',
+            'email' => $f->email_contact,
+            'telephone' => $f->telephone,
+            'statut' => $f->statut, // Utilisation de la nouvelle colonne
+            'date_inscription' => $f->created_at->format('Y-m-d'),
+            'nombre_candidatures' => $f->candidatures_count,
+            'domaines_activite' => [],
+        ];
     }
 
     /**
@@ -181,24 +200,37 @@ class AdminDashboardController extends Controller
             });
         }
         
-        $responsables = $query->orderBy('created_at', 'desc')
-            ->paginate($perPage)
-            ->through(function ($r) {
-                return [
-                    'id' => $r->id,
-                    'user_id' => $r->user_id,
-                    'departement' => $r->departement,
-                    'fonction' => $r->fonction,
-                    'telephone' => $r->telephone,
-                    'user' => [
-                        'name' => $r->user->name ?? 'N/A',
-                        'email' => $r->user->email ?? 'N/A',
-                    ],
-                    'nombre_appels_offres' => $r->appels_offres_count,
-                ];
-            });
+        if ($request->has('all')) {
+            $responsables = $query->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($r) {
+                    return $this->formatResponsable($r);
+                });
+        } else {
+            $responsables = $query->orderBy('created_at', 'desc')
+                ->paginate($perPage)
+                ->through(function ($r) {
+                    return $this->formatResponsable($r);
+                });
+        }
 
         return response()->json($responsables);
+    }
+
+    private function formatResponsable($r)
+    {
+        return [
+            'id' => $r->id,
+            'user_id' => $r->user_id,
+            'departement' => $r->departement,
+            'fonction' => $r->fonction,
+            'telephone' => $r->telephone,
+            'user' => [
+                'name' => $r->user->name ?? 'N/A',
+                'email' => $r->user->email ?? 'N/A',
+            ],
+            'nombre_appels_offres' => $r->appels_offres_count,
+        ];
     }
 
     /**
@@ -228,24 +260,43 @@ class AdminDashboardController extends Controller
      */
     public function validateFournisseur(Fournisseur $fournisseur)
     {
+        \Illuminate\Support\Facades\Log::info("Début validation fournisseur #{$fournisseur->id}");
+
         if ($fournisseur->user) {
             $fournisseur->user->is_active = true;
             $fournisseur->user->save();
+            
+            $fournisseur->statut = 'actif';
+            $fournisseur->save();
+
+            \Illuminate\Support\Facades\Log::info("Utilisateur activé.");
 
             // Try-catch pour éviter le crash si l'envoi de mail échoue
             try {
                 $this->log('validate_fournisseur', "Validation fournisseur #{$fournisseur->id}");
-                app(NotificationService::class)->notifyUser(
+                
+                $notificationService = app(NotificationService::class);
+                
+                // Notification interne (base de données)
+                $notificationService->notifyUser(
                     $fournisseur->user->id,
-                    'Votre compte a été validé.'
+                    'Votre compte a été validé. Vous pouvez maintenant accéder à la plateforme.'
                 );
+
+                \Illuminate\Support\Facades\Log::info("Tentative envoi mail à: " . $fournisseur->user->email);
+                // Envoi de l'email de confirmation
+                $notificationService->sendAccountValidatedEmail($fournisseur->user);
+                \Illuminate\Support\Facades\Log::info("Mail envoyé avec succès (théoriquement).");
+
             } catch (\Exception $e) {
-                // On continue même si la notif plante
+                // Loguer l'erreur pour le débogage
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email validation: " . $e->getMessage());
             }
 
             return response()->json(['message' => 'Fournisseur validé avec succès.']);
         }
 
+        \Illuminate\Support\Facades\Log::warning("Utilisateur introuvable pour fournisseur #{$fournisseur->id}");
         return response()->json(['message' => 'Utilisateur associé introuvable pour ce fournisseur.'], 404);
     }
 
@@ -257,6 +308,9 @@ class AdminDashboardController extends Controller
         if ($fournisseur->user) {
             $fournisseur->user->is_active = false;
             $fournisseur->user->save();
+            
+            $fournisseur->statut = 'rejete';
+            $fournisseur->save();
 
             try {
             $this->log('reject_fournisseur', "Rejet fournisseur #{$fournisseur->id}");

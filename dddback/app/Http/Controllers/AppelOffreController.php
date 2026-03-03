@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AppelOffre;
 use App\Models\LogActivite;
 use App\Services\AppelOffreService;
+use App\Services\NotificationService;
 use App\Http\Requests\StoreAppelOffreRequest;
 use App\Http\Requests\UpdateAppelOffreRequest;
 use App\Http\Requests\PublishAppelOffreRequest;
@@ -15,8 +16,9 @@ use Illuminate\Http\Request;
 class AppelOffreController extends Controller
 {
     protected AppelOffreService $appelOffreService;
+    protected NotificationService $notificationService;
 
-    public function __construct(AppelOffreService $appelOffreService)
+    public function __construct(AppelOffreService $appelOffreService, NotificationService $notificationService)
     {
         $this->middleware('auth:sanctum')->except(['index', 'show']);
         $this->authorizeResource(AppelOffre::class, 'appel_offre', [
@@ -24,6 +26,7 @@ class AppelOffreController extends Controller
         ]);
 
         $this->appelOffreService = $appelOffreService;
+        $this->notificationService = $notificationService;
     }
 
     public function index(Request $request)
@@ -192,10 +195,8 @@ class AppelOffreController extends Controller
      */
     public function assign(Request $request, AppelOffre $appelOffre)
     {
-        $user = auth()->user();
-        
-        // Seul l'admin peut assigner
-        if ($user->role->name !== 'ADMIN') {
+        // Seul l'admin peut assigner (vérification manuelle car pas de Policy spécifique pour 'assign')
+        if (auth()->user()->role->name !== 'ADMIN') {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 
@@ -207,6 +208,23 @@ class AppelOffreController extends Controller
         $appelOffre->save();
         
         $appelOffre->load('responsableMarche.user');
+        
+        // Envoi de l'email de notification au responsable
+        if ($appelOffre->responsableMarche && $appelOffre->responsableMarche->user) {
+            try {
+                $this->notificationService->sendAppelOffreAssignedEmail(
+                    $appelOffre->responsableMarche->user,
+                    $appelOffre
+                );
+                $this->notificationService->notifyUser(
+                    $appelOffre->responsableMarche->user->id,
+                    "L'appel d'offre '{$appelOffre->titre}' vous a été assigné."
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email assignation AO: " . $e->getMessage());
+            }
+        }
+
         $this->log('assign_appel_offre', "Assignation AO #{$appelOffre->id} au responsable #{$request->responsable_marche_id}");
 
         return new AppelOffreResource($appelOffre);

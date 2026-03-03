@@ -20,33 +20,54 @@
 
 ### Frontend 🔄 EN COURS
 - ✅ Composant `DataTablePagination.tsx` créé
-- ⏳ Intégration dans `AppelsOffres.tsx`
-- ⏳ Intégration dans `AdminDashboard.tsx`
+- ✅ Intégration dans `AdminDashboard.tsx`
+- ✅ Intégration dans `AppelsOffres.tsx`
 - ⏳ Intégration dans `ResponsableDashboard.tsx`
 - ⏳ Intégration dans `FournisseurDashboard.tsx`
 
 ---
 
-## 📄 2. Export PDF/Excel
+## ✅ 2. Export PDF/Excel
 
-### Backend ⏳ À FAIRE
-- [ ] Créer `ExportController.php`
-- [ ] Installer `barryvdh/laravel-dompdf` pour PDF
-- [ ] Installer `maatwebsite/excel` pour Excel
-- [ ] Route `/api/admin/export/appels-offres` (PDF/Excel)
-- [ ] Route `/api/admin/export/fournisseurs` (PDF/Excel)
-- [ ] Route `/api/admin/export/candidatures` (PDF/Excel)
-- [ ] Route `/api/responsable/export/candidatures/{ao_id}` (PDF/Excel)
-- [ ] Route `/api/fournisseur/export/mes-candidatures` (PDF/Excel)
+### Backend ✅ TERMINÉ (Support API)
+- ✅ `AdminDashboardController` mis à jour pour supporter `all=true` (export complet)
 
-### Frontend ⏳ À FAIRE
-- [ ] Bouton "Exporter" dans les dashboards
-- [ ] Modal de sélection format (PDF/Excel)
-- [ ] Téléchargement automatique
+### Frontend ✅ TERMINÉ (Admin Dashboard)
+- ✅ Librairies installées (`xlsx`, `jspdf`, `jspdf-autotable`, `file-saver`)
+- ✅ Utilitaire `exportUtils.ts` créé
+- ✅ Export Excel/PDF fonctionnel pour :
+  - ✅ Liste des Appels d'Offres
+  - ✅ Liste des Fournisseurs
+  - ✅ Liste des Responsables
+- ⏳ Intégration dans `ResponsableDashboard.tsx`
+- ⏳ Intégration dans `FournisseurDashboard.tsx`
 
 ---
 
-## 🔍 3. Recherche Avancée
+## 📧 3. Notifications par Email
+
+### Backend 🔄 EN COURS
+- ✅ Configuration Laravel Mail (SMTP)
+- ✅ Création Mailable `AccountValidated`
+- ✅ Service `NotificationService` mis à jour
+- ✅ Email de validation compte fournisseur implémenté
+- ⏳ Créer templates d'emails manquants :
+  - [ ] Email de rejet compte fournisseur
+  - [ ] Email d'assignation d'un AO (pour responsable)
+  - [ ] Email de réception candidature (pour responsable)
+  - [ ] Email de confirmation candidature (pour fournisseur)
+  - [ ] Email d'acceptation/rejet candidature (pour fournisseur)
+  - [ ] Email de clôture AO (pour fournisseurs ayant postulé)
+  - [ ] Email de nouveau commentaire
+- ⏳ Queue jobs pour envoi asynchrone
+
+### Frontend ⏳ À FAIRE
+- [ ] Préférences de notification (email/in-app)
+- [ ] Paramètres de notification dans profil
+
+---
+
+## 🔍 4. Recherche Avancée
 
 ### Backend ✅ PARTIELLEMENT TERMINÉ
 - ✅ Recherche basique implémentée dans les contrôleurs
@@ -62,105 +83,34 @@
 
 ---
 
-## 📧 4. Notifications par Email
+## 📜 5. Historique des Modifications (Audit)
 
 ### Backend ⏳ À FAIRE
-- [ ] Configurer Laravel Mail (SMTP)
-- [ ] Créer templates d'emails :
-  - [ ] Email de validation compte fournisseur
-  - [ ] Email de rejet compte fournisseur
-  - [ ] Email de nouvelle candidature (pour responsable)
-  - [ ] Email d'acceptation candidature (pour fournisseur)
-  - [ ] Email de rejet candidature (pour fournisseur)
-  - [ ] Email de clôture AO (pour fournisseurs ayant postulé)
-  - [ ] Email de nouveau commentaire
-- [ ] Modifier `NotificationService` pour envoyer emails
-- [ ] Queue jobs pour envoi asynchrone
+- [ ] Créer modèle `AuditLog` (ou étendre `LogActivite`)
+- [ ] Observer les modèles clés (`AppelOffre`, `Fournisseur`, `Candidature`)
+- [ ] Enregistrer les changements d'état (old_value, new_value)
+- [ ] Route API pour récupérer l'historique d'un objet
 
 ### Frontend ⏳ À FAIRE
-- [ ] Préférences de notification (email/in-app)
-- [ ] Paramètres de notification dans profil
+- [ ] Composant `AuditHistory.tsx` (Timeline)
+- [ ] Intégration dans les modales de détails (AO, Fournisseur, Candidature)
 
 ---
 
-## 📋 Prochaines Étapes
+## 📋 Prochaines Étapes (Priorisées)
 
-### Priorité 1 : Terminer la Pagination Frontend
-1. Intégrer `DataTablePagination` dans toutes les pages de listes
-2. Gérer les états de pagination (currentPage, perPage)
-3. Tester avec différentes tailles de données
+### Priorité 1 : Notifications Email (Compléter)
+1. Créer les Mailables manquants (Assignation, Candidature reçue)
+2. Intégrer l'envoi dans les contrôleurs correspondants
+3. Tester les flux d'emails
 
-### Priorité 2 : Export PDF/Excel
-1. Installer les packages Laravel
-2. Créer les contrôleurs d'export
-3. Créer les vues/templates d'export
-4. Ajouter les boutons dans les dashboards
+### Priorité 2 : Historique des Modifications (Audit)
+1. Mettre en place le système de logging détaillé
+2. Créer l'interface de visualisation de l'historique
 
-### Priorité 3 : Notifications Email
-1. Configurer SMTP
-2. Créer les templates d'emails
-3. Intégrer dans `NotificationService`
-4. Tester l'envoi d'emails
+### Priorité 3 : Recherche Avancée
+1. Améliorer les filtres backend
+2. Créer l'interface de recherche avancée
 
-### Priorité 4 : Recherche Avancée
-1. Implémenter recherche full-text PostgreSQL
-2. Créer composant de recherche avancée
-3. Ajouter filtres visuels
-
----
-
-## 🔧 Commandes à Exécuter
-
-### Installation packages Laravel
-```bash
-cd dddback
-composer require barryvdh/laravel-dompdf
-composer require maatwebsite/excel
-php artisan vendor:publish --provider="Barryvdh\DomPDF\ServiceProvider"
-php artisan vendor:publish --provider="Maatwebsite\Excel\ExcelServiceProvider"
-```
-
-### Configuration Mail (.env)
-```env
-MAIL_MAILER=smtp
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-MAIL_ENCRYPTION=tls
-MAIL_FROM_ADDRESS=noreply@ddd.sn
-MAIL_FROM_NAME="Dakar Dem Dikk"
-```
-
----
-
-## 📝 Notes Techniques
-
-### Pagination Laravel
-Les réponses paginées incluent :
-```json
-{
-  "data": [...],
-  "current_page": 1,
-  "per_page": 15,
-  "total": 100,
-  "last_page": 7,
-  "from": 1,
-  "to": 15
-}
-```
-
-### Export PDF
-- Utiliser `DomPDF` pour génération PDF
-- Templates Blade pour mise en forme
-- Styles CSS inline pour compatibilité
-
-### Export Excel
-- Utiliser `Maatwebsite/Excel`
-- Exporters pour chaque type de données
-- Formatage conditionnel
-
-### Notifications Email
-- Utiliser `Mail::queue()` pour envoi asynchrone
-- Templates Blade avec variables
-- Tests avec Mailtrap en développement
+### Priorité 4 : Finaliser Pagination & Export (Autres Dashboards)
+1. Appliquer `DataTablePagination` et `exportUtils` aux dashboards Responsable et Fournisseur

@@ -186,23 +186,32 @@ class CandidatureController extends Controller
 
     public function reject(UpdateCandidatureStatusRequest $request, Candidature $candidature)
     {
+        \Illuminate\Support\Facades\Log::info("Tentative de rejet candidature #{$candidature->id} par utilisateur " . auth()->id());
+        
         $this->authorize('reject', $candidature);
 
         if ($candidature->statut === \App\Models\Candidature::STATUS_REJECTED) {
+            \Illuminate\Support\Facades\Log::warning("Candidature #{$candidature->id} déjà rejetée.");
             return response()->json(['message' => 'Déjà rejetée.'], 409);
         }
         if ($candidature->statut === \App\Models\Candidature::STATUS_ACCEPTED) {
+            \Illuminate\Support\Facades\Log::warning("Candidature #{$candidature->id} déjà acceptée.");
             return response()->json(['message' => 'Déjà acceptée.'], 409);
         }
 
         $candidature->update(['statut' => \App\Models\Candidature::STATUS_REJECTED]);
+        \Illuminate\Support\Facades\Log::info("Candidature #{$candidature->id} rejetée avec succès.");
 
         $this->log('reject_candidature', "Rejet candidature #{$candidature->id}");
 
-        app(NotificationService::class)->notifyUser(
-            $candidature->fournisseur->user->id,
-            'Votre candidature a été rejetée.'
-        );
+        try {
+            app(NotificationService::class)->notifyUser(
+                $candidature->fournisseur->user->id,
+                'Votre candidature a été rejetée.'
+            );
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Erreur notif rejet: " . $e->getMessage());
+        }
 
         return new CandidatureResource($candidature);
     }

@@ -13,6 +13,7 @@ class Fournisseur extends Model
 
     protected $fillable = [
         'user_id',
+        'statut',
         'nom_entreprise',
         'adresse',
         'telephone',
