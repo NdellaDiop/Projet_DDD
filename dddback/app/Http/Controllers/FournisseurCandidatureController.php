@@ -9,13 +9,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\StoreCandidatureRequest;
 use App\Http\Requests\UpdateCandidatureRequest;
-
+use App\Services\NotificationService;
 
 class FournisseurCandidatureController extends Controller
 {
-    public function __construct()
+    protected NotificationService $notificationService;
+
+    public function __construct(NotificationService $notificationService)
     {
         $this->middleware(['auth:sanctum', 'role:FOURNISSEUR,ADMIN']);
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -45,7 +48,34 @@ class FournisseurCandidatureController extends Controller
     public function store(StoreCandidatureRequest $request)
     {
         $candidature = Candidature::create($request->validated());
-        return response()->json($candidature->load(['appelOffre', 'fournisseur']), 201);
+        
+        $candidature->load(['appelOffre.responsableMarche.user', 'fournisseur.user']);
+
+        // Notification au responsable de l'appel d'offre
+        $responsable = $candidature->appelOffre->responsableMarche?->user;
+        
+        if ($responsable) {
+            try {
+                $this->notificationService->sendCandidatureReceivedEmail($responsable, $candidature);
+                $this->notificationService->notifyUser(
+                    $responsable->id,
+                    "Nouvelle candidature reçue pour l'appel d'offre '{$candidature->appelOffre->titre}'."
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email candidature reçue: " . $e->getMessage());
+            }
+        }
+
+        // Notification de confirmation au fournisseur
+        if ($candidature->fournisseur && $candidature->fournisseur->user) {
+            try {
+                $this->notificationService->sendCandidatureSubmittedEmail($candidature->fournisseur->user, $candidature);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email confirmation candidature: " . $e->getMessage());
+            }
+        }
+
+        return response()->json($candidature, 201);
     }
 
     /**

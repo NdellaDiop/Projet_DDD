@@ -56,7 +56,8 @@ import {
   MapPin,
   Send,
   Filter,
-  Download
+  Download,
+  FileClock
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -69,6 +70,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { exportData } from "@/lib/exportUtils";
+import AuditHistory from "@/components/AuditHistory";
 
 
 // ============================================\n
@@ -1165,6 +1167,15 @@ const AdminDashboard: React.FC = () => {
             <Megaphone className="w-4 h-4 mr-3" />
             Gestion Appels d'Offres
           </Button>
+
+          <Button
+            variant={activeTab === "audit" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "audit" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            onClick={() => setActiveTab("audit")}
+          >
+            <FileClock className="w-4 h-4 mr-3" />
+            Historique Audit
+          </Button>
         </nav>
  {/* PIED DE PAGE : PARAMÈTRES ET DÉCONNEXION */}
  <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2">
@@ -1200,6 +1211,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'responsables' && "Équipe Responsables Marché"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
                 {activeTab === 'gestion-ao' && "Gestion Appels d'Offres"}
+                {activeTab === 'audit' && "Historique des modifications"}
               </h1>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'vue-ensemble' && "Métriques clés et activités récentes"}
@@ -1208,6 +1220,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'responsables' && "Administrez les comptes des responsables de marché"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres et candidatures"}
+                {activeTab === 'audit' && "Trace des actions effectuées sur la plateforme"}
               </p>
            </div>
            
@@ -1744,6 +1757,13 @@ const AdminDashboard: React.FC = () => {
                 />
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* 7. AUDIT LOGS */}
+        {activeTab === "audit" && (
+          <div className="animate-in fade-in duration-500">
+            <AuditHistory />
           </div>
         )}
 

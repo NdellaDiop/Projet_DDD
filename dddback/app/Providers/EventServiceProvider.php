@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\AppelOffre;
+use App\Models\Candidature;
+use App\Models\Fournisseur;
+use App\Models\ResponsableMarche;
+use App\Models\User;
+use App\Observers\AuditObserver;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -25,7 +31,11 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        AppelOffre::observe(AuditObserver::class);
+        Candidature::observe(AuditObserver::class);
+        Fournisseur::observe(AuditObserver::class);
+        ResponsableMarche::observe(AuditObserver::class);
+        User::observe(AuditObserver::class);
     }
 
     /**

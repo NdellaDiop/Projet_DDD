@@ -15,9 +15,12 @@ use App\Http\Resources\CandidatureResource;
 
 class CandidatureController extends Controller
 {
-    public function __construct()
+    protected NotificationService $notificationService;
+
+    public function __construct(NotificationService $notificationService)
     {
         $this->middleware('auth:sanctum');
+        $this->notificationService = $notificationService;
     }
 
     public function index(Request $request)
@@ -176,10 +179,20 @@ class CandidatureController extends Controller
 
         $this->log('accept_candidature', "Acceptation candidature #{$candidature->id}");
 
-        app(NotificationService::class)->notifyUser(
-            $candidature->fournisseur->user->id,
-            'Votre candidature a été acceptée.'
-        );
+        if ($candidature->fournisseur && $candidature->fournisseur->user) {
+            try {
+                $this->notificationService->sendCandidatureAcceptedEmail(
+                    $candidature->fournisseur->user,
+                    $candidature
+                );
+                $this->notificationService->notifyUser(
+                    $candidature->fournisseur->user->id,
+                    'Votre candidature a été acceptée.'
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email acceptation candidature: " . $e->getMessage());
+            }
+        }
 
         return new CandidatureResource($candidature);
     }
@@ -204,13 +217,19 @@ class CandidatureController extends Controller
 
         $this->log('reject_candidature', "Rejet candidature #{$candidature->id}");
 
-        try {
-            app(NotificationService::class)->notifyUser(
-                $candidature->fournisseur->user->id,
-                'Votre candidature a été rejetée.'
-            );
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Erreur notif rejet: " . $e->getMessage());
+        if ($candidature->fournisseur && $candidature->fournisseur->user) {
+            try {
+                $this->notificationService->sendCandidatureRejectedEmail(
+                    $candidature->fournisseur->user,
+                    $candidature
+                );
+                $this->notificationService->notifyUser(
+                    $candidature->fournisseur->user->id,
+                    'Votre candidature a été rejetée.'
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Erreur envoi email rejet candidature: " . $e->getMessage());
+            }
         }
 
         return new CandidatureResource($candidature);

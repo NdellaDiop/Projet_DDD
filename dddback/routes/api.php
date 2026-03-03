@@ -22,6 +22,8 @@ use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\SuggestionController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CandidatureCommentController;
+use App\Http\Controllers\AuditLogController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -95,6 +97,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('users/{user}/activate', [AdminUserController::class, 'activate']);
         Route::post('users/{user}/deactivate', [AdminUserController::class, 'deactivate']);
         Route::get('logs', [AdminLogController::class, 'index']);
+        Route::get('audit-logs', [AuditLogController::class, 'index']);
+        Route::get('audit-logs/{id}', [AuditLogController::class, 'show']);
         Route::post('responsables', [AdminResponsableController::class, 'store']);
         Route::delete('responsables/{id}', [AdminResponsableController::class, 'destroy']);
         Route::put('responsables/{id}', [AdminResponsableController::class, 'update']);
