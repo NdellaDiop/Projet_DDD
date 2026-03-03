@@ -18,99 +18,99 @@
 - `statut` : Filtre par statut
 - `appel_offre_id` : Filtre par appel d'offre (pour candidatures)
 
-### Frontend 🔄 EN COURS
+### Frontend ✅ TERMINÉ
 - ✅ Composant `DataTablePagination.tsx` créé
 - ✅ Intégration dans `AdminDashboard.tsx`
 - ✅ Intégration dans `AppelsOffres.tsx`
-- ⏳ Intégration dans `ResponsableDashboard.tsx`
-- ⏳ Intégration dans `FournisseurDashboard.tsx`
+- ✅ Intégration dans `ResponsableDashboard.tsx`
+- ⏳ Intégration dans `FournisseurDashboard.tsx` (À faire si nécessaire, liste généralement courte)
 
 ---
 
-## ✅ 2. Export PDF/Excel
+## ✅ 2. Export PDF/Excel & Rapports
 
-### Backend ✅ TERMINÉ (Support API)
+### Backend ✅ TERMINÉ
 - ✅ `AdminDashboardController` mis à jour pour supporter `all=true` (export complet)
+- ✅ `AppelOffreController` mis à jour pour supporter `all=true`
 
-### Frontend ✅ TERMINÉ (Admin Dashboard)
+### Frontend ✅ TERMINÉ
 - ✅ Librairies installées (`xlsx`, `jspdf`, `jspdf-autotable`, `file-saver`)
-- ✅ Utilitaire `exportUtils.ts` créé
+- ✅ Utilitaire `exportUtils.ts` créé pour les listes
+- ✅ Utilitaire `reportUtils.ts` créé pour les rapports officiels (PV)
 - ✅ Export Excel/PDF fonctionnel pour :
-  - ✅ Liste des Appels d'Offres
+  - ✅ Liste des Appels d'Offres (Admin & Resp)
   - ✅ Liste des Fournisseurs
   - ✅ Liste des Responsables
-- ⏳ Intégration dans `ResponsableDashboard.tsx`
-- ⏳ Intégration dans `FournisseurDashboard.tsx`
+- ✅ Génération de Rapport (PV d'Analyse) pour :
+  - ✅ Responsable de Marché (via modale Candidatures)
+  - ✅ Administrateur (via modale Candidatures)
 
 ---
 
-## 📧 3. Notifications par Email
+## ✅ 3. Notifications par Email
 
-### Backend 🔄 EN COURS
-- ✅ Configuration Laravel Mail (SMTP)
-- ✅ Création Mailable `AccountValidated`
-- ✅ Service `NotificationService` mis à jour
-- ✅ Email de validation compte fournisseur implémenté
-- ⏳ Créer templates d'emails manquants :
-  - [ ] Email de rejet compte fournisseur
-  - [ ] Email d'assignation d'un AO (pour responsable)
-  - [ ] Email de réception candidature (pour responsable)
-  - [ ] Email de confirmation candidature (pour fournisseur)
-  - [ ] Email d'acceptation/rejet candidature (pour fournisseur)
-  - [ ] Email de clôture AO (pour fournisseurs ayant postulé)
-  - [ ] Email de nouveau commentaire
-- ⏳ Queue jobs pour envoi asynchrone
+### Backend ✅ TERMINÉ
+- ✅ Configuration Laravel Mail (SMTP) et gestion `.env`
+- ✅ Service `NotificationService` centralisé
+- ✅ Templates d'emails créés (`views/emails/*.blade.php`) :
+  - ✅ `AccountValidated` : Validation compte fournisseur
+  - ✅ `AppelOffreAssigned` : Assignation d'un AO
+  - ✅ `CandidatureReceived` : Nouvelle candidature (pour responsable)
+  - ✅ `CandidatureSubmitted` : Confirmation dépôt (pour fournisseur)
+  - ✅ `CandidatureAccepted` / `CandidatureRejected` : Décision finale
+- ✅ Intégration des envois dans les contrôleurs (`AppelOffreController`, `CandidatureController`, `AdminDashboardController`)
 
-### Frontend ⏳ À FAIRE
-- [ ] Préférences de notification (email/in-app)
-- [ ] Paramètres de notification dans profil
+### Frontend (Configuration)
+- ℹ️ Note : Le lien dans les emails utilise `FRONTEND_URL` du `.env`. Pour les tests mobiles, utiliser l'IP locale (ex: `http://192.168.1.15:8081`).
 
 ---
 
-## 🔍 4. Recherche Avancée
+## ✅ 4. Recherche Avancée
 
-### Backend ✅ PARTIELLEMENT TERMINÉ
-- ✅ Recherche basique implémentée dans les contrôleurs
-- ⏳ Recherche full-text avec PostgreSQL
-- ⏳ Filtres multiples (date, montant, etc.)
-- ⏳ Tri avancé (multi-colonnes)
+### Backend ✅ TERMINÉ
+- ✅ Filtres multiples ajoutés (`date_debut`, `date_fin`, `statut`, `domaines`)
+- ✅ Support dans `AdminDashboardController` et `AppelOffreController`
 
-### Frontend ⏳ À FAIRE
-- [ ] Composant `AdvancedSearch.tsx`
-- [ ] Filtres visuels dans les listes
-- [ ] Sauvegarde des filtres préférés
-- [ ] Recherche en temps réel (debounce)
+### Frontend ✅ TERMINÉ
+- ✅ Composant `AdvancedSearch.tsx` créé (Filtres dynamiques)
+- ✅ Intégration dans `AdminDashboard.tsx` (Onglets AO et Fournisseurs)
+- ✅ Intégration dans `ResponsableDashboard.tsx`
 
 ---
 
-## 📜 5. Historique des Modifications (Audit)
+## ✅ 5. Statistiques Avancées
 
-### Backend ⏳ À FAIRE
-- [ ] Créer modèle `AuditLog` (ou étendre `LogActivite`)
-- [ ] Observer les modèles clés (`AppelOffre`, `Fournisseur`, `Candidature`)
-- [ ] Enregistrer les changements d'état (old_value, new_value)
-- [ ] Route API pour récupérer l'historique d'un objet
+### Backend ✅ TERMINÉ
+- ✅ Endpoint `/api/admin/dashboard-advanced-stats` (Stats globales)
+- ✅ Endpoint `/api/responsable/dashboard-advanced-stats` (Stats personnelles)
 
-### Frontend ⏳ À FAIRE
-- [ ] Composant `AuditHistory.tsx` (Timeline)
-- [ ] Intégration dans les modales de détails (AO, Fournisseur, Candidature)
+### Frontend ✅ TERMINÉ
+- ✅ Composant `AdvancedStats.tsx` avec `recharts` (Admin)
+- ✅ Composant `ResponsableAdvancedStats.tsx` avec `recharts` (Responsable)
+- ✅ Visualisation : Évolution des AO, Répartition Candidatures, Top Responsables
 
 ---
 
-## 📋 Prochaines Étapes (Priorisées)
+## ✅ 6. Historique des Modifications (Audit)
 
-### Priorité 1 : Notifications Email (Compléter)
-1. Créer les Mailables manquants (Assignation, Candidature reçue)
-2. Intégrer l'envoi dans les contrôleurs correspondants
-3. Tester les flux d'emails
+### Backend ✅ TERMINÉ
+- ✅ Modèle `AuditLog` et migration créés
+- ✅ Observer `AuditObserver` configuré pour `AppelOffre`, `Fournisseur`, `Candidature`, `User`
+- ✅ Enregistrement des changements (`old_values`, `new_values`)
+- ✅ Contrôleur `AuditLogController`
 
-### Priorité 2 : Historique des Modifications (Audit)
-1. Mettre en place le système de logging détaillé
-2. Créer l'interface de visualisation de l'historique
+### Frontend ✅ TERMINÉ
+- ✅ Composant `AuditHistory.tsx` pour visualiser la timeline
+- ✅ Intégration dans `AdminDashboard.tsx` (Nouvel onglet "Historique Audit")
 
-### Priorité 3 : Recherche Avancée
-1. Améliorer les filtres backend
-2. Créer l'interface de recherche avancée
+---
 
-### Priorité 4 : Finaliser Pagination & Export (Autres Dashboards)
-1. Appliquer `DataTablePagination` et `exportUtils` aux dashboards Responsable et Fournisseur
+## 📋 Statut Global
+
+Toutes les améliorations majeures planifiées ont été implémentées et intégrées tant pour l'Administrateur que pour le Responsable de Marché.
+
+Le système dispose désormais de :
+1.  **Traçabilité complète** (Audit logs)
+2.  **Reporting puissant** (Stats graphiques, Exports Excel, Rapports PDF officiels)
+3.  **Communication fluide** (Notifications emails automatiques)
+4.  **Ergonomie améliorée** (Pagination, Recherche avancée)

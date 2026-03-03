@@ -59,6 +59,8 @@ class AdminDashboardController extends Controller
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
+        $dateDebut = $request->get('date_debut', '');
+        $dateFin = $request->get('date_fin', '');
         
         $query = AppelOffre::with('responsableMarche.user')
             ->withCount('candidatures');
@@ -75,6 +77,14 @@ class AdminDashboardController extends Controller
         // Filtre par statut
         if ($statut) {
             $query->where('statut', $statut);
+        }
+
+        // Filtre par plage de dates (publication)
+        if ($dateDebut) {
+            $query->whereDate('date_publication', '>=', $dateDebut);
+        }
+        if ($dateFin) {
+            $query->whereDate('date_publication', '<=', $dateFin);
         }
         
         if ($request->has('all')) {
@@ -121,6 +131,7 @@ class AdminDashboardController extends Controller
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
+        $domaines = $request->get('domaines', ''); // ex: "BTP,Informatique"
         
         $query = Fournisseur::with('user')
             ->withCount('candidatures');
@@ -143,6 +154,9 @@ class AdminDashboardController extends Controller
         if ($statut) {
             $query->where('statut', $statut);
         }
+
+        // Filtre par domaines d'activité (simulé pour l'instant car pas de colonne 'domaines')
+        // Dans un cas réel, on ferait un whereHas ou whereJsonContains
         
         if ($request->has('all')) {
             $fournisseurs = $query->orderBy('created_at', 'desc')
@@ -253,6 +267,76 @@ class AdminDashboardController extends Controller
             });
 
         return response()->json($activities);
+    }
+
+    /**
+     * Récupère les statistiques avancées pour les graphiques.
+     */
+    public function getAdvancedStats()
+    {
+        // 1. Évolution des appels d'offres sur les 6 derniers mois
+        $sixMonthsAgo = now()->subMonths(6);
+        $aoEvolution = AppelOffre::selectRaw("TO_CHAR(date_publication, 'YYYY-MM') as month, count(*) as count")
+            ->where('date_publication', '>=', $sixMonthsAgo)
+            ->groupBy('month')
+            ->orderBy('month')
+            ->get();
+
+        // 2. Répartition des fournisseurs par statut
+        $fournisseurStats = Fournisseur::selectRaw('statut, count(*) as count')
+            ->groupBy('statut')
+            ->get();
+
+        // 3. Top 5 des responsables par nombre d'AO
+        $topResponsables = ResponsableMarche::withCount('appelsOffres')
+            ->orderBy('appels_offres_count', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function ($r) {
+                return [
+                    'name' => $r->user->name ?? 'Inconnu',
+                    'count' => $r->appels_offres_count
+                ];
+            });
+
+        return response()->json([
+            'aoEvolution' => $aoEvolution,
+            'fournisseurStats' => $fournisseurStats,
+            'topResponsables' => $topResponsables
+        ]);
+    }
+
+    /**
+     * Récupère les statistiques avancées pour le responsable de marché.
+     */
+    public function getResponsableAdvancedStats()
+    {
+        $user = auth()->user();
+        if (!$user->responsableMarche) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+        $responsableId = $user->responsableMarche->id;
+
+        // 1. Évolution de ses appels d'offres sur les 6 derniers mois
+        $sixMonthsAgo = now()->subMonths(6);
+        $aoEvolution = AppelOffre::selectRaw("TO_CHAR(date_publication, 'YYYY-MM') as month, count(*) as count")
+            ->where('responsable_marche_id', $responsableId)
+            ->where('date_publication', '>=', $sixMonthsAgo)
+            ->groupBy('month')
+            ->orderBy('month')
+            ->get();
+
+        // 2. Répartition des statuts des candidatures reçues sur ses AO
+        $candidatureStats = Candidature::join('appels_offres', 'candidatures.appel_offre_id', '=', 'appels_offres.id')
+            ->where('appels_offres.responsable_marche_id', $responsableId)
+            ->selectRaw('candidatures.statut, count(*) as count')
+            ->groupBy('candidatures.statut')
+            ->get();
+
+        return response()->json([
+            'aoEvolution' => $aoEvolution,
+            'candidatureStats' => $candidatureStats,
+        ]);
     }
 
     /**

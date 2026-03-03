@@ -43,8 +43,23 @@ import {
   MapPin,
   AlertCircle,
   MessageSquare,
-  Send
+  Send,
+  Filter,
+  Search
 } from "lucide-react";
+import AdvancedSearch from "@/components/AdvancedSearch";
+import ResponsableAdvancedStats from "@/components/ResponsableAdvancedStats";
+import { exportData } from "@/lib/exportUtils";
+import { generatePVReport } from "@/lib/reportUtils";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from "@/components/ui/select";
+
 
 interface AppelOffre {
   id: number;
@@ -87,6 +102,17 @@ export default function ResponsableDashboard() {
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Pagination et Filtres
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatut, setFilterStatut] = useState("tous");
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, any>>({});
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    perPage: 15,
+  });
+
   // États pour la création
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTender, setNewTender] = useState({
@@ -124,34 +150,134 @@ export default function ResponsableDashboard() {
 
 
   useEffect(() => {
-    loadData();
+    if (activeTab === 'appels-offres') {
+      loadAppelsOffres();
+    }
+  }, [api, activeTab, pagination.currentPage, pagination.perPage]);
+
+  // Chargement initial du profil
+  useEffect(() => {
+    loadProfile();
   }, [api]);
 
-  const loadData = async () => {
+  const loadProfile = async () => {
+    if (!api) return;
+    try {
+      const profileRes = await api.get("/api/responsable/profile");
+      setProfile(profileRes.data);
+      setProfileForm({
+        departement: profileRes.data.departement || "",
+        fonction: profileRes.data.fonction || "",
+        telephone: profileRes.data.telephone || "",
+      });
+    } catch (error) {
+      console.error("Erreur chargement profil:", error);
+    }
+  };
+
+  const loadAppelsOffres = async () => {
     if (!api) return;
     try {
       setLoading(true);
-      const [appelsOffresRes, profileRes] = await Promise.all([
-        api.get("/api/responsable/mes-appels-offres"),
-        api.get("/api/responsable/profile").catch(() => ({ data: null }))
-      ]);
-      // Gérer la pagination : si data.data existe, c'est paginé, sinon c'est un tableau direct
-      const appelsOffresData = appelsOffresRes.data?.data || appelsOffresRes.data || [];
-      setAppelsOffres(Array.isArray(appelsOffresData) ? appelsOffresData : []);
-      if (profileRes.data) {
-        setProfile(profileRes.data);
-        setProfileForm({
-          departement: profileRes.data.departement || "",
-          fonction: profileRes.data.fonction || "",
-          telephone: profileRes.data.telephone || "",
-        });
+      
+      const params: any = {
+        page: pagination.currentPage,
+        per_page: pagination.perPage,
+        search: searchTerm,
+        ...advancedFilters
+      };
+
+      if (filterStatut && filterStatut !== 'tous') {
+        params.statut = filterStatut;
+      }
+
+      const response = await api.get("/api/responsable/mes-appels-offres", { params });
+      
+      if (response.data.data) {
+        setAppelsOffres(response.data.data);
+        setPagination(prev => ({
+            ...prev,
+            currentPage: response.data.meta.current_page,
+            totalPages: response.data.meta.last_page,
+            totalItems: response.data.meta.total,
+            perPage: response.data.meta.per_page,
+        }));
+      } else {
+        setAppelsOffres(response.data);
       }
     } catch (error) {
-      console.error("Erreur chargement:", error);
+      console.error("Erreur chargement AO:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadData = async () => {
+     // Legacy function kept for compatibility if needed, but logic moved to separate functions
+     await Promise.all([loadAppelsOffres(), loadProfile()]);
+  };
+
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }));
+  };
+
+  const handlePerPageChange = (perPage: number) => {
+    setPagination(prev => ({ ...prev, perPage, currentPage: 1 }));
+  };
+
+  const handleAdvancedSearch = (filters: Record<string, any>) => {
+    setAdvancedFilters(filters);
+    setPagination(prev => ({ ...prev, currentPage: 1 })); // Reset pagination
+    // L'effet useEffect déclenchera le rechargement car pagination ou activeTab a changé
+    // Si pagination ne change pas (ex: on est déjà page 1), on doit appeler loadAppelsOffres manuellement
+    // Pour simplifier, on force l'appel ici si besoin, mais useEffect est plus propre.
+    // Astuce : on peut ajouter advancedFilters aux dépendances du useEffect.
+  };
+
+  // Ajout de advancedFilters et searchTerm aux dépendances pour rechargement auto
+  useEffect(() => {
+     if (activeTab === 'appels-offres') {
+        loadAppelsOffres();
+     }
+  }, [searchTerm, filterStatut, advancedFilters]);
+
+
+  const handleExportData = async (format: 'excel' | 'pdf') => {
+    if (!api) return;
+    try {
+        const params: any = {
+            all: true,
+            search: searchTerm,
+            ...advancedFilters
+        };
+        if (filterStatut && filterStatut !== 'tous') {
+            params.statut = filterStatut;
+        }
+
+        const response = await api.get("/api/responsable/mes-appels-offres", { params });
+        // Avec Resource::collection, les données sont souvent enveloppées dans 'data'
+        const data = response.data.data || response.data; 
+
+        exportData(format, {
+            fileName: 'mes_appels_offres',
+            title: 'Mes Appels d\'Offres',
+            columns: [
+                { header: 'Référence', key: 'reference' },
+                { header: 'Titre', key: 'titre' },
+                { header: 'Date Clôture', key: 'date_limite_depot', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+                { header: 'Statut', key: 'statut' },
+                { header: 'Candidatures', key: 'candidatures_count' },
+            ],
+            data: data
+        });
+
+        toast({ title: "Export réussi", description: `Le fichier ${format.toUpperCase()} a été généré.` });
+    } catch (error) {
+        console.error("Erreur export:", error);
+        toast({ title: "Erreur", description: "Impossible d'exporter les données.", variant: "destructive" });
+    }
+  };
+
 
   const handleCreateTender = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -332,6 +458,37 @@ export default function ResponsableDashboard() {
     };
     const config = map[statut] || { label: statut, variant: "outline" };
     return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const handleGenerateReport = () => {
+    if (!selectedAppelOffre || !user) return;
+
+    const reportData = {
+      appelOffre: {
+        reference: selectedAppelOffre.reference,
+        titre: selectedAppelOffre.titre,
+        description: selectedAppelOffre.description,
+        // On utilise la date limite comme date de cloture
+        date_cloture: new Date(selectedAppelOffre.date_limite_depot).toLocaleDateString(),
+        // Date de publication estimée (ou récupérer via API si disponible)
+        date_publication: new Date().toLocaleDateString(), // Simplification pour l'instant
+        responsable: user.name,
+      },
+      candidatures: (Array.isArray(candidatures) ? candidatures : []).map((c) => ({
+        fournisseur: c.fournisseur.nom_entreprise,
+        email: c.fournisseur.email_contact,
+        date_soumission: new Date(c.date_soumission).toLocaleDateString(),
+        montant: c.montant_propose ? `${c.montant_propose.toLocaleString()} FCFA` : 'Non spécifié',
+        statut: c.statut === 'accepted' ? 'Retenu' : c.statut === 'rejected' ? 'Rejeté' : 'En attente',
+        documents_complets: 'Oui', // À dynamiser si on vérifie les docs
+      })),
+    };
+
+    generatePVReport(reportData);
+    toast({
+      title: "Rapport généré",
+      description: "Le Procès-Verbal d'analyse a été téléchargé.",
+    });
   };
 
   const handleLogout = async () => {
@@ -545,7 +702,48 @@ export default function ResponsableDashboard() {
 
         {/* TAB: MES APPELS D'OFFRES */}
         {activeTab === "appels-offres" && (
-            <div className="animate-in fade-in duration-500">
+            <div className="animate-in fade-in duration-500 space-y-4">
+                {/* Barre d'outils */}
+                <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <div className="relative w-full md:w-64">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                            <Input
+                                placeholder="Rechercher..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-9 bg-white"
+                            />
+                        </div>
+                        <Select value={filterStatut} onValueChange={setFilterStatut}>
+                            <SelectTrigger className="w-[140px] bg-white">
+                                <SelectValue placeholder="Statut" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="tous">Tous statuts</SelectItem>
+                                <SelectItem value="draft">Brouillon</SelectItem>
+                                <SelectItem value="published">Publié</SelectItem>
+                                <SelectItem value="closed">Clôturé</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <AdvancedSearch 
+                            onSearch={handleAdvancedSearch}
+                            configs={[
+                                { key: 'date_debut', label: 'Publié après le', type: 'date' },
+                                { key: 'date_fin', label: 'Publié avant le', type: 'date' }
+                            ]}
+                        />
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleExportData('excel')}>
+                            <Download className="mr-2 h-4 w-4" /> Excel
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleExportData('pdf')}>
+                            <Download className="mr-2 h-4 w-4" /> PDF
+                        </Button>
+                    </div>
+                </div>
+
                 <Card className="border-none shadow-sm">
                     <CardContent className="p-0">
                         <div className="rounded-lg border border-slate-100 overflow-hidden bg-white">
@@ -607,6 +805,16 @@ export default function ResponsableDashboard() {
                               </TableBody>
                             </Table>
                         </div>
+                        <div className="mt-4">
+                            <DataTablePagination
+                                currentPage={pagination.currentPage}
+                                totalPages={pagination.totalPages}
+                                totalItems={pagination.totalItems}
+                                perPage={pagination.perPage}
+                                onPageChange={handlePageChange}
+                                onPerPageChange={handlePerPageChange}
+                            />
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -662,6 +870,9 @@ export default function ResponsableDashboard() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Statistiques Avancées */}
+                <ResponsableAdvancedStats />
 
                 {/* Liste des derniers AO pour stats rapides */}
                 <Card className="border-none shadow-sm mt-6">
@@ -799,6 +1010,10 @@ export default function ResponsableDashboard() {
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setIsViewCandidatesOpen(false)}>Fermer</Button>
+                <Button onClick={handleGenerateReport}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Générer PV d'Analyse
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>

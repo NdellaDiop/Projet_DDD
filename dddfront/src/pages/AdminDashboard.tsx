@@ -70,7 +70,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { exportData } from "@/lib/exportUtils";
+import { generatePVReport } from "@/lib/reportUtils";
 import AuditHistory from "@/components/AuditHistory";
+import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
+import AdvancedStats from "@/components/AdvancedStats";
 
 
 // ============================================\n
@@ -285,6 +288,7 @@ const AdminDashboard: React.FC = () => {
   // États de filtres et recherche
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatut, setFilterStatut] = useState("tous");
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, any>>({});
 
   // Etats de pagination
   const [pagination, setPagination] = useState({
@@ -747,6 +751,42 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleGenerateReport = () => {
+    if (!selectedAOForCandidatures) return;
+
+    // Déterminer le nom du responsable
+    let responsableName = 'Administrateur';
+    if (selectedAOForCandidatures.responsable && selectedAOForCandidatures.responsable.name) {
+        responsableName = selectedAOForCandidatures.responsable.name;
+    }
+
+    const reportData = {
+      appelOffre: {
+        reference: selectedAOForCandidatures.reference,
+        titre: selectedAOForCandidatures.titre,
+        description: selectedAOForCandidatures.description || "Aucune description",
+        // Utiliser date_cloture ou date_limite_depot si disponible
+        date_cloture: selectedAOForCandidatures.date_cloture ? new Date(selectedAOForCandidatures.date_cloture).toLocaleDateString() : 'Non spécifiée',
+        date_publication: selectedAOForCandidatures.date_publication ? new Date(selectedAOForCandidatures.date_publication).toLocaleDateString() : new Date().toLocaleDateString(),
+        responsable: responsableName,
+      },
+      candidatures: (Array.isArray(candidaturesAO) ? candidaturesAO : []).map((c) => ({
+        fournisseur: c.fournisseur?.nom_entreprise || 'Inconnu',
+        email: c.fournisseur?.email_contact || 'N/A',
+        date_soumission: c.date_soumission ? new Date(c.date_soumission).toLocaleDateString() : 'N/A',
+        montant: c.montant_propose ? `${Number(c.montant_propose).toLocaleString()} FCFA` : 'Non spécifié',
+        statut: c.statut === 'accepted' ? 'Retenu' : c.statut === 'rejected' ? 'Rejeté' : 'En attente',
+        documents_complets: 'Oui', 
+      })),
+    };
+
+    generatePVReport(reportData);
+    toast({
+      title: "Rapport généré",
+      description: "Le Procès-Verbal d'analyse a été téléchargé.",
+    });
+  };
+
   const handleViewDossier = async (candidature: CandidatureAdmin) => {
     if (!api) return;
     
@@ -959,6 +999,62 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Reset advanced filters when switching tabs
+  useEffect(() => {
+    setAdvancedFilters({});
+  }, [activeTab]);
+
+  const handleAdvancedSearch = (filters: Record<string, any>) => {
+    setAdvancedFilters(filters);
+    
+    if (activeTab === 'appels-offres') {
+      fetchWithFilters(filters, 'appelsOffres');
+    } else if (activeTab === 'fournisseurs') {
+      fetchWithFilters(filters, 'fournisseurs');
+    }
+  };
+
+  const fetchWithFilters = async (newFilters: Record<string, any>, type: 'appelsOffres' | 'fournisseurs' = 'appelsOffres') => {
+    if (!api) return;
+    setLoading(true);
+    try {
+        let endpoint = '';
+        let perPage = 15;
+        
+        if (type === 'appelsOffres') {
+            endpoint = '/api/admin/appels-offres-dashboard';
+            perPage = pagination.appelsOffres.perPage;
+        } else if (type === 'fournisseurs') {
+            endpoint = '/api/admin/fournisseurs-dashboard';
+            perPage = pagination.fournisseurs.perPage;
+        }
+
+        const params = {
+            page: 1,
+            per_page: perPage,
+            search: searchTerm,
+            statut: filterStatut,
+            ...newFilters
+        };
+        
+        const response = await api.get(endpoint, { params });
+        
+        if (response.data.data) {
+            if (type === 'appelsOffres') {
+                setAppelsOffres(response.data.data);
+                updatePaginationState('appelsOffres', response.data);
+            } else if (type === 'fournisseurs') {
+                setFournisseurs(response.data.data);
+                updatePaginationState('fournisseurs', response.data);
+            }
+        }
+    } catch (error) {
+        console.error("Erreur filtre avancé:", error);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   // ============================================
   // PAGINATION HANDLERS
   // ============================================
@@ -989,9 +1085,16 @@ const AdminDashboard: React.FC = () => {
       }
 
       if (endpoint) {
-        const response = await api.get(endpoint, {
-          params: { page, per_page: perPage, search: searchTerm, statut: filterStatut }
-        });
+        // Fusionner les filtres standard et avancés
+        const params: any = { 
+          page, 
+          per_page: perPage, 
+          search: searchTerm, 
+          statut: filterStatut,
+          ...advancedFilters // Ajouter les filtres avancés (date_debut, date_fin, etc.)
+        };
+
+        const response = await api.get(endpoint, { params });
         
         if (response.data.data) {
           switch(type) {
@@ -1279,6 +1382,9 @@ const AdminDashboard: React.FC = () => {
                 ))}
              </div>
 
+             {/* Graphiques Statistiques Avancées */}
+             <AdvancedStats />
+
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Activités récentes */}
                 <Card className="border-none shadow-sm">
@@ -1385,6 +1491,13 @@ const AdminDashboard: React.FC = () => {
                       <Button variant="outline" size="sm" onClick={() => handleExportData('appelsOffres', 'pdf')}>
                         <Download className="mr-2 h-4 w-4" /> PDF
                       </Button>
+                      <AdvancedSearch 
+                        onSearch={handleAdvancedSearch}
+                        configs={[
+                          { key: 'date_debut', label: 'Publié après le', type: 'date' },
+                          { key: 'date_fin', label: 'Publié avant le', type: 'date' }
+                        ]}
+                      />
                     </div>
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1491,6 +1604,12 @@ const AdminDashboard: React.FC = () => {
                       <Button variant="outline" size="sm" onClick={() => handleExportData('fournisseurs', 'pdf')}>
                         <Download className="mr-2 h-4 w-4" /> PDF
                       </Button>
+                      <AdvancedSearch 
+                        onSearch={handleAdvancedSearch}
+                        configs={[
+                          { key: 'domaines', label: 'Domaines d\'activité', type: 'text', placeholder: 'Ex: BTP, Informatique' }
+                        ]}
+                      />
                     </div>
                   </div>
               </CardHeader>
@@ -2130,6 +2249,10 @@ const AdminDashboard: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsViewCandidatesOpen(false)}>Fermer</Button>
+            <Button onClick={handleGenerateReport}>
+                <FileText className="w-4 h-4 mr-2" />
+                Générer PV d'Analyse
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

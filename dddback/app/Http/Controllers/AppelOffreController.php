@@ -120,6 +120,8 @@ class AppelOffreController extends Controller
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
+        $dateDebut = $request->get('date_debut', '');
+        $dateFin = $request->get('date_fin', '');
         
         $query = AppelOffre::query();
         
@@ -151,6 +153,19 @@ class AppelOffreController extends Controller
         // Filtre par statut
         if ($statut) {
             $query->where('statut', $statut);
+        }
+
+        // Filtre par plage de dates (publication)
+        if ($dateDebut) {
+            $query->whereDate('date_publication', '>=', $dateDebut);
+        }
+        if ($dateFin) {
+            $query->whereDate('date_publication', '<=', $dateFin);
+        }
+        
+        if ($request->has('all')) {
+            $appelsOffres = $query->orderBy('created_at', 'desc')->get();
+            return AppelOffreResource::collection($appelsOffres);
         }
         
         $appelsOffres = $query->orderBy('created_at', 'desc')->paginate($perPage);
