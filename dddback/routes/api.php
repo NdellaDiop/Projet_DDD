@@ -64,6 +64,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('responsable/profile', [ResponsableCandidatureController::class, 'updateProfile']);
     });
 
+    // Assignation d'AO (Admin uniquement)
+    Route::post('appels-offres/{appel_offre}/assign', [AppelOffreController::class, 'assign'])->middleware('role:ADMIN');
+
     // CANDIDATURES
     Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware('role:FOURNISSEUR');
     Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware('role:FOURNISSEUR');

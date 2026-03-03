@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -54,6 +55,7 @@ import {
   Phone,
   MapPin,
   Send,
+  Filter,
   Download
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -155,6 +157,10 @@ interface AppelOffreAdmin {
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
   candidatures_count?: number;
+  responsable_marche_id?: number | null;
+  responsable?: {
+    name: string;
+  } | null;
 }
 
 interface CandidatureAdmin {
@@ -186,9 +192,9 @@ interface DocumentLegal {
   created_at: string;
 }
 
-// ============================================
-// COMPOSANT PRINCIPAL
-// ============================================
+  // ============================================
+  // COMPOSANT PRINCIPAL
+  // ============================================
 
 const AdminDashboard: React.FC = () => {
   const [isCreateResponsableOpen, setIsCreateResponsableOpen] = useState(false);
@@ -230,6 +236,11 @@ const AdminDashboard: React.FC = () => {
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [loadingComments, setLoadingComments] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  
+  // États pour l'assignation d'AO
+  const [isAssignAOOpen, setIsAssignAOOpen] = useState(false);
+  const [selectedAOForAssign, setSelectedAOForAssign] = useState<AppelOffreAdmin | null>(null);
+  const [selectedResponsableId, setSelectedResponsableId] = useState<number | null>(null);
 
   const { user: authUser, api, logout } = useAuth();
   const navigate = useNavigate();  
@@ -268,9 +279,50 @@ const AdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatut, setFilterStatut] = useState("tous");
 
+  // Etats de pagination
+  const [pagination, setPagination] = useState({
+    appelsOffres: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      perPage: 15,
+    },
+    fournisseurs: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      perPage: 15,
+    },
+    responsables: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      perPage: 15,
+    },
+    mesAppelsOffres: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      perPage: 15,
+    },
+  });
+
   // ============================================
   // CHARGEMENT DES DONNÉES
   // ============================================
+
+  // Fonction utilitaire pour mettre à jour la pagination
+  const updatePaginationState = (key: keyof typeof pagination, meta: any) => {
+    setPagination(prev => ({
+      ...prev,
+      [key]: {
+        currentPage: meta.current_page,
+        totalPages: meta.last_page,
+        totalItems: meta.total,
+        perPage: meta.per_page,
+      }
+    }));
+  };
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -283,12 +335,32 @@ const AdminDashboard: React.FC = () => {
 
       const statsResponse = await api.get('/api/admin/dashboard-stats');
       setStats(statsResponse.data);
-      const appelsOffresResponse = await api.get('/api/admin/appels-offres-dashboard');
-      setAppelsOffres(appelsOffresResponse.data);
-      const fournisseursResponse = await api.get('/api/admin/fournisseurs-dashboard');
-      setFournisseurs(fournisseursResponse.data);
-      const responsablesResponse = await api.get('/api/admin/responsables-dashboard');
-      setResponsables(responsablesResponse.data);
+
+      const appelsOffresResponse = await api.get('/api/admin/appels-offres-dashboard', { params: { per_page: pagination.appelsOffres.perPage } });
+      // Gestion de la pagination Laravel (data.data) ou réponse directe (data)
+      if (appelsOffresResponse.data.data) {
+        setAppelsOffres(appelsOffresResponse.data.data);
+        updatePaginationState('appelsOffres', appelsOffresResponse.data);
+      } else {
+        setAppelsOffres(appelsOffresResponse.data);
+      }
+
+      const fournisseursResponse = await api.get('/api/admin/fournisseurs-dashboard', { params: { per_page: pagination.fournisseurs.perPage } });
+      if (fournisseursResponse.data.data) {
+        setFournisseurs(fournisseursResponse.data.data);
+        updatePaginationState('fournisseurs', fournisseursResponse.data);
+      } else {
+        setFournisseurs(fournisseursResponse.data);
+      }
+
+      const responsablesResponse = await api.get('/api/admin/responsables-dashboard', { params: { per_page: pagination.responsables.perPage } });
+      if (responsablesResponse.data.data) {
+        setResponsables(responsablesResponse.data.data);
+        updatePaginationState('responsables', responsablesResponse.data);
+      } else {
+        setResponsables(responsablesResponse.data);
+      }
+
       const suggestionsResponse = await api.get('/api/admin/suggestions');
       setSuggestions(suggestionsResponse.data);
       const activitiesResponse = await api.get('/api/admin/recent-activities');
@@ -306,7 +378,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api]); // Retrait de 'pagination' des dépendances pour éviter la boucle infinie si on ne fait pas attention
 
   useEffect(() => {
     const roleName = getRoleName(authUser);
@@ -529,19 +601,32 @@ const AdminDashboard: React.FC = () => {
   };
 
   // Fonctions pour la gestion des appels d'offres (comme responsable)
-  const loadMesAppelsOffres = async () => {
+  const loadMesAppelsOffres = async (page = 1, perPage = pagination.mesAppelsOffres.perPage) => {
     if (!api) return;
     try {
-      const res = await api.get("/api/responsable/mes-appels-offres");
+      const res = await api.get("/api/responsable/mes-appels-offres", {
+        params: { page, per_page: perPage }
+      });
       // S'assurer que nous avons toujours un tableau
       const data = res.data;
+      let rawData: any[] = [];
+      
       if (Array.isArray(data)) {
-        setMesAppelsOffres(data);
+        rawData = data;
       } else if (data && Array.isArray(data.data)) {
-        setMesAppelsOffres(data.data);
-      } else {
-        setMesAppelsOffres([]);
+        rawData = data.data;
+        // Mise à jour de la pagination si présente
+        updatePaginationState('mesAppelsOffres', data);
       }
+
+      // Mapper les données pour assurer la compatibilité avec l'interface AppelOffreAdmin
+      // Notamment pour le champ 'responsable' qui peut arriver comme 'responsable_marche'
+      const mappedData = rawData.map((item: any) => ({
+        ...item,
+        responsable: item.responsable || (item.responsable_marche?.user ? { name: item.responsable_marche.user.name } : null)
+      }));
+
+      setMesAppelsOffres(mappedData);
     } catch (error: any) {
       console.error("Erreur chargement appels d'offres:", error);
       setMesAppelsOffres([]); // S'assurer que c'est toujours un tableau même en cas d'erreur
@@ -604,10 +689,20 @@ const AdminDashboard: React.FC = () => {
     setSelectedAOForCandidatures(ao);
     try {
       const res = await api.get(`/api/responsable/appels-offres/${ao.id}/candidatures-recues`); 
-      setCandidaturesAO(res.data || []);
+      
+      const data = res.data;
+      if (Array.isArray(data)) {
+        setCandidaturesAO(data);
+      } else if (data && Array.isArray(data.data)) {
+        setCandidaturesAO(data.data);
+      } else {
+        setCandidaturesAO([]);
+      }
+      
       setIsViewCandidatesOpen(true);
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de charger les candidatures.", variant: "destructive" });
+      setCandidaturesAO([]);
     }
   };
 
@@ -714,6 +809,100 @@ const AdminDashboard: React.FC = () => {
     };
     const config = map[statut] || { label: statut, variant: "outline" };
     return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const handleAssignAO = async () => {
+    if (!api || !selectedAOForAssign || !selectedResponsableId) return;
+    try {
+      await api.post(`/api/appels-offres/${selectedAOForAssign.id}/assign`, {
+        responsable_marche_id: selectedResponsableId
+      });
+      toast({ 
+        title: "Succès", 
+        description: "L'appel d'offre a été assigné au responsable." 
+      });
+      setIsAssignAOOpen(false);
+      setSelectedAOForAssign(null);
+      setSelectedResponsableId(null);
+      loadMesAppelsOffres();
+    } catch (error: any) {
+      console.error("Erreur assignation:", error);
+      const message = error.response?.data?.message || "Impossible d'assigner l'appel d'offre.";
+      toast({ 
+        title: "Erreur", 
+        description: message, 
+        variant: "destructive" 
+      });
+    }
+  };
+
+  const handleOpenAssignModal = (ao: AppelOffreAdmin) => {
+    setSelectedAOForAssign(ao);
+    setSelectedResponsableId(ao.responsable_marche_id || null);
+    setIsAssignAOOpen(true);
+  };
+
+  // ============================================
+  // PAGINATION HANDLERS
+  // ============================================
+
+  const handlePageChange = async (type: keyof typeof pagination, page: number) => {
+    if (!api) return;
+
+    if (type === 'mesAppelsOffres') {
+      loadMesAppelsOffres(page);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const perPage = pagination[type].perPage;
+      let endpoint = '';
+      
+      switch(type) {
+        case 'appelsOffres':
+          endpoint = '/api/admin/appels-offres-dashboard';
+          break;
+        case 'fournisseurs':
+          endpoint = '/api/admin/fournisseurs-dashboard';
+          break;
+        case 'responsables':
+          endpoint = '/api/admin/responsables-dashboard';
+          break;
+      }
+
+      if (endpoint) {
+        const response = await api.get(endpoint, {
+          params: { page, per_page: perPage, search: searchTerm, statut: filterStatut }
+        });
+        
+        if (response.data.data) {
+          switch(type) {
+            case 'appelsOffres': setAppelsOffres(response.data.data); break;
+            case 'fournisseurs': setFournisseurs(response.data.data); break;
+            case 'responsables': setResponsables(response.data.data); break;
+          }
+          updatePaginationState(type, response.data);
+        }
+      }
+    } catch (error) {
+      console.error("Erreur pagination:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePerPageChange = async (type: keyof typeof pagination, perPage: number) => {
+    setPagination(prev => ({
+      ...prev,
+      [type]: { ...prev[type], perPage, currentPage: 1 }
+    }));
+    // Recharger avec la nouvelle limite (page 1)
+    if (type === 'mesAppelsOffres') {
+      loadMesAppelsOffres(1, perPage);
+    } else {
+      handlePageChange(type, 1);
+    }
   };
 
 
@@ -1100,13 +1289,6 @@ const AdminDashboard: React.FC = () => {
                     </TableHeader>
                     <TableBody>
                       {appelsOffres
-                        .filter((ao) => {
-                          const matchesSearch = ao.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                ao.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                ao.responsable.name.toLowerCase().includes(searchTerm.toLowerCase());
-                          const matchesStatut = filterStatut === "tous" || ao.statut === filterStatut;
-                          return matchesSearch && matchesStatut;
-                        })
                         .map((ao) => (
                         <TableRow key={ao.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono text-sm font-medium text-primary">{ao.reference}</TableCell>
@@ -1114,12 +1296,16 @@ const AdminDashboard: React.FC = () => {
                           <TableCell>{getStatutBadge(ao.statut)}</TableCell>
                           <TableCell className="text-sm text-slate-500">{formatDate(ao.date_cloture)}</TableCell>
                           <TableCell>
-                             <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                                    {ao.responsable.name.charAt(0)}
-                                </div>
-                                <span className="text-sm">{ao.responsable.name}</span>
-                             </div>
+                             {ao.responsable ? (
+                               <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
+                                      {ao.responsable.name?.charAt(0)}
+                                  </div>
+                                  <span className="text-sm">{ao.responsable.name}</span>
+                               </div>
+                             ) : (
+                                <Badge variant="outline" className="text-orange-600 border-orange-200">Non assigné</Badge>
+                             )}
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="secondary" className="font-mono">{ao.nombre_candidatures}</Badge>
@@ -1143,6 +1329,14 @@ const AdminDashboard: React.FC = () => {
                     </TableBody>
                   </Table>
                 </div>
+                <DataTablePagination
+                  currentPage={pagination.appelsOffres.currentPage}
+                  totalPages={pagination.appelsOffres.totalPages}
+                  totalItems={pagination.appelsOffres.totalItems}
+                  perPage={pagination.appelsOffres.perPage}
+                  onPageChange={(page) => handlePageChange('appelsOffres', page)}
+                  onPerPageChange={(perPage) => handlePerPageChange('appelsOffres', perPage)}
+                />
               </CardContent>
             </Card>
           </div>
@@ -1191,6 +1385,14 @@ const AdminDashboard: React.FC = () => {
                     </TableBody>
                   </Table>
                 </div>
+                <DataTablePagination
+                  currentPage={pagination.fournisseurs.currentPage}
+                  totalPages={pagination.fournisseurs.totalPages}
+                  totalItems={pagination.fournisseurs.totalItems}
+                  perPage={pagination.fournisseurs.perPage}
+                  onPageChange={(page) => handlePageChange('fournisseurs', page)}
+                  onPerPageChange={(perPage) => handlePerPageChange('fournisseurs', perPage)}
+                />
               </CardContent>
             </Card>
           </div>
@@ -1241,6 +1443,16 @@ const AdminDashboard: React.FC = () => {
                          </CardContent>
                      </Card>
                  ))}
+             </div>
+             <div className="mt-4">
+               <DataTablePagination
+                  currentPage={pagination.responsables.currentPage}
+                  totalPages={pagination.responsables.totalPages}
+                  totalItems={pagination.responsables.totalItems}
+                  perPage={pagination.responsables.perPage}
+                  onPageChange={(page) => handlePageChange('responsables', page)}
+                  onPerPageChange={(perPage) => handlePerPageChange('responsables', perPage)}
+                />
              </div>
           </div>
         )}
@@ -1315,6 +1527,7 @@ const AdminDashboard: React.FC = () => {
                         <TableHead className="font-semibold">Titre</TableHead>
                         <TableHead className="font-semibold">Date Limite</TableHead>
                         <TableHead className="font-semibold">Statut</TableHead>
+                        <TableHead className="font-semibold">Responsable</TableHead>
                         <TableHead className="font-semibold">Candidatures</TableHead>
                         <TableHead className="text-right font-semibold">Actions</TableHead>
                       </TableRow>
@@ -1322,7 +1535,7 @@ const AdminDashboard: React.FC = () => {
                     <TableBody>
                       {!Array.isArray(mesAppelsOffres) || mesAppelsOffres.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                             <div className="flex flex-col items-center gap-2">
                               <Briefcase className="w-8 h-8 text-slate-300" />
                               <p>Aucun appel d'offre créé pour le moment.</p>
@@ -1339,6 +1552,13 @@ const AdminDashboard: React.FC = () => {
                           <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
                           <TableCell>{getStatutBadgeAO(ao.statut)}</TableCell>
                           <TableCell>
+                            {ao.responsable?.name ? (
+                              <span className="text-sm text-slate-700">{ao.responsable.name}</span>
+                            ) : (
+                              <Badge variant="outline" className="text-orange-600 border-orange-200">Non assigné</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center gap-1">
                               <Users className="w-3 h-3 text-slate-400" />
                               <span className="text-sm font-medium">{ao.candidatures_count || 0}</span>
@@ -1346,6 +1566,11 @@ const AdminDashboard: React.FC = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              {!ao.responsable_marche_id && (
+                                <Button size="sm" variant="outline" className="h-8 border border-primary text-primary hover:bg-primary/10" onClick={() => handleOpenAssignModal(ao)} title="Assigner à un responsable">
+                                  <User className="w-3 h-3 mr-1" /> Assigner
+                                </Button>
+                              )}
                               {ao.statut === 'draft' && (
                                 <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handlePublish(ao.id)} title="Publier">
                                   <Megaphone className="w-3 h-3 mr-1" /> Publier
@@ -1366,6 +1591,14 @@ const AdminDashboard: React.FC = () => {
                     </TableBody>
                   </Table>
                 </div>
+                <DataTablePagination
+                  currentPage={pagination.mesAppelsOffres.currentPage}
+                  totalPages={pagination.mesAppelsOffres.totalPages}
+                  totalItems={pagination.mesAppelsOffres.totalItems}
+                  perPage={pagination.mesAppelsOffres.perPage}
+                  onPageChange={(page) => handlePageChange('mesAppelsOffres', page)}
+                  onPerPageChange={(perPage) => handlePerPageChange('mesAppelsOffres', perPage)}
+                />
               </CardContent>
             </Card>
           </div>
@@ -1695,20 +1928,20 @@ const AdminDashboard: React.FC = () => {
                   <div key={cand.id} className="flex flex-col md:flex-row md:items-center justify-between border p-4 rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
                     <div className="space-y-1 mb-4 md:mb-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-lg text-slate-800">{cand.fournisseur.nom_entreprise}</h4>
+                        <h4 className="font-bold text-lg text-slate-800">{cand.fournisseur?.nom_entreprise || 'Entreprise inconnue'}</h4>
                         <Badge variant={cand.statut === 'accepted' ? 'default' : cand.statut === 'rejected' ? 'destructive' : 'secondary'}>
                           {cand.statut === 'submitted' ? 'Soumise' : cand.statut === 'accepted' ? 'Acceptée' : cand.statut === 'rejected' ? 'Rejetée' : cand.statut}
                         </Badge>
                       </div>
                       <p className="text-sm text-slate-600 flex items-center gap-2">
-                        <span className="font-medium">Contact:</span> {cand.fournisseur.email_contact}
+                        <span className="font-medium">Contact:</span> {cand.fournisseur?.email_contact || 'N/A'}
                       </p>
                       <p className="text-sm text-slate-500">
-                        Soumis le {new Date(cand.date_soumission).toLocaleDateString()} à {new Date(cand.date_soumission).toLocaleTimeString()}
+                        Soumis le {cand.date_soumission ? new Date(cand.date_soumission).toLocaleDateString() : 'Date inconnue'} {cand.date_soumission ? `à ${new Date(cand.date_soumission).toLocaleTimeString()}` : ''}
                       </p>
                       {cand.montant_propose && (
                         <p className="text-sm font-medium text-primary">
-                          Offre: {cand.montant_propose.toLocaleString()} FCFA
+                          Offre: {Number(cand.montant_propose).toLocaleString()} FCFA
                         </p>
                       )}
                     </div>
@@ -2129,6 +2362,62 @@ const AdminDashboard: React.FC = () => {
               setSelectedDocumentId(null);
             }}>Fermer</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Assignation AO */}
+      <Dialog open={isAssignAOOpen} onOpenChange={(open) => {
+        setIsAssignAOOpen(open);
+        if (!open) {
+          setSelectedAOForAssign(null);
+          setSelectedResponsableId(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Assigner un Appel d'Offre</DialogTitle>
+          </DialogHeader>
+          {selectedAOForAssign && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-1">Appel d'offre</p>
+                <p className="text-lg font-bold text-slate-800">{selectedAOForAssign.titre}</p>
+                <p className="text-xs text-slate-500 font-mono mt-1">{selectedAOForAssign.reference}</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="responsable-select">Sélectionner un responsable</Label>
+                <Select 
+                  value={selectedResponsableId?.toString() || ""} 
+                  onValueChange={(value) => setSelectedResponsableId(parseInt(value))}
+                >
+                  <SelectTrigger id="responsable-select">
+                    <SelectValue placeholder="Choisir un responsable..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.isArray(responsables) && responsables.map((r) => (
+                      <SelectItem key={r.id} value={r.id.toString()}>
+                        {r.user?.name || `Responsable #${r.id}`} - {r.departement}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {Array.isArray(responsables) && responsables.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Aucun responsable disponible.</p>
+                )}
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAssignAOOpen(false)}>Annuler</Button>
+                <Button 
+                  onClick={handleAssignAO} 
+                  disabled={!selectedResponsableId}
+                >
+                  Assigner
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

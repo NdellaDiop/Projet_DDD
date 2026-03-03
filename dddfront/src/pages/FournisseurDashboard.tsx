@@ -587,7 +587,7 @@ export default function FournisseurDashboard() {
                 {activeTab === 'documents' && "Assurez-vous que vos documents légaux sont à jour."}
                 {activeTab === 'suggestions' && "Proposez des améliorations pour la plateforme."}
                 {activeTab === 'profile' && "Mettez à jour les informations de votre entreprise."}
-              </p>
+          </p>
            </div>
         </div>
 
@@ -721,15 +721,15 @@ export default function FournisseurDashboard() {
                                                         <div className="flex justify-between md:justify-start gap-2">
                                                             <span className="text-muted-foreground">Montant:</span>
                                                             <span className="font-medium text-orange-600">Non renseigné</span>
-                            </div>
-                                                    )}
-                          </div>
+                  </div>
+                )}
+                  </div>
                                                 
                                                 {/* Documents déposés pour cette candidature */}
                                                 {candidature.documents && candidature.documents.length > 0 && (
                                                   <div className="mt-4 pt-4 border-t border-slate-200">
                                                     <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                                                      <FileText className="w-4 h-4" />
+                        <FileText className="w-4 h-4" />
                                                       Documents déposés ({candidature.documents.length})
                                                     </h4>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -739,10 +739,10 @@ export default function FournisseurDashboard() {
                                                             <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                                                             <span className="text-xs text-slate-700 truncate" title={doc.nom_fichier}>
                                                               {doc.nom_fichier}
-                                  </span>
-                                                          </div>
-                                                          <Button
-                                                            size="sm"
+                        </span>
+                      </div>
+                        <Button
+                          size="sm"
                                                             variant="ghost"
                                                             className="h-7 px-2 shrink-0"
                                                             onClick={async () => {
@@ -788,10 +788,10 @@ export default function FournisseurDashboard() {
                                                                 });
                                                               }
                                                             }}
-                                                          >
+                        >
                                                             <Eye className="w-3 h-3 mr-1" />
                                                             Voir
-                                                          </Button>
+                        </Button>
                                                         </div>
                                                       ))}
                                                     </div>
@@ -805,9 +805,9 @@ export default function FournisseurDashboard() {
                                                       <MessageSquare className="w-4 h-4" />
                                                       Commentaires ({candidatureComments[candidature.id]?.length || 0})
                                                     </h4>
-                                                    <Button
+                        <Button
                                                       variant="ghost"
-                                                      size="sm"
+                          size="sm"
                                                       onClick={() => {
                                                         if (expandedCandidatureId === candidature.id) {
                                                           setExpandedCandidatureId(null);
@@ -828,8 +828,8 @@ export default function FournisseurDashboard() {
                                                       }}
                                                     >
                                                       {expandedCandidatureId === candidature.id ? "Masquer" : "Voir"}
-                                                    </Button>
-                                                  </div>
+                        </Button>
+                      </div>
                                                   
                                                   {expandedCandidatureId === candidature.id && (
                                                     <div className="space-y-3">
@@ -849,13 +849,13 @@ export default function FournisseurDashboard() {
                                                                 <span className="text-muted-foreground">
                                                                   {new Date(comment.created_at).toLocaleString()}
                                                                 </span>
-                                                              </div>
+                    </div>
                                                               <p className="text-slate-600 whitespace-pre-wrap">{comment.message}</p>
                                                             </div>
                                                           ))
                                                         )}
-                                                      </div>
-                                                      
+                </div>
+
                                                       {/* Formulaire de réponse */}
                                                       <div className="space-y-2 border-t pt-2">
                                                         <Textarea
@@ -869,8 +869,8 @@ export default function FournisseurDashboard() {
                                                           className="resize-none text-xs"
                                                         />
                                                         <div className="flex justify-end">
-                                                          <Button
-                                                            size="sm"
+                        <Button
+                          size="sm"
                                                             onClick={async () => {
                                                               if (!api || !newComments[candidature.id]?.trim()) return;
                                                               
@@ -914,7 +914,7 @@ export default function FournisseurDashboard() {
                                                                 Envoyer
                                                               </>
                                                             )}
-                                                          </Button>
+                        </Button>
                                                         </div>
                                                       </div>
                                                     </div>
@@ -927,7 +927,7 @@ export default function FournisseurDashboard() {
                                                  candidature.appel_offre.statut !== 'closed' && (
                                                   <Button variant="outline" size="sm" onClick={() => handleEditClick(candidature)}>
                                                       Modifier
-                                                  </Button>
+                        </Button>
                                                 )}
                                                 {candidature.appel_offre.statut === 'closed' && (
                                                   <Badge variant="outline" className="text-xs">
@@ -935,10 +935,10 @@ export default function FournisseurDashboard() {
                                                   </Badge>
                                                 )}
                           </div>
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
+                </div>
                 )}
               </CardContent>
             </Card>
@@ -1050,8 +1050,8 @@ export default function FournisseurDashboard() {
                   ))}
                 </div>
                         ))}
-                    </CardContent>
-                </Card>
+              </CardContent>
+            </Card>
             </div>
         )}
 
@@ -1060,13 +1060,13 @@ export default function FournisseurDashboard() {
             <div className="animate-in fade-in duration-500 grid gap-6 grid-cols-1 lg:grid-cols-3">
                 <div className="lg:col-span-1 space-y-6">
                     <Card className="border-none shadow-sm">
-                        <CardHeader>
+              <CardHeader>
                             <CardTitle>Nouvelle Suggestion</CardTitle>
                             <CardDescription>Partagez vos idées pour améliorer la plateforme.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
+              </CardHeader>
+              <CardContent>
                             <form onSubmit={handleCreateSuggestion} className="space-y-4">
-                <div className="space-y-2">
+                      <div className="space-y-2">
                                     <Label htmlFor="sujet">Sujet</Label>
                     <Input
                                         id="sujet"
@@ -1075,8 +1075,8 @@ export default function FournisseurDashboard() {
                                         placeholder="Ex: Amélioration du dashboard..."
                                         required
                     />
-                  </div>
-                                <div className="space-y-2">
+                        </div>
+                      <div className="space-y-2">
                                     <Label htmlFor="message">Message</Label>
                                     <Textarea 
                                         id="message"
@@ -1086,14 +1086,14 @@ export default function FournisseurDashboard() {
                                         required
                                         className="min-h-[150px]"
                                     />
-                      </div>
+                        </div>
                                 <Button type="submit" className="w-full">
                                     Envoyer ma suggestion
                         </Button>
                             </form>
                         </CardContent>
                     </Card>
-                </div>
+                      </div>
 
                 <div className="lg:col-span-2">
                     <Card className="border-none shadow-sm h-full">
@@ -1105,7 +1105,7 @@ export default function FournisseurDashboard() {
                                 <div className="text-center py-12 text-muted-foreground">
                                     <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-20" />
                                     <p>Vous n'avez pas encore envoyé de suggestions.</p>
-                  </div>
+                        </div>
                             ) : (
                                 <div className="space-y-4">
                                     {suggestions.map((sug) => (
@@ -1120,15 +1120,15 @@ export default function FournisseurDashboard() {
                                             <p className="text-xs text-muted-foreground pt-2 border-t mt-2">
                                                 Envoyé le {new Date(sug.created_at).toLocaleDateString()}
                                             </p>
-                    </div>
+                        </div>
                   ))}
-                </div>
+                      </div>
                             )}
               </CardContent>
             </Card>
+                          </div>
                         </div>
-                      </div>
-        )}
+                      )}
 
         {/* MON PROFIL */}
         {activeTab === "profile" && (
@@ -1141,11 +1141,11 @@ export default function FournisseurDashboard() {
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-800">Informations de l'entreprise</h3>
                                     <p className="text-sm text-muted-foreground">Ces informations seront utilisées pour vos documents.</p>
-                        </div>
+                          </div>
                                 <Button onClick={() => setEditingProfile(true)}>
                                     Modifier
                                 </Button>
-                      </div>
+                        </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="flex items-center gap-3">
@@ -1153,8 +1153,8 @@ export default function FournisseurDashboard() {
                                     <div>
                                         <p className="text-xs text-muted-foreground">Nom de l'entreprise</p>
                                         <p className="font-medium text-slate-800">{profile?.nom_entreprise || "-"}</p>
+                          </div>
                         </div>
-                      </div>
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Mail className="w-5 h-5 text-blue-600" /></div>
                                     <div>
@@ -1210,8 +1210,8 @@ export default function FournisseurDashboard() {
                                                             <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
                                                                 Aucun document
                                                             </Badge>
-                                                        )}
-                                                    </div>
+                      )}
+                    </div>
                                                     {docs.length > 0 && (
                                                         <div className="space-y-2 mt-3">
                                                             {docs.map((doc) => (
@@ -1277,8 +1277,8 @@ export default function FournisseurDashboard() {
                                                                     >
                                                                         <Eye className="w-4 h-4 mr-2" />
                                                                         Voir
-                                                                    </Button>
-                          </div>
+                    </Button>
+                  </div>
                                                             ))}
                         </div>
                       )}

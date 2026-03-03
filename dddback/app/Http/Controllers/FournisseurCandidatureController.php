@@ -222,7 +222,7 @@ class FournisseurCandidatureController extends Controller
         ]);
     }
 
-    public function getOwnCandidatures()
+    public function getOwnCandidatures(Request $request)
     {
         $user = auth()->user();
         
@@ -237,16 +237,25 @@ class FournisseurCandidatureController extends Controller
             return response()->json([]);
         }
 
-        $candidatures = $fournisseur->candidatures()
+        $perPage = $request->get('per_page', 15);
+        $statut = $request->get('statut', '');
+        
+        $query = $fournisseur->candidatures()
             ->with('appelOffre')
-            ->orderBy('date_soumission', 'desc')
-            ->get()
-            ->map(function ($c) {
+            ->orderBy('date_soumission', 'desc');
+        
+        // Filtre par statut
+        if ($statut) {
+            $query->where('statut', $statut);
+        }
+        
+        $candidatures = $query->paginate($perPage)
+            ->through(function ($c) {
                 return [
                     'id' => $c->id,
                     'statut' => $c->statut,
                     'date_soumission' => $c->date_soumission,
-                    'montant_propose' => $c->montant_propose, // Récupérer le vrai montant depuis la base de données
+                    'montant_propose' => $c->montant_propose,
                     'appel_offre' => [
                         'id' => $c->appelOffre->id,
                         'titre' => $c->appelOffre->titre,

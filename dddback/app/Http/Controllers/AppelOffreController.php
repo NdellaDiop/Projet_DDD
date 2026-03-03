@@ -10,6 +10,7 @@ use App\Http\Requests\UpdateAppelOffreRequest;
 use App\Http\Requests\PublishAppelOffreRequest;
 use App\Http\Requests\CloseAppelOffreRequest;
 use App\Http\Resources\AppelOffreResource;
+use Illuminate\Http\Request;
 
 class AppelOffreController extends Controller
 {
@@ -31,29 +32,31 @@ class AppelOffreController extends Controller
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
         
-        $query = $this->appelOffreService
-            ->getAllAppelsOffres()
-            ->load('responsableMarche.user')
-            ->loadCount('candidatures');
+        $query = AppelOffre::query()
+            ->with('responsableMarche.user')
+            ->withCount('candidatures');
+        
+        // Par défaut, on affiche les publiés et clôturés
+        if (!$statut) {
+            $query->whereIn('statut', [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED]);
+        }
         
         // Recherche
         if ($search) {
-            $query = $query->filter(function ($ao) use ($search) {
-                return stripos($ao->titre, $search) !== false 
-                    || stripos($ao->description, $search) !== false
-                    || stripos($ao->reference, $search) !== false;
+            $query->where(function($q) use ($search) {
+                $q->where('titre', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%")
+                  ->orWhere('reference', 'ilike', "%{$search}%");
             });
         }
         
-        // Filtre par statut
+        // Filtre par statut (si différent de published)
         if ($statut) {
-            $query = $query->filter(function ($ao) use ($statut) {
-                return $ao->statut === $statut;
-            });
+            $query->where('statut', $statut);
         }
         
         // Pagination
-        $appelsOffres = $query->paginate($perPage);
+        $appelsOffres = $query->orderBy('date_publication', 'desc')->paginate($perPage);
     
         return AppelOffreResource::collection($appelsOffres);
     }
@@ -103,10 +106,10 @@ class AppelOffreController extends Controller
         return response()->json(null, 204);
     }
 
-        /**
+    /**
      * Récupère les appels d'offres créés par le responsable connecté.
-     * Les responsables voient leurs propres appels d'offres + ceux créés par l'admin (responsable_marche_id = null).
-     * L'admin voit tous les appels d'offres.
+     * Les responsables voient UNIQUEMENT leurs propres appels d'offres (responsable_marche_id = leur id).
+     * L'admin voit tous les appels d'offres (y compris ceux non assignés).
      */
     public function indexForResponsable(Request $request)
     {
@@ -117,7 +120,7 @@ class AppelOffreController extends Controller
         
         $query = AppelOffre::query();
         
-        // Si c'est l'admin, il voit tout
+        // Si c'est l'admin, il voit tout (y compris les AO non assignés)
         if ($user->role->name === 'ADMIN') {
             $query->with('responsableMarche.user')
                 ->withCount('candidatures');
@@ -127,11 +130,8 @@ class AppelOffreController extends Controller
                 return response()->json(['message' => 'Non autorisé'], 403);
             }
 
-            // Les responsables voient leurs propres appels d'offres + ceux créés par l'admin
-            $query->where(function($q) use ($responsable) {
-                    $q->where('responsable_marche_id', $responsable->id)
-                      ->orWhereNull('responsable_marche_id');
-                })
+            // Les responsables voient UNIQUEMENT leurs propres appels d'offres
+            $query->where('responsable_marche_id', $responsable->id)
                 ->with('responsableMarche.user')
                 ->withCount('candidatures');
         }
@@ -152,7 +152,7 @@ class AppelOffreController extends Controller
         
         $appelsOffres = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
-        return response()->json($appelsOffres);
+        return AppelOffreResource::collection($appelsOffres);
     }
 
     /**
@@ -167,7 +167,7 @@ class AppelOffreController extends Controller
         // Vérification que c'est bien son appel d'offre (ou admin)
         if ($user->role->name !== 'ADMIN') {
             $responsable = $user->responsableMarche;
-            if (!$responsable || ($appelOffre->responsable_marche_id !== $responsable->id && $appelOffre->responsable_marche_id !== null)) {
+            if (!$responsable || $appelOffre->responsable_marche_id !== $responsable->id) {
                 return response()->json(['message' => 'Accès refusé'], 403);
             }
         }
@@ -184,6 +184,32 @@ class AppelOffreController extends Controller
         $candidatures = $query->paginate($perPage);
 
         return response()->json($candidatures);
+    }
+
+    /**
+     * Assigner un appel d'offre à un responsable de marché.
+     * Seul l'admin peut assigner un AO à un responsable.
+     */
+    public function assign(Request $request, AppelOffre $appelOffre)
+    {
+        $user = auth()->user();
+        
+        // Seul l'admin peut assigner
+        if ($user->role->name !== 'ADMIN') {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        $request->validate([
+            'responsable_marche_id' => 'required|exists:responsables_marche,id',
+        ]);
+
+        $appelOffre->responsable_marche_id = $request->responsable_marche_id;
+        $appelOffre->save();
+        
+        $appelOffre->load('responsableMarche.user');
+        $this->log('assign_appel_offre', "Assignation AO #{$appelOffre->id} au responsable #{$request->responsable_marche_id}");
+
+        return new AppelOffreResource($appelOffre);
     }
     
     private function log(string $action, string $details): void

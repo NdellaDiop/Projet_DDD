@@ -7,24 +7,42 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class AppelOffreResource extends JsonResource
 {
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
     public function toArray(Request $request): array
     {
         return [
             'id' => $this->id,
-            'titre' => $this->titre,
             'reference' => $this->reference,
+            'titre' => $this->titre,
             'description' => $this->description,
-            'statut' => $this->statut,
             'date_publication' => $this->date_publication,
             'date_limite_depot' => $this->date_limite_depot,
+            'statut' => $this->statut,
+            'criteres_eligibilite' => $this->criteres_eligibilite,
+            'responsable_marche_id' => $this->responsable_marche_id,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+            'candidatures_count' => $this->whenCounted('candidatures'),
             'responsable' => $this->whenLoaded('responsableMarche', function () {
+                if (!$this->responsableMarche) {
+                    return null;
+                }
                 return [
                     'id' => $this->responsableMarche->id,
-                    'name' => $this->responsableMarche->user ? $this->responsableMarche->user->name : 'Non défini',
-                    'email' => $this->responsableMarche->user ? $this->responsableMarche->user->email : '',
+                    'user_id' => $this->responsableMarche->user_id,
+                    'departement' => $this->responsableMarche->departement,
+                    'fonction' => $this->responsableMarche->fonction,
+                    'user' => $this->responsableMarche->user ? [
+                        'id' => $this->responsableMarche->user->id,
+                        'name' => $this->responsableMarche->user->name,
+                        'email' => $this->responsableMarche->user->email,
+                    ] : null,
                 ];
             }),
-            'candidatures_count' => $this->whenCounted('candidatures'),
         ];
     }
 }

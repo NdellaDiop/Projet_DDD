@@ -77,7 +77,19 @@ const AppelsOffres = () => {
     const fetchAppelsOffres = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/appels-offres');
+        // Construire les paramètres de requête
+        const params: any = {};
+        if (statusFilter !== "all") {
+          params.statut = statusFilter;
+        }
+        
+        // Ajouter la recherche côté serveur si nécessaire, ou on laisse le filtre client pour l'instant
+        // Pour une vraie pagination, il faudra aussi envoyer 'page' et 'per_page'
+        // Pour l'instant, on récupère tout ce que l'API nous donne (qui est paginé par défaut à 15)
+        // Idéalement, on devrait augmenter per_page ici pour avoir plus de résultats sur la page publique
+        params.per_page = 50; 
+
+        const response = await api.get('/api/appels-offres', { params });
 
         const tenders =
           response.data && Array.isArray(response.data.data)
@@ -86,7 +98,7 @@ const AppelsOffres = () => {
             ? response.data
             : [];
 
-setAppelsOffres(tenders);
+        setAppelsOffres(tenders);
       } catch (err: any) {
         console.error("Erreur lors de la récupération des appels d'offres:", err);
         setError("Impossible de charger les appels d'offres. Veuillez réessayer.");
@@ -101,7 +113,7 @@ setAppelsOffres(tenders);
     };
 
     fetchAppelsOffres();
-  }, [api]); // Re-déclenche si l'instance API change (peu probable mais bonne pratique)
+  }, [api, statusFilter]); // Re-déclenche si l'instance API change (peu probable mais bonne pratique)
 
   const filteredTenders = appelsOffres.filter((tender) => {
     const matchesSearch =

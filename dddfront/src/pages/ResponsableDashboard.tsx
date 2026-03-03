@@ -135,7 +135,9 @@ export default function ResponsableDashboard() {
         api.get("/api/responsable/mes-appels-offres"),
         api.get("/api/responsable/profile").catch(() => ({ data: null }))
       ]);
-      setAppelsOffres(appelsOffresRes.data);
+      // Gérer la pagination : si data.data existe, c'est paginé, sinon c'est un tableau direct
+      const appelsOffresData = appelsOffresRes.data?.data || appelsOffresRes.data || [];
+      setAppelsOffres(Array.isArray(appelsOffresData) ? appelsOffresData : []);
       if (profileRes.data) {
         setProfile(profileRes.data);
         setProfileForm({
@@ -203,7 +205,9 @@ export default function ResponsableDashboard() {
     setSelectedAppelOffre(ao);
     try {
       const res = await api.get(`/api/responsable/appels-offres/${ao.id}/candidatures-recues`); 
-      setCandidatures(res.data);
+      // Gérer la pagination : si data.data existe, c'est paginé, sinon c'est un tableau direct
+      const candidaturesData = res.data?.data || res.data || [];
+      setCandidatures(Array.isArray(candidaturesData) ? candidaturesData : []);
       setIsViewCandidatesOpen(true);
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de charger les candidatures.", variant: "destructive" });
@@ -218,7 +222,7 @@ export default function ResponsableDashboard() {
         title: decision === 'accept' ? "Candidature acceptée" : "Candidature rejetée",
         variant: decision === 'accept' ? "default" : "destructive"
       });
-      setCandidatures(prev => prev.map(c => c.id === candidatureId ? { ...c, statut: decision === 'accept' ? 'accepted' : 'rejected' } : c));
+      setCandidatures(prev => Array.isArray(prev) ? prev.map(c => c.id === candidatureId ? { ...c, statut: decision === 'accept' ? 'accepted' : 'rejected' } : c) : []);
     } catch (error: any) {
       console.error("Erreur évaluation:", error);
       const message = error.response?.data?.message || "Action impossible.";
@@ -557,7 +561,7 @@ export default function ResponsableDashboard() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {appelsOffres.length === 0 ? (
+                                {Array.isArray(appelsOffres) && appelsOffres.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                                             <div className="flex flex-col items-center gap-2">
@@ -569,7 +573,7 @@ export default function ResponsableDashboard() {
                                             </div>
                                         </TableCell>
                                     </TableRow>
-                                ) : appelsOffres.map((ao) => (
+                                ) : Array.isArray(appelsOffres) && appelsOffres.map((ao) => (
                                   <TableRow key={ao.id} className="hover:bg-slate-50/50">
                                     <TableCell className="font-mono text-xs font-medium text-slate-600">{ao.reference}</TableCell>
                                     <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
@@ -618,7 +622,7 @@ export default function ResponsableDashboard() {
                                 <Briefcase className="w-6 h-6 text-blue-600" />
                             </div>
                             <p className="text-sm font-medium text-muted-foreground">Total Appels d'Offres</p>
-                            <h3 className="text-3xl font-bold text-slate-800 mt-2">{appelsOffres.length}</h3>
+                            <h3 className="text-3xl font-bold text-slate-800 mt-2">{Array.isArray(appelsOffres) ? appelsOffres.length : 0}</h3>
                         </CardContent>
                     </Card>
 
@@ -629,7 +633,7 @@ export default function ResponsableDashboard() {
                             </div>
                             <p className="text-sm font-medium text-muted-foreground">En cours de publication</p>
                             <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {appelsOffres.filter(ao => ao.statut === 'published').length}
+                                {Array.isArray(appelsOffres) ? appelsOffres.filter(ao => ao.statut === 'published').length : 0}
                             </h3>
                         </CardContent>
                     </Card>
@@ -641,7 +645,7 @@ export default function ResponsableDashboard() {
                             </div>
                             <p className="text-sm font-medium text-muted-foreground">Candidatures reçues</p>
                             <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {appelsOffres.reduce((acc, ao) => acc + (ao.candidatures_count || 0), 0)}
+                                {Array.isArray(appelsOffres) ? appelsOffres.reduce((acc, ao) => acc + (ao.candidatures_count || 0), 0) : 0}
                             </h3>
                         </CardContent>
                     </Card>
@@ -653,7 +657,7 @@ export default function ResponsableDashboard() {
                             </div>
                             <p className="text-sm font-medium text-muted-foreground">Marchés clôturés</p>
                             <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {appelsOffres.filter(ao => ao.statut === 'closed').length}
+                                {Array.isArray(appelsOffres) ? appelsOffres.filter(ao => ao.statut === 'closed').length : 0}
                             </h3>
                         </CardContent>
                     </Card>
@@ -664,7 +668,7 @@ export default function ResponsableDashboard() {
                     <CardContent className="p-6">
                         <h3 className="text-lg font-bold text-slate-800 mb-4">Aperçu rapide</h3>
                         <div className="space-y-4">
-                             {appelsOffres.slice(0, 3).map(ao => (
+                             {Array.isArray(appelsOffres) && appelsOffres.slice(0, 3).map(ao => (
                                  <div key={ao.id} className="flex items-center justify-between p-4 border rounded-lg">
                                      <div>
                                          <p className="font-medium">{ao.titre}</p>
@@ -676,7 +680,7 @@ export default function ResponsableDashboard() {
                                      </div>
                                  </div>
                              ))}
-                             {appelsOffres.length === 0 && <p className="text-muted-foreground">Aucune donnée à afficher.</p>}
+                             {Array.isArray(appelsOffres) && appelsOffres.length === 0 && <p className="text-muted-foreground">Aucune donnée à afficher.</p>}
                         </div>
                     </CardContent>
                 </Card>
@@ -744,14 +748,14 @@ export default function ResponsableDashboard() {
                 </DialogTitle>
             </DialogHeader>
             <div className="py-4">
-                {candidatures.length === 0 ? (
+                {Array.isArray(candidatures) && candidatures.length === 0 ? (
                     <div className="text-center py-12 border-2 border-dashed rounded-lg">
                         <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                         <p className="text-muted-foreground">Aucune candidature reçue pour le moment.</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {candidatures.map(cand => (
+                        {Array.isArray(candidatures) && candidatures.map(cand => (
                             <div key={cand.id} className="flex flex-col md:flex-row md:items-center justify-between border p-4 rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
                                 <div className="space-y-1 mb-4 md:mb-0">
                                     <div className="flex items-center gap-2">

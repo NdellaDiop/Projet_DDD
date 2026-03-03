@@ -55,13 +55,32 @@ class AdminDashboardController extends Controller
     /**
      * Récupère la liste des appels d'offres.
      */
-    public function getAppelsOffres()
+    public function getAppelsOffres(Request $request)
     {
-        $appelsOffres = AppelOffre::with('responsableMarche.user')
-            ->withCount('candidatures')
-            ->orderBy('date_publication', 'desc')
-            ->get()
-            ->map(function ($ao) {
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        $statut = $request->get('statut', '');
+        
+        $query = AppelOffre::with('responsableMarche.user')
+            ->withCount('candidatures');
+        
+        // Recherche
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('titre', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%")
+                  ->orWhere('reference', 'ilike', "%{$search}%");
+            });
+        }
+        
+        // Filtre par statut
+        if ($statut) {
+            $query->where('statut', $statut);
+        }
+        
+        $appelsOffres = $query->orderBy('date_publication', 'desc')
+            ->paginate($perPage)
+            ->through(function ($ao) {
                 return [
                     'id' => $ao->id,
                     'titre' => $ao->titre,
@@ -70,9 +89,12 @@ class AdminDashboardController extends Controller
                     'date_publication' => $ao->date_publication,
                     'date_cloture' => $ao->date_limite_depot,
                     'nombre_candidatures' => $ao->candidatures_count,
-                    'responsable' => [
-                        'name' => $ao->responsableMarche->user->name ?? 'N/A',
-                    ],
+                    'responsable_marche_id' => $ao->responsable_marche_id,
+                    'responsable' => $ao->responsableMarche
+                        ? [
+                            'name' => $ao->responsableMarche->user ? $ao->responsableMarche->user->name : 'Responsable inconnu',
+                        ]
+                        : null,
                 ];
             });
 
@@ -82,13 +104,43 @@ class AdminDashboardController extends Controller
     /**
      * Récupère la liste des fournisseurs.
      */
-    public function getFournisseurs()
+    public function getFournisseurs(Request $request)
     {
-        $fournisseurs = Fournisseur::with('user')
-            ->withCount('candidatures')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($f) {
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        $statut = $request->get('statut', '');
+        
+        $query = Fournisseur::with('user')
+            ->withCount('candidatures');
+        
+        // Recherche
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('nom_entreprise', 'ilike', "%{$search}%")
+                  ->orWhere('email_contact', 'ilike', "%{$search}%")
+                  ->orWhere('ninea', 'ilike', "%{$search}%")
+                  ->orWhere('telephone', 'ilike', "%{$search}%")
+                  ->orWhereHas('user', function($uq) use ($search) {
+                      $uq->where('name', 'ilike', "%{$search}%")
+                         ->orWhere('email', 'ilike', "%{$search}%");
+                  });
+            });
+        }
+        
+        // Filtre par statut
+        if ($statut === 'actif') {
+            $query->whereHas('user', function($q) {
+                $q->where('is_active', true);
+            });
+        } elseif ($statut === 'en_attente') {
+            $query->whereHas('user', function($q) {
+                $q->where('is_active', false);
+            });
+        }
+        
+        $fournisseurs = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage)
+            ->through(function ($f) {
                 return [
                     'id' => $f->id,
                     'raison_sociale' => $f->nom_entreprise,
@@ -108,13 +160,30 @@ class AdminDashboardController extends Controller
     /**
      * Récupère la liste des responsables de marché.
      */
-    public function getResponsables()
+    public function getResponsables(Request $request)
     {
-        $responsables = ResponsableMarche::with('user')
-            ->withCount('appelsOffres')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($r) {
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search', '');
+        
+        $query = ResponsableMarche::with('user')
+            ->withCount('appelsOffres');
+        
+        // Recherche
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('departement', 'ilike', "%{$search}%")
+                  ->orWhere('fonction', 'ilike', "%{$search}%")
+                  ->orWhere('telephone', 'ilike', "%{$search}%")
+                  ->orWhereHas('user', function($uq) use ($search) {
+                      $uq->where('name', 'ilike', "%{$search}%")
+                         ->orWhere('email', 'ilike', "%{$search}%");
+                  });
+            });
+        }
+        
+        $responsables = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage)
+            ->through(function ($r) {
                 return [
                     'id' => $r->id,
                     'user_id' => $r->user_id,

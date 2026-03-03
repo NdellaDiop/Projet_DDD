@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\LogActivite;
 use App\Http\Requests\StoreCandidatureRequest;
 use App\Http\Requests\UpdateCandidatureStatusRequest;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Services\NotificationService;
 use App\Http\Resources\CandidatureResource;
@@ -19,34 +20,46 @@ class CandidatureController extends Controller
         $this->middleware('auth:sanctum');
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $this->authorize('viewAny', Candidature::class);
 
         $user = Auth::user();
+        $perPage = $request->get('per_page', 15);
+        $statut = $request->get('statut', '');
+        $appelOffreId = $request->get('appel_offre_id', '');
+
+        $query = Candidature::query();
 
         if ($user->isAdmin()) {
-            $candidatures = Candidature::with(['appelOffre', 'fournisseur.user'])->get();
-            return CandidatureResource::collection($candidatures);
+            $query->with(['appelOffre', 'fournisseur.user']);
+        } elseif ($user->isResponsableMarche()) {
+            $query->whereHas('appelOffre', function ($q) use ($user) {
+                $q->where('responsable_marche_id', $user->responsableMarche->id)
+                  ->orWhereNull('responsable_marche_id'); // AO créés par admin
+            })->with(['appelOffre', 'fournisseur.user']);
+        } elseif ($user->isFournisseur()) {
+            if ($user->fournisseur) {
+                $query = $user->fournisseur->candidatures()->with(['appelOffre']);
+            } else {
+                return CandidatureResource::collection(collect()->paginate($perPage));
+            }
+        } else {
+            return CandidatureResource::collection(collect()->paginate($perPage));
+        }
+        
+        // Filtre par statut
+        if ($statut) {
+            $query->where('statut', $statut);
+        }
+        
+        // Filtre par appel d'offre
+        if ($appelOffreId) {
+            $query->where('appel_offre_id', $appelOffreId);
         }
 
-        if ($user->isResponsableMarche()) {
-            $candidatures = Candidature::whereHas('appelOffre', function ($q) use ($user) {
-                $q->where('responsable_marche_id', $user->responsableMarche->id);
-            })->with(['appelOffre', 'fournisseur.user'])->get();
-
-            return CandidatureResource::collection($candidatures);
-        }
-
-        if ($user->isFournisseur()) {
-            $candidatures = $user->fournisseur
-                ? $user->fournisseur->candidatures()->with(['appelOffre'])->get()
-                : collect();
-
-            return CandidatureResource::collection($candidatures);
-        }
-
-        return CandidatureResource::collection(collect());
+        $candidatures = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        return CandidatureResource::collection($candidatures);
     }
 
     public function show(Candidature $candidature)

@@ -49,7 +49,7 @@ class AppelOffre extends Model
      */
     public function responsableMarche(): BelongsTo
     {
-        return $this->belongsTo(ResponsableMarche::class);
+        return $this->belongsTo(ResponsableMarche::class, 'responsable_marche_id');
     }
 
     /**
