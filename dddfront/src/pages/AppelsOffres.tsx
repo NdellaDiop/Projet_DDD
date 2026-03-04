@@ -270,7 +270,7 @@ const AppelsOffres = () => {
                               <div className="flex items-center gap-2">
                                 <Building2 className="h-4 w-4" />
                                 {/* Budget non spécifié si non retourné par le backend */}
-                                <span>Budget non spécifié</span>
+                                <span>Budget : Sur demande</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4" />

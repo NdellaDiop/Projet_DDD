@@ -37,6 +37,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { exportData } from "@/lib/exportUtils";
+import { Download } from "lucide-react";
 
 interface Candidature {
   id: number;
@@ -114,24 +117,43 @@ export default function FournisseurDashboard() {
   const [newComments, setNewComments] = useState<Record<number, string>>({});
   const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
 
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    perPage: 15,
+  });
+
   useEffect(() => {
     loadDashboardData();
-  }, [api]);
+  }, [api, pagination.currentPage, pagination.perPage]);
 
   const loadDashboardData = async () => {
     if (!api) return;
     try {
       setLoading(true);
       const [candidaturesRes, documentsRes, profileRes, suggestionsRes] = await Promise.all([
-        api.get("/api/fournisseur/candidatures"),
+        api.get("/api/fournisseur/candidatures", {
+          params: { page: pagination.currentPage, per_page: pagination.perPage }
+        }),
         api.get("/api/fournisseur/documents-legaux"),
         api.get("/api/fournisseur/profile"),
         api.get("/api/suggestions"),
       ]);
 
       const candData = candidaturesRes.data;
-      const candidaturesList = Array.isArray(candData) ? candData : candData.data || [];
+      const candidaturesList = Array.isArray(candData.data) ? candData.data : candData;
       
+      if (candData.meta) {
+        setPagination(prev => ({
+          ...prev,
+          currentPage: candData.meta.current_page,
+          totalPages: candData.meta.last_page,
+          totalItems: candData.meta.total,
+          perPage: candData.meta.per_page
+        }));
+      }
+
       // Charger les documents et commentaires pour chaque candidature
       const candidaturesWithDocs = await Promise.all(
         candidaturesList.map(async (cand: Candidature) => {
@@ -468,6 +490,71 @@ export default function FournisseurDashboard() {
     documents_total: documents.length,
   };
 
+  const handlePageChange = (page: number) => {
+    setPagination(prev => ({ ...prev, currentPage: page }));
+  };
+
+  const handlePerPageChange = (perPage: number) => {
+    setPagination(prev => ({ ...prev, perPage, currentPage: 1 }));
+  };
+
+  const handleExportData = async (type: 'excel' | 'pdf') => {
+    if (!api) return;
+    try {
+      // On demande toutes les données pour l'export (paramètre 'all=true' à gérer côté backend si nécessaire, 
+      // sinon on récupère tout ce qu'on peut)
+      const response = await api.get('/api/fournisseur/candidatures', {
+        params: { per_page: 1000 } 
+      });
+      
+      const rawData = response.data.data || response.data;
+      
+      // Définir les colonnes pour l'export
+      const columns = [
+        { header: "Appel d'offre", key: "appel_offre.titre" },
+        { header: "Référence", key: "appel_offre.numero_reference" },
+        { 
+          header: "Date limite", 
+          key: "appel_offre.date_limite",
+          format: (val: any) => val ? new Date(val).toLocaleDateString() : "-"
+        },
+        { 
+          header: "Date soumission", 
+          key: "date_soumission",
+          format: (val: any) => val ? new Date(val).toLocaleDateString() : "-"
+        },
+        { 
+          header: "Montant (FCFA)", 
+          key: "montant_propose",
+          format: (val: any) => val ? val.toLocaleString() : "Non renseigné"
+        },
+        { 
+          header: "Statut", 
+          key: "statut",
+          format: (val: any) => val === 'submitted' ? 'Soumise' : 
+                                   val === 'accepted' ? 'Acceptée' : 
+                                   val === 'rejected' ? 'Rejetée' : val
+        }
+      ];
+
+      // Appeler exportData avec la bonne signature (format, options)
+      exportData(type, {
+        fileName: `mes_candidatures_${new Date().toISOString().split('T')[0]}`,
+        title: "Mes Candidatures",
+        columns: columns,
+        data: rawData
+      });
+
+    } catch (error) {
+      console.error("Erreur export:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'exporter les données.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     toast({ title: "Déconnexion", description: "Vous avez été déconnecté." });
@@ -676,7 +763,15 @@ export default function FournisseurDashboard() {
         {/* MES CANDIDATURES */}
         {activeTab === "candidatures" && (
             <div className="animate-in fade-in duration-500">
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-between items-center mb-4">
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleExportData('excel')}>
+                            <Download className="mr-2 h-4 w-4" /> Excel
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleExportData('pdf')}>
+                            <Download className="mr-2 h-4 w-4" /> PDF
+                        </Button>
+                    </div>
                     <Button onClick={() => navigate("/appels-offres")}>
                         Voir les offres disponibles
                     </Button>
@@ -939,6 +1034,18 @@ export default function FournisseurDashboard() {
                     </div>
                   ))}
                 </div>
+                )}
+                {candidatures.length > 0 && (
+                  <div className="mt-6">
+                    <DataTablePagination
+                      currentPage={pagination.currentPage}
+                      totalPages={pagination.totalPages}
+                      totalItems={pagination.totalItems}
+                      perPage={pagination.perPage}
+                      onPageChange={handlePageChange}
+                      onPerPageChange={handlePerPageChange}
+                    />
+                  </div>
                 )}
               </CardContent>
             </Card>

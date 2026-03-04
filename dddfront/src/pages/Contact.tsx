@@ -164,10 +164,10 @@ export default function Contact() {
                       <div>
                         <h3 className="font-semibold text-sm mb-1">Email</h3>
                         <a
-                          href="mailto:appels-offres@demdikk.sn"
+                          href="mailto:appel.offre@demdikk.sn"
                           className="text-sm text-muted-foreground hover:text-primary transition-colors"
                         >
-                          appels-offres@demdikk.sn
+                          appel.offre@demdikk.sn
                         </a>
                       </div>
                     </div>

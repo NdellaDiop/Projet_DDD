@@ -1447,6 +1447,15 @@ const AdminDashboard: React.FC = () => {
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
+                                variant="outline"
+                                className="h-8 px-2"
+                                onClick={() => handleViewFournisseur(fournisseur)}
+                                title="Voir détails"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
                                 className="bg-green-600 hover:bg-green-700 h-8 px-2"
                                 onClick={() => handleValidateFournisseur(fournisseur.id)}
                                 title="Valider"

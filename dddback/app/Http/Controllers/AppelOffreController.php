@@ -66,6 +66,18 @@ class AppelOffreController extends Controller
     
     public function show(AppelOffre $appelOffre)
     {
+        // SÉCURITÉ : Si l'utilisateur n'est pas admin/responsable, il ne doit voir que les AO publiés ou clôturés
+        $user = auth('sanctum')->user();
+        
+        // Si non connecté OU connecté mais pas admin/responsable du marché
+        $isPublicOrSimpleUser = !$user || ($user->role->name !== 'ADMIN' && ($user->role->name !== 'RESPONSABLE_MARCHE' || $appelOffre->responsable_marche_id !== $user->responsableMarche?->id));
+
+        if ($isPublicOrSimpleUser) {
+            if (!in_array($appelOffre->statut, [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED])) {
+                abort(404); // On fait croire que l'AO n'existe pas
+            }
+        }
+
         $appelOffre->load('responsableMarche.user')->loadCount('candidatures');
         return new AppelOffreResource($appelOffre);
     }

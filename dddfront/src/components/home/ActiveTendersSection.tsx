@@ -188,7 +188,7 @@ const ActiveTendersSection = () => {
                       <Building2 className="h-4 w-4 shrink-0" />
                       {/* Votre API ne renvoie pas de budget directement. Si vous voulez l'afficher,
                           il faudra l'ajouter au modèle AppelOffre dans le backend ou le simuler ici. */}
-                      <span className="truncate">Budget non spécifié</span>
+                      <span className="truncate">Budget : Sur demande</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="h-4 w-4 shrink-0" />
