@@ -58,7 +58,7 @@ export default function Login() {
   };
 
   const validateLoginForm = () => {
-    let newErrors: typeof errors = { email: "", password: "" };
+    const newErrors: typeof errors = { email: "", password: "" };
     let isValid = true;
 
     if (!formData.email) {
@@ -89,7 +89,13 @@ export default function Login() {
 
       const roleRaw = typeof loggedInUser.role === "string" ? loggedInUser.role : loggedInUser.role?.name;
       const roleName = roleRaw?.toString().trim().toUpperCase();
-      const isAdmin = roleName === "ADMIN" || (loggedInUser as any)?.role_id === 1;
+      const roleId =
+        typeof loggedInUser === "object" &&
+        loggedInUser !== null &&
+        "role_id" in loggedInUser
+          ? (loggedInUser as { role_id?: number }).role_id
+          : undefined;
+      const isAdmin = roleName === "ADMIN" || roleId === 1;
 
       toast({
         title: "Connexion réussie !",
@@ -107,9 +113,14 @@ export default function Login() {
       } else {
         navigate("/appels-offres", { replace: true });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage =
-        error.response?.data?.message || "Identifiants incorrects. Veuillez réessayer.";
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : "Identifiants incorrects. Veuillez réessayer.";
       setApiError(errorMessage);
       toast({
         title: "Erreur de connexion",

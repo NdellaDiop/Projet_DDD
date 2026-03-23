@@ -8,11 +8,15 @@ const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const { isAuthenticated, user } = useAuth();
+  const roleId =
+    typeof user === "object" && user !== null && "role_id" in user
+      ? (user as { role_id?: number }).role_id
+      : undefined;
 
   const getDashboardLink = () => {
-    if (user?.role?.name === 'ADMIN' || (user as any)?.role_id === 1) return '/admin';
-    if (user?.role?.name === 'FOURNISSEUR' || (user as any)?.role_id === 3) return '/fournisseur/dashboard';
-    if (user?.role?.name === 'RESPONSABLE_MARCHE' || (user as any)?.role_id === 2) return '/responsable/dashboard';
+    if (user?.role?.name === 'ADMIN' || roleId === 1) return '/admin';
+    if (user?.role?.name === 'FOURNISSEUR' || roleId === 3) return '/fournisseur/dashboard';
+    if (user?.role?.name === 'RESPONSABLE_MARCHE' || roleId === 2) return '/responsable/dashboard';
     return '/appels-offres';
   };
 

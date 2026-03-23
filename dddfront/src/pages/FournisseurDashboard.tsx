@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +87,19 @@ interface Suggestion {
   created_at: string;
 }
 
+interface CommentItem {
+  id: number;
+  message: string;
+  created_at: string;
+  user?: {
+    id: number;
+    name: string;
+  };
+  document?: {
+    nom_fichier: string;
+  };
+}
+
 export default function FournisseurDashboard() {
   const { api, user, logout, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
@@ -112,10 +125,23 @@ export default function FournisseurDashboard() {
   const [editMontant, setEditMontant] = useState("");
   
   // États pour les commentaires
-  const [candidatureComments, setCandidatureComments] = useState<Record<number, any[]>>({});
+  const [candidatureComments, setCandidatureComments] = useState<Record<number, CommentItem[]>>({});
   const [expandedCandidatureId, setExpandedCandidatureId] = useState<number | null>(null);
   const [newComments, setNewComments] = useState<Record<number, string>>({});
   const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
+
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+    ) {
+      return (error as { response?: { data?: { message?: string } } }).response?.data?.message as string;
+    }
+    if (error instanceof Error) return error.message;
+    return fallback;
+  };
 
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -124,11 +150,7 @@ export default function FournisseurDashboard() {
     perPage: 15,
   });
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [api, pagination.currentPage, pagination.perPage]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!api) return;
     try {
       setLoading(true);
@@ -151,6 +173,14 @@ export default function FournisseurDashboard() {
           totalPages: candData.meta.last_page,
           totalItems: candData.meta.total,
           perPage: candData.meta.per_page
+        }));
+      } else {
+        setPagination(prev => ({
+          ...prev,
+          currentPage: 1,
+          totalPages: 1,
+          totalItems: Array.isArray(candidaturesList) ? candidaturesList.length : 0,
+          perPage: Array.isArray(candidaturesList) ? (candidaturesList.length || 15) : 15
         }));
       }
 
@@ -196,12 +226,16 @@ export default function FournisseurDashboard() {
         telephone: profileRes.data.telephone || "",
         email_contact: profileRes.data.email_contact || "",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur chargement dashboard:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, pagination.currentPage, pagination.perPage]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,17 +350,20 @@ export default function FournisseurDashboard() {
         title: "Profil mis à jour",
         description: successMessage,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur mise à jour profil:", error);
-      console.error("Response data:", error.response?.data);
+      const responseData =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { errors?: Record<string, string[]>, message?: string } } }).response?.data
+          : undefined;
       
       let errorMessage = "Erreur lors de la mise à jour";
       
-      if (error.response?.data?.errors) {
+      if (responseData?.errors) {
         // Afficher toutes les erreurs de validation
-        const errors = error.response.data.errors;
+        const errors = responseData.errors;
         const errorList = Object.entries(errors)
-          .map(([field, messages]: [string, any]) => {
+          .map(([field, messages]: [string, string[]]) => {
             const fieldName = field === 'nom_entreprise' ? 'Nom de l\'entreprise' :
                             field === 'email_contact' ? 'Email de contact' :
                             field === 'telephone' ? 'Téléphone' :
@@ -336,8 +373,8 @@ export default function FournisseurDashboard() {
           })
           .join('; ');
         errorMessage = errorList;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      } else if (responseData?.message) {
+        errorMessage = responseData.message;
       }
       
       toast({
@@ -378,11 +415,11 @@ export default function FournisseurDashboard() {
         title: "Candidature mise à jour",
         description: "Le montant de votre offre a été modifié.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible de mettre à jour la candidature.",
+        description: getErrorMessage(error, "Impossible de mettre à jour la candidature."),
         variant: "destructive"
       });
     }
@@ -399,10 +436,10 @@ export default function FournisseurDashboard() {
         title: "Suggestion envoyée",
         description: "Merci pour votre contribution !",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Erreur lors de l'envoi",
+        description: getErrorMessage(error, "Erreur lors de l'envoi"),
         variant: "destructive",
       });
     }
@@ -429,10 +466,10 @@ export default function FournisseurDashboard() {
       });
 
       loadDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erreur d'upload",
-        description: error.response?.data?.message || "Erreur lors de l'upload",
+        description: getErrorMessage(error, "Erreur lors de l'upload"),
         variant: "destructive",
       });
     } finally {
@@ -451,7 +488,7 @@ export default function FournisseurDashboard() {
         description: "Le document a été supprimé avec succès",
       });
       loadDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erreur",
         description: "Impossible de supprimer le document",
@@ -461,7 +498,10 @@ export default function FournisseurDashboard() {
   };
 
   const getStatutBadge = (statut: string) => {
-    const variants: Record<string, { variant: any; icon: any; label: string }> = {
+    const variants: Record<
+      string,
+      { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ComponentType<{ className?: string }>; label: string }
+    > = {
       submitted: { variant: "default", icon: Clock, label: "Soumise" },
       SOUMISE: { variant: "default", icon: Clock, label: "Soumise" }, // Rétrocompatibilité
       under_review: { variant: "secondary", icon: Eye, label: "En évaluation" },
@@ -476,7 +516,7 @@ export default function FournisseurDashboard() {
     const Icon = config.icon;
 
     return (
-      <Badge variant={config.variant as any} className="gap-1">
+      <Badge variant={config.variant} className="gap-1">
         <Icon className="w-3 h-3" />
         {config.label}
       </Badge>
@@ -516,24 +556,24 @@ export default function FournisseurDashboard() {
         { 
           header: "Date limite", 
           key: "appel_offre.date_limite",
-          format: (val: any) => val ? new Date(val).toLocaleDateString() : "-"
+          format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString() : "-"
         },
         { 
           header: "Date soumission", 
           key: "date_soumission",
-          format: (val: any) => val ? new Date(val).toLocaleDateString() : "-"
+          format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString() : "-"
         },
         { 
           header: "Montant (FCFA)", 
           key: "montant_propose",
-          format: (val: any) => val ? val.toLocaleString() : "Non renseigné"
+          format: (val: unknown) => val ? Number(val).toLocaleString() : "Non renseigné"
         },
         { 
           header: "Statut", 
           key: "statut",
-          format: (val: any) => val === 'submitted' ? 'Soumise' : 
+          format: (val: unknown) => val === 'submitted' ? 'Soumise' : 
                                    val === 'accepted' ? 'Acceptée' : 
-                                   val === 'rejected' ? 'Rejetée' : val
+                                   val === 'rejected' ? 'Rejetée' : String(val ?? '')
         }
       ];
 
@@ -874,11 +914,11 @@ export default function FournisseurDashboard() {
                                                                   document.body.removeChild(link);
                                                                   window.URL.revokeObjectURL(url);
                                                                 }
-                                                              } catch (error: any) {
+                                                              } catch (error: unknown) {
                                                                 console.error("Erreur ouverture document:", error);
                                                                 toast({
                                                                   title: "Erreur",
-                                                                  description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                                                  description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                                                   variant: "destructive"
                                                                 });
                                                               }
@@ -935,7 +975,7 @@ export default function FournisseurDashboard() {
                                                             Aucun commentaire pour le moment.
                                                           </p>
                                                         ) : (
-                                                          candidatureComments[candidature.id]?.map((comment: any) => (
+                                                          candidatureComments[candidature.id]?.map((comment) => (
                                                             <div key={comment.id} className={`p-2 rounded-lg border text-xs ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
                                                               <div className="flex items-start justify-between mb-1">
                                                                 <span className="font-semibold text-slate-700">
@@ -984,11 +1024,11 @@ export default function FournisseurDashboard() {
                                                                   title: "Commentaire envoyé",
                                                                   description: "Votre réponse a été envoyée au responsable.",
                                                                 });
-                                                              } catch (error: any) {
+                                                              } catch (error: unknown) {
                                                                 console.error("Erreur envoi commentaire:", error);
                                                                 toast({
                                                                   title: "Erreur",
-                                                                  description: error.response?.data?.message || "Impossible d'envoyer le commentaire.",
+                                                                  description: getErrorMessage(error, "Impossible d'envoyer le commentaire."),
                                                                   variant: "destructive"
                                                                 });
                                                               } finally {
@@ -1137,11 +1177,11 @@ export default function FournisseurDashboard() {
                                                             document.body.removeChild(link);
                                                             window.URL.revokeObjectURL(url);
                                                         }
-                                                    } catch (error: any) {
+                                                    } catch (error: unknown) {
                                                         console.error("Erreur ouverture document:", error);
                                                         toast({
                                                             title: "Erreur",
-                                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                                            description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                                             variant: "destructive"
                                                         });
                                                     }
@@ -1219,10 +1259,25 @@ export default function FournisseurDashboard() {
                                         <div key={sug.id} className="p-4 border rounded-lg bg-white space-y-2">
                                             <div className="flex justify-between items-start">
                                                 <h4 className="font-semibold text-slate-800">{sug.sujet}</h4>
-                                                <Badge variant={sug.statut === 'pending' ? 'outline' : 'secondary'}>
-                                                    {sug.statut === 'pending' ? 'En attente' : sug.statut}
+                                                <Badge 
+                                                    variant={
+                                                        sug.statut === 'pending' ? 'outline' : 
+                                                        sug.statut === 'rejected' ? 'destructive' : 
+                                                        'secondary'
+                                                    }
+                                                    className={
+                                                        sug.statut === 'approved' || sug.statut === 'implemented' 
+                                                            ? 'bg-green-600 hover:bg-green-700 text-white' 
+                                                            : ''
+                                                    }
+                                                >
+                                                    {sug.statut === 'pending' ? 'En attente' :
+                                                     sug.statut === 'approved' ? 'Approuvée' :
+                                                     sug.statut === 'implemented' ? 'Implémentée' :
+                                                     sug.statut === 'rejected' ? 'Rejetée' :
+                                                     sug.statut}
                                                 </Badge>
-                      </div>
+                                            </div>
                                             <p className="text-sm text-slate-600 whitespace-pre-line">{sug.message}</p>
                                             <p className="text-xs text-muted-foreground pt-2 border-t mt-2">
                                                 Envoyé le {new Date(sug.created_at).toLocaleDateString()}
@@ -1372,11 +1427,11 @@ export default function FournisseurDashboard() {
                                                                                     document.body.removeChild(link);
                                                                                     window.URL.revokeObjectURL(url);
                                                                                 }
-                                                                            } catch (error: any) {
+                                                                            } catch (error: unknown) {
                                                                                 console.error("Erreur ouverture document:", error);
                                                                                 toast({
                                                                                     title: "Erreur",
-                                                                                    description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                                                                    description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                                                                     variant: "destructive"
                                                                                 });
                                                                             }
@@ -1452,21 +1507,21 @@ export default function FournisseurDashboard() {
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                     <Label>Téléphone</Label>
-                        <Input
-                          value={profileForm.telephone}
-                        onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })} 
-                          required
-                        />
-                      </div>
+                    <Input
+                      value={profileForm.telephone}
+                      onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })} 
+                      required
+                    />
+                </div>
                 <div className="grid gap-2">
                     <Label>Adresse</Label>
-                        <Input
-                          value={profileForm.adresse}
-                        onChange={(e) => setProfileForm({ ...profileForm, adresse: e.target.value })} 
-                          required
-                        />
-                      </div>
-                      </div>
+                    <Input
+                      value={profileForm.adresse}
+                      onChange={(e) => setProfileForm({ ...profileForm, adresse: e.target.value })} 
+                      required
+                    />
+                </div>
+            </div>
 
 
             <DialogFooter>

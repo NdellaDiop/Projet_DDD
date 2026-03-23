@@ -91,7 +91,7 @@ const TenderDetail = () => {
         setLoading(true);
         const response = await api.get<AppelOffre>(`/api/appels-offres/${id}`);
         setTender(response.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur lors de la récupération des détails de l'appel d'offres:", err);
         setError("Impossible de charger les détails de l'appel d'offres. Veuillez réessayer.");
         toast({

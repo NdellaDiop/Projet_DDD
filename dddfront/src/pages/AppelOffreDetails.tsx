@@ -79,7 +79,7 @@ const AppelOffreDetails = () => {
         // Si elle n'existe pas, il faudra l'ajouter au backend.
         const response = await api.get(`/api/appels-offres/${id}`);
         setAppelOffre(response.data.data || response.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur chargement détails:", err);
         setError("Impossible de charger les détails de cet appel d'offre.");
       } finally {
@@ -121,7 +121,11 @@ const AppelOffreDetails = () => {
         // Créer la candidature
         const candidatureResponse = await api.post(`/api/appels-offres/${appelOffre.id}/candidatures`, {
             montant_propose: montant,
-            fournisseur_id: (user as any).fournisseur?.id || (user as any).id, 
+            fournisseur_id:
+              typeof user === "object" && user !== null && "fournisseur" in user
+                ? (((user as { fournisseur?: { id?: number }; id?: number }).fournisseur?.id) ??
+                  (user as { fournisseur?: { id?: number }; id?: number }).id)
+                : undefined,
         });
 
         const candidatureId = candidatureResponse.data.data?.id || candidatureResponse.data.id;
@@ -168,10 +172,16 @@ const AppelOffreDetails = () => {
         setOffreFinanciere(null);
         navigate("/fournisseur/dashboard");
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Erreur soumission:", error);
-        const errorMessage = error.response?.data?.message || "Impossible de soumettre la candidature.";
-        const missingDocs = error.response?.data?.missing_documents;
+        const responseData =
+          typeof error === "object" &&
+          error !== null &&
+          "response" in error
+            ? (error as { response?: { data?: { message?: string; missing_documents?: unknown[] } } }).response?.data
+            : undefined;
+        const errorMessage = responseData?.message || "Impossible de soumettre la candidature.";
+        const missingDocs = responseData?.missing_documents;
         
         let description = errorMessage;
         if (missingDocs && Array.isArray(missingDocs)) {

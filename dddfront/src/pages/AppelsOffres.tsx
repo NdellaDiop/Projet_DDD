@@ -78,7 +78,7 @@ const AppelsOffres = () => {
       try {
         setLoading(true);
         // Construire les paramètres de requête
-        const params: any = {};
+        const params: Record<string, string | number> = {};
         if (statusFilter !== "all") {
           params.statut = statusFilter;
         }
@@ -98,8 +98,8 @@ const AppelsOffres = () => {
             ? response.data
             : [];
 
-        setAppelsOffres(tenders);
-      } catch (err: any) {
+setAppelsOffres(tenders);
+      } catch (err: unknown) {
         console.error("Erreur lors de la récupération des appels d'offres:", err);
         setError("Impossible de charger les appels d'offres. Veuillez réessayer.");
         toast({

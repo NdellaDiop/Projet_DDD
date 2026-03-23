@@ -75,12 +75,17 @@ export default function Contact() {
         title: "Message envoyé !",
         description: "Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur envoi message:", error);
-      const errorMessage = error.response?.data?.message || 
-                          (error.response?.data?.errors ? 
-                            Object.values(error.response.data.errors).flat().join(', ') : 
-                            "Erreur lors de l'envoi du message");
+      const responseData =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error
+          ? (error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response?.data
+          : undefined;
+      const errorMessage =
+        responseData?.message ||
+        (responseData?.errors ? Object.values(responseData.errors).flat().join(", ") : "Erreur lors de l'envoi du message");
       toast({
         title: "Erreur",
         description: errorMessage,

@@ -8,15 +8,36 @@ interface AdvancedStatsProps {
   className?: string;
 }
 
+interface AOEvolutionItem {
+  month: string;
+  count: number;
+}
+
+interface FournisseurStatItem {
+  statut: string;
+  count: number;
+}
+
+interface TopResponsableItem {
+  name: string;
+  count: number;
+}
+
+interface FormattedPieItem {
+  name: string;
+  value: number;
+  color: string;
+}
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   const { api } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
-    aoEvolution: any[];
-    fournisseurStats: any[];
-    topResponsables: any[];
+    aoEvolution: AOEvolutionItem[];
+    fournisseurStats: FournisseurStatItem[];
+    topResponsables: TopResponsableItem[];
   } | null>(null);
 
   useEffect(() => {
@@ -46,12 +67,12 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   if (!data) return null;
 
   // Formatter les données pour les graphiques
-  const formattedAOEvolution = data.aoEvolution.map((item: any) => ({
+  const formattedAOEvolution = data.aoEvolution.map((item: AOEvolutionItem) => ({
     name: item.month,
     AppelsOffres: item.count
   }));
 
-  const formattedFournisseurStats = data.fournisseurStats.map((item: any, index: number) => ({
+  const formattedFournisseurStats: FormattedPieItem[] = data.fournisseurStats.map((item: FournisseurStatItem) => ({
     name: item.statut.charAt(0).toUpperCase() + item.statut.slice(1).replace('_', ' '),
     value: item.count,
     color: item.statut === 'actif' ? '#16a34a' : (item.statut === 'en_attente' ? '#ea580c' : '#dc2626')
@@ -114,7 +135,7 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {formattedFournisseurStats.map((entry: any, index: number) => (
+                  {formattedFournisseurStats.map((entry, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>

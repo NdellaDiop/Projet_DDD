@@ -5,7 +5,7 @@ const steps = [
     icon: UserPlus,
     step: "01",
     title: "Créez votre compte",
-    description: "Inscrivez-vous en tant que fournisseur avec vos documents officiels (NINEA, RCCM, attestations).",
+    description: "Inscrivez-vous en tant que fournisseur et faites valider votre compte par nos services.",
   },
   {
     icon: Search,

@@ -48,33 +48,51 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
     perPage: 20,
   });
 
-  const fetchLogs = async (page = 1, perPage = 20) => {
-    if (!api) return;
-    setLoading(true);
-    try {
-      const params: any = { page, per_page: perPage };
-      if (auditableType) params.auditable_type = auditableType;
-      if (auditableId) params.auditable_id = auditableId;
-
-      const response = await api.get('/api/admin/audit-logs', { params });
-      
-      setLogs(response.data.data);
-      setPagination({
-        currentPage: response.data.current_page,
-        totalPages: response.data.last_page,
-        totalItems: response.data.total,
-        perPage: response.data.per_page,
-      });
-    } catch (error) {
-      console.error("Erreur chargement logs:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchLogs(pagination.currentPage, pagination.perPage);
-  }, [auditableType, auditableId, pagination.currentPage, pagination.perPage]); // Ajout dépendances pagination
+    const fetchLogs = async () => {
+      if (!api) return;
+      setLoading(true);
+      try {
+        const params: Record<string, string | number> = {
+            page: pagination.currentPage, 
+            per_page: pagination.perPage 
+        };
+        if (auditableType) params.auditable_type = auditableType;
+        if (auditableId) params.auditable_id = auditableId;
+
+        const response = await api.get('/api/admin/audit-logs', { params });
+        
+        setLogs(response.data.data);
+        
+        setPagination(prev => {
+            const newTotal = Number(response.data.total || 0);
+            const newLastPage = Number(response.data.last_page || 1);
+            const newCurrentPage = Number(response.data.current_page || 1);
+            
+            // Éviter les mises à jour inutiles et les boucles infinies
+            if (
+                prev.totalItems === newTotal && 
+                prev.totalPages === newLastPage &&
+                prev.currentPage === newCurrentPage
+            ) {
+                return prev;
+            }
+            return {
+                ...prev,
+                currentPage: newCurrentPage,
+                totalPages: newLastPage,
+                totalItems: newTotal,
+            };
+        });
+      } catch (error) {
+        console.error("Erreur chargement logs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [api, pagination.currentPage, pagination.perPage, auditableType, auditableId]);
 
   const handlePageChange = (page: number) => {
     setPagination(prev => ({ ...prev, currentPage: page }));

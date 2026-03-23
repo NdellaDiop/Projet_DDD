@@ -21,7 +21,7 @@ interface PVReportData {
 }
 
 export const generatePVReport = (data: PVReportData) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF() as jsPDF & { lastAutoTable?: { finalY?: number } };
   const pageWidth = doc.internal.pageSize.width;
   
   // 1. En-tête avec Logo (Simulé par du texte stylisé)
@@ -94,7 +94,7 @@ export const generatePVReport = (data: PVReportData) => {
   });
 
   // Récupérer la position Y après le tableau
-  const finalY = (doc as any).lastAutoTable.finalY || 150;
+  const finalY = doc.lastAutoTable?.finalY || 150;
 
   // 5. Conclusion / Synthèse
   doc.setFontSize(12);
@@ -133,7 +133,7 @@ export const generatePVReport = (data: PVReportData) => {
   doc.text("Le Directeur Général", 14 + (boxWidth + 6) * 2 + 5, signatureY + 8);
 
   // Pied de page
-  const pageCount = (doc as any).internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);

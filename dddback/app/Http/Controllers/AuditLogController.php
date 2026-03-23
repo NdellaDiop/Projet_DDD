@@ -21,12 +21,16 @@ class AuditLogController extends Controller
 
         $query = AuditLog::with('user');
 
-        if ($request->auditable_type && $request->auditable_id) {
-            $query->where('auditable_type', $request->auditable_type)
-                  ->where('auditable_id', $request->auditable_id);
+        if ($request->has('auditable_type')) {
+            $query->where('auditable_type', $request->auditable_type);
+        }
+        
+        if ($request->has('auditable_id')) {
+            $query->where('auditable_id', $request->auditable_id);
         }
 
-        $logs = $query->orderBy('created_at', 'desc')->paginate(20);
+        $perPage = $request->input('per_page', 20);
+        $logs = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json($logs);
     }

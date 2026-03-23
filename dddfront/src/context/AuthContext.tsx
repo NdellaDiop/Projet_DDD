@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { API_BASE_URL } from '@/lib/utils'; 
@@ -8,7 +9,19 @@ interface User {
   name: string;
   email: string;
   role: { id: number; name: string };
+  role_id?: number;
   is_active?: boolean;
+}
+
+interface RegisterPayload {
+  name: string;
+  email: string;
+  password: string;
+  password_confirmation: string;
+  role_name: string;
+  nom_entreprise: string;
+  adresse: string;
+  telephone: string;
 }
 
 interface AuthContextType {
@@ -19,7 +32,7 @@ interface AuthContextType {
   isResponsableMarche: boolean;
   isFournisseur: boolean;
   login: (email: string, password: string) => Promise<User>;
-  register: (data: any) => Promise<User>;
+  register: (data: RegisterPayload) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   loading: boolean;
@@ -28,6 +41,26 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const parseUserPayload = (payload: unknown): User => {
+  if (typeof payload === 'string') {
+    return JSON.parse(payload) as User;
+  }
+  return payload as User;
+};
+
+const getApiErrorMessage = (error: unknown): string => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === 'string'
+  ) {
+    return (error as { response?: { data?: { message?: string } } }).response?.data?.message as string;
+  }
+  if (error instanceof Error) return error.message;
+  return 'Erreur inconnue';
+};
 
 // Configuration Axios globale
 const api: AxiosInstance = axios.create({
@@ -106,20 +139,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.log('👤 typeof response.data:', typeof response.data);
           
           // ✅ SOLUTION : Parser si c'est une string
-          let userData = response.data;
-          if (typeof userData === 'string') {
-            console.log('⚠️ User est une string, parsing JSON...');
-            userData = JSON.parse(userData);
-          }
+          const userData = parseUserPayload(response.data);
           
           console.log('👤 User après parsing:', userData);
           console.log('👤 userData.role:', userData.role);
 
-          setUser(response.data);
+          setUser(userData);
           setIsAuthenticated(true); // ✅ Explicite
           
-        } catch (error: any) {
-          console.error("❌ Erreur chargement user:", error.response?.data || error.message);
+        } catch (error: unknown) {
+          console.error("❌ Erreur chargement user:", getApiErrorMessage(error));
           localStorage.removeItem('access_token');
           setToken(null);
           setUser(null);
@@ -173,11 +202,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.log('👤 typeof loggedInUser:', typeof loggedInUser);
   
       // ✅ Parser si c'est une string
-      let userData = loggedInUser;
-      if (typeof userData === 'string') {
-        console.log('⚠️ loggedInUser est une string, parsing JSON...');
-        userData = JSON.parse(userData);
-      }
+      const userData = parseUserPayload(loggedInUser);
 
       console.log('👤 userData après parsing:', userData);
       setUser(userData);
@@ -195,18 +220,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log('👤 typeof me.data:', typeof me.data);
 
       // ✅ Parser si c'est une string
-      let userData = me.data;
-      if (typeof userData === 'string') {
-        console.log('⚠️ me.data est une string, parsing JSON...');
-        userData = JSON.parse(userData);
-      }
+      const userData = parseUserPayload(me.data);
       
       setUser(userData);
       setIsAuthenticated(true); // ✅ Explicite
       setIsReady(true);
-      return me.data;
-    } catch (error: any) {
-      console.error('❌ Erreur de connexion:', error.response?.data || error.message);
+      return userData;
+    } catch (error: unknown) {
+      console.error('❌ Erreur de connexion:', getApiErrorMessage(error));
       setIsAuthenticated(false);
       throw error;
     } finally {
@@ -214,7 +235,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const register = async (data: any): Promise<User> => {
+  const register = async (data: RegisterPayload): Promise<User> => {
     setLoading(true);
     try {
       await api.get('/sanctum/csrf-cookie');
@@ -237,8 +258,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAuthenticated(true); // ✅ Explicite
   
       return registeredUser;
-    } catch (error: any) {
-      console.error('Erreur d\'enregistrement:', error.response?.data || error.message);
+    } catch (error: unknown) {
+      console.error('Erreur d\'enregistrement:', getApiErrorMessage(error));
       setIsAuthenticated(false);
       throw error;
     } finally {
@@ -252,8 +273,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userData = response.data;
       setUser(userData);
       console.log('✅ Utilisateur rafraîchi:', userData);
-    } catch (error: any) {
-      console.error('❌ Erreur lors du rafraîchissement de l\'utilisateur:', error.response?.data || error.message);
+    } catch (error: unknown) {
+      console.error('❌ Erreur lors du rafraîchissement de l\'utilisateur:', getApiErrorMessage(error));
     }
   };
 
@@ -269,8 +290,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setIsAuthenticated(false); // ✅ Explicite
       navigate('/connexion');
-    } catch (error: any) {
-      console.error('Erreur de déconnexion:', error.response?.data || error.message);
+    } catch (error: unknown) {
+      console.error('Erreur de déconnexion:', getApiErrorMessage(error));
       localStorage.removeItem('access_token');
       setToken(null);
       setUser(null);

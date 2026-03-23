@@ -78,7 +78,7 @@ class AdminDashboardController extends Controller
         if ($statut) {
             $query->where('statut', $statut);
         }
-
+        
         // Filtre par plage de dates (publication)
         if ($dateDebut) {
             $query->whereDate('date_publication', '>=', $dateDebut);
@@ -94,9 +94,9 @@ class AdminDashboardController extends Controller
                     return $this->formatAppelOffre($ao);
                 });
         } else {
-            $appelsOffres = $query->orderBy('date_publication', 'desc')
-                ->paginate($perPage)
-                ->through(function ($ao) {
+        $appelsOffres = $query->orderBy('date_publication', 'desc')
+            ->paginate($perPage)
+            ->through(function ($ao) {
                     return $this->formatAppelOffre($ao);
                 });
         }
@@ -106,21 +106,21 @@ class AdminDashboardController extends Controller
 
     private function formatAppelOffre($ao)
     {
-        return [
-            'id' => $ao->id,
-            'titre' => $ao->titre,
-            'reference' => $ao->reference,
-            'statut' => $ao->statut,
-            'date_publication' => $ao->date_publication,
-            'date_cloture' => $ao->date_limite_depot,
-            'nombre_candidatures' => $ao->candidatures_count,
+                return [
+                    'id' => $ao->id,
+                    'titre' => $ao->titre,
+                    'reference' => $ao->reference,
+                    'statut' => $ao->statut,
+                    'date_publication' => $ao->date_publication,
+                    'date_cloture' => $ao->date_limite_depot,
+                    'nombre_candidatures' => $ao->candidatures_count,
             'responsable_marche_id' => $ao->responsable_marche_id,
             'responsable' => $ao->responsableMarche
-                ? [
+                        ? [
                     'name' => $ao->responsableMarche->user ? $ao->responsableMarche->user->name : 'Responsable inconnu',
-                ]
+                        ]
                 : null,
-        ];
+                ];
     }
 
     /**
@@ -131,7 +131,7 @@ class AdminDashboardController extends Controller
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
-        $domaines = $request->get('domaines', ''); // ex: "BTP,Informatique"
+        $raisonSociale = $request->get('raison_sociale', '');
         
         $query = Fournisseur::with('user')
             ->withCount('candidatures');
@@ -150,6 +150,11 @@ class AdminDashboardController extends Controller
             });
         }
         
+        // Filtres spécifiques
+        if ($raisonSociale) {
+            $query->where('nom_entreprise', 'ilike', "%{$raisonSociale}%");
+        }
+        
         // Filtre par statut
         if ($statut) {
             $query->where('statut', $statut);
@@ -163,11 +168,11 @@ class AdminDashboardController extends Controller
                 ->get()
                 ->map(function ($f) {
                     return $this->formatFournisseur($f);
-                });
+            });
         } else {
-            $fournisseurs = $query->orderBy('created_at', 'desc')
-                ->paginate($perPage)
-                ->through(function ($f) {
+        $fournisseurs = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage)
+            ->through(function ($f) {
                     return $this->formatFournisseur($f);
                 });
         }
@@ -177,17 +182,17 @@ class AdminDashboardController extends Controller
 
     private function formatFournisseur($f)
     {
-        return [
-            'id' => $f->id,
-            'raison_sociale' => $f->nom_entreprise,
-            'ninea' => $f->ninea ?? 'N/A',
-            'email' => $f->email_contact,
-            'telephone' => $f->telephone,
+                return [
+                    'id' => $f->id,
+                    'raison_sociale' => $f->nom_entreprise,
+                    'ninea' => $f->ninea ?? 'N/A',
+                    'email' => $f->email_contact,
+                    'telephone' => $f->telephone,
             'statut' => $f->statut, // Utilisation de la nouvelle colonne
-            'date_inscription' => $f->created_at->format('Y-m-d'),
-            'nombre_candidatures' => $f->candidatures_count,
-            'domaines_activite' => [],
-        ];
+                    'date_inscription' => $f->created_at->format('Y-m-d'),
+                    'nombre_candidatures' => $f->candidatures_count,
+                    'domaines_activite' => [],
+                ];
     }
 
     /**
@@ -221,9 +226,9 @@ class AdminDashboardController extends Controller
                     return $this->formatResponsable($r);
                 });
         } else {
-            $responsables = $query->orderBy('created_at', 'desc')
-                ->paginate($perPage)
-                ->through(function ($r) {
+        $responsables = $query->orderBy('created_at', 'desc')
+            ->paginate($perPage)
+            ->through(function ($r) {
                     return $this->formatResponsable($r);
                 });
         }
@@ -233,18 +238,18 @@ class AdminDashboardController extends Controller
 
     private function formatResponsable($r)
     {
-        return [
-            'id' => $r->id,
-            'user_id' => $r->user_id,
-            'departement' => $r->departement,
-            'fonction' => $r->fonction,
-            'telephone' => $r->telephone,
-            'user' => [
-                'name' => $r->user->name ?? 'N/A',
-                'email' => $r->user->email ?? 'N/A',
-            ],
-            'nombre_appels_offres' => $r->appels_offres_count,
-        ];
+                return [
+                    'id' => $r->id,
+                    'user_id' => $r->user_id,
+                    'departement' => $r->departement,
+                    'fonction' => $r->fonction,
+                    'telephone' => $r->telephone,
+                    'user' => [
+                        'name' => $r->user->name ?? 'N/A',
+                        'email' => $r->user->email ?? 'N/A',
+                    ],
+                    'nombre_appels_offres' => $r->appels_offres_count,
+                ];
     }
 
     /**
@@ -317,6 +322,17 @@ class AdminDashboardController extends Controller
         }
         $responsableId = $user->responsableMarche->id;
 
+        // Stats globales
+        $totalAO = AppelOffre::where('responsable_marche_id', $responsableId)->count();
+        $publishedAO = AppelOffre::where('responsable_marche_id', $responsableId)
+            ->where('statut', 'published')->count();
+        $closedAO = AppelOffre::where('responsable_marche_id', $responsableId)
+            ->where('statut', 'closed')->count();
+        
+        $totalCandidatures = Candidature::join('appels_offres', 'candidatures.appel_offre_id', '=', 'appels_offres.id')
+            ->where('appels_offres.responsable_marche_id', $responsableId)
+            ->count();
+
         // 1. Évolution de ses appels d'offres sur les 6 derniers mois
         $sixMonthsAgo = now()->subMonths(6);
         $aoEvolution = AppelOffre::selectRaw("TO_CHAR(date_publication, 'YYYY-MM') as month, count(*) as count")
@@ -334,6 +350,10 @@ class AdminDashboardController extends Controller
             ->get();
 
         return response()->json([
+            'totalAO' => $totalAO,
+            'publishedAO' => $publishedAO,
+            'closedAO' => $closedAO,
+            'totalCandidatures' => $totalCandidatures,
             'aoEvolution' => $aoEvolution,
             'candidatureStats' => $candidatureStats,
         ]);

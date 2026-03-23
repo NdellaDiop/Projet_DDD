@@ -169,6 +169,8 @@ interface AppelOffreAdmin {
   responsable?: {
     name: string;
   } | null;
+  date_publication?: string;
+  date_cloture?: string;
 }
 
 interface CandidatureAdmin {
@@ -200,6 +202,30 @@ interface DocumentLegal {
   created_at: string;
 }
 
+interface EditingResponsable {
+  id: number;
+  name: string;
+  email: string;
+  departement: string;
+  fonction: string;
+  telephone: string;
+}
+
+interface CommentItem {
+  id: number;
+  message: string;
+  created_at: string;
+  user?: {
+    id: number;
+    name: string;
+  };
+  document?: {
+    nom_fichier: string;
+  };
+}
+
+type DashboardFilterValue = string | number | boolean;
+
   // ============================================
   // COMPOSANT PRINCIPAL
   // ============================================
@@ -207,7 +233,7 @@ interface DocumentLegal {
 const AdminDashboard: React.FC = () => {
   const [isCreateResponsableOpen, setIsCreateResponsableOpen] = useState(false);
   const [isEditResponsableOpen, setIsEditResponsableOpen] = useState(false);
-  const [editingResponsable, setEditingResponsable] = useState<any>(null);
+  const [editingResponsable, setEditingResponsable] = useState<EditingResponsable | null>(null);
   const [isViewFournisseurOpen, setIsViewFournisseurOpen] = useState(false);
   const [selectedFournisseur, setSelectedFournisseur] = useState<Fournisseur | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -239,7 +265,7 @@ const AdminDashboard: React.FC = () => {
   const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
   const [candidatureDocuments, setCandidatureDocuments] = useState<DocumentLegal[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -252,9 +278,31 @@ const AdminDashboard: React.FC = () => {
 
   const { user: authUser, api, logout } = useAuth();
   const navigate = useNavigate();  
-  const getRoleName = (u: any) => {
-    const raw = typeof u?.role === "string" ? u.role : u?.role?.name;
+  const getRoleName = (u: unknown) => {
+    const roleContainer =
+      typeof u === "object" && u !== null ? (u as { role?: string | { name?: string } }).role : undefined;
+    const raw = typeof roleContainer === "string" ? roleContainer : roleContainer?.name;
     return raw?.toString().trim().toUpperCase();
+  };
+
+  const getRoleId = (u: unknown): number | undefined => {
+    if (typeof u === "object" && u !== null && "role_id" in u) {
+      return (u as { role_id?: number }).role_id;
+    }
+    return undefined;
+  };
+
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+    ) {
+      return (error as { response?: { data?: { message?: string } } }).response?.data?.message as string;
+    }
+    if (error instanceof Error) return error.message;
+    return fallback;
   };
 
   // États principaux
@@ -287,8 +335,17 @@ const AdminDashboard: React.FC = () => {
 
   // États de filtres et recherche
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(""); // Nouvel état debounce
   const [filterStatut, setFilterStatut] = useState("tous");
-  const [advancedFilters, setAdvancedFilters] = useState<Record<string, any>>({});
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, DashboardFilterValue>>({});
+
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   // Etats de pagination
   const [pagination, setPagination] = useState({
@@ -323,86 +380,173 @@ const AdminDashboard: React.FC = () => {
   // ============================================
 
   // Fonction utilitaire pour mettre à jour la pagination
-  const updatePaginationState = (key: keyof typeof pagination, meta: any) => {
-    setPagination(prev => ({
-      ...prev,
-      [key]: {
-        currentPage: meta.current_page,
-        totalPages: meta.last_page,
-        totalItems: meta.total,
-        perPage: meta.per_page,
+  const updatePaginationState = useCallback((
+    key: keyof typeof pagination,
+    meta: { current_page: number; last_page: number; total: number; per_page: number }
+  ) => {
+    setPagination(prev => {
+      const current = prev[key];
+      // On ne met à jour que les métadonnées serveur (total et pages) pour éviter les boucles infinies
+      // On garde currentPage et perPage tels que définis par l'UI
+      if (current.totalPages === meta.last_page && current.totalItems === meta.total) {
+          return prev;
       }
-    }));
-  };
+      return {
+        ...prev,
+        [key]: {
+          ...current,
+          totalPages: meta.last_page,
+          totalItems: meta.total,
+        }
+      };
+    });
+  }, []);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchGlobalData = useCallback(async () => {
+    if (!api) return;
     try {
-      setLoading(true);
-      setError(null);
-
-      if (!api) {
-        throw new Error("API client non disponible.");
-      }
-
-      const statsResponse = await api.get('/api/admin/dashboard-stats');
-      setStats(statsResponse.data);
-
-      const appelsOffresResponse = await api.get('/api/admin/appels-offres-dashboard', { params: { per_page: pagination.appelsOffres.perPage } });
-      // Gestion de la pagination Laravel (data.data) ou réponse directe (data)
-      if (appelsOffresResponse.data.data) {
-        setAppelsOffres(appelsOffresResponse.data.data);
-        updatePaginationState('appelsOffres', appelsOffresResponse.data);
-      } else {
-        setAppelsOffres(appelsOffresResponse.data);
-      }
-
-      const fournisseursResponse = await api.get('/api/admin/fournisseurs-dashboard', { params: { per_page: pagination.fournisseurs.perPage } });
-      if (fournisseursResponse.data.data) {
-        setFournisseurs(fournisseursResponse.data.data);
-        updatePaginationState('fournisseurs', fournisseursResponse.data);
-      } else {
-        setFournisseurs(fournisseursResponse.data);
-      }
-
-      const responsablesResponse = await api.get('/api/admin/responsables-dashboard', { params: { per_page: pagination.responsables.perPage } });
-      if (responsablesResponse.data.data) {
-        setResponsables(responsablesResponse.data.data);
-        updatePaginationState('responsables', responsablesResponse.data);
-      } else {
-        setResponsables(responsablesResponse.data);
-      }
-
-      const suggestionsResponse = await api.get('/api/admin/suggestions');
-      setSuggestions(suggestionsResponse.data);
-      const activitiesResponse = await api.get('/api/admin/recent-activities');
-      setRecentActivities(activitiesResponse.data);
-
-    } catch (err: any) {
-      console.error("Erreur lors du chargement des données:", err);
-      const errorMessage = err.response?.data?.message || "Impossible de charger les données.";
-      setError(errorMessage);
-      toast({
-        title: "Erreur de chargement",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      const [statsRes, suggestionsRes, activitiesRes] = await Promise.all([
+        api.get('/api/admin/dashboard-stats'),
+        api.get('/api/admin/suggestions'),
+        api.get('/api/admin/recent-activities')
+      ]);
+      setStats(statsRes.data);
+      setSuggestions(suggestionsRes.data);
+      setRecentActivities(activitiesRes.data);
+    } catch (error) {
+      console.error("Erreur chargement global:", error);
     }
-  }, [api]); // Retrait de 'pagination' des dépendances pour éviter la boucle infinie si on ne fait pas attention
+  }, [api]);
 
+  const fetchAppelsOffres = useCallback(async () => {
+    if (!api) return;
+    try {
+      const params: Record<string, DashboardFilterValue> = {
+          per_page: pagination.appelsOffres.perPage,
+          page: pagination.appelsOffres.currentPage,
+          search: debouncedSearchTerm,
+          ...advancedFilters
+      };
+
+      if (filterStatut && filterStatut !== 'tous') {
+          params.statut = filterStatut;
+      }
+
+      const response = await api.get('/api/admin/appels-offres-dashboard', { params });
+
+      if (response.data.data) {
+        setAppelsOffres(response.data.data);
+        updatePaginationState('appelsOffres', response.data);
+      } else {
+        const data = Array.isArray(response.data) ? response.data : [];
+        setAppelsOffres(data);
+        setPagination(prev => ({ ...prev, appelsOffres: { ...prev.appelsOffres, totalItems: data.length, totalPages: 1 } }));
+      }
+    } catch (error) {
+      console.error("Erreur chargement AO:", error);
+    }
+  }, [api, pagination.appelsOffres.perPage, pagination.appelsOffres.currentPage, debouncedSearchTerm, filterStatut, advancedFilters, updatePaginationState]);
+
+  const fetchFournisseurs = useCallback(async () => {
+    if (!api) return;
+    try {
+      const params: Record<string, DashboardFilterValue> = {
+          per_page: pagination.fournisseurs.perPage,
+          page: pagination.fournisseurs.currentPage,
+          search: debouncedSearchTerm,
+          ...advancedFilters
+      };
+
+      const response = await api.get('/api/admin/fournisseurs-dashboard', { params });
+
+      if (response.data.data) {
+        setFournisseurs(response.data.data);
+        updatePaginationState('fournisseurs', response.data);
+      } else {
+        const data = Array.isArray(response.data) ? response.data : [];
+        setFournisseurs(data);
+        setPagination(prev => ({ ...prev, fournisseurs: { ...prev.fournisseurs, totalItems: data.length, totalPages: 1 } }));
+      }
+    } catch (error) {
+      console.error("Erreur chargement Fournisseurs:", error);
+    }
+  }, [api, pagination.fournisseurs.perPage, pagination.fournisseurs.currentPage, debouncedSearchTerm, advancedFilters, updatePaginationState]);
+
+  const fetchResponsables = useCallback(async () => {
+    if (!api) return;
+    try {
+      const params: Record<string, DashboardFilterValue> = {
+          per_page: pagination.responsables.perPage,
+          page: pagination.responsables.currentPage,
+          search: debouncedSearchTerm
+      };
+
+      const response = await api.get('/api/admin/responsables-dashboard', { params });
+
+      if (response.data.data) {
+        setResponsables(response.data.data);
+        updatePaginationState('responsables', response.data);
+      } else {
+        const data = Array.isArray(response.data) ? response.data : [];
+        setResponsables(data);
+        setPagination(prev => ({ ...prev, responsables: { ...prev.responsables, totalItems: data.length, totalPages: 1 } }));
+      }
+    } catch (error) {
+      console.error("Erreur chargement Responsables:", error);
+    }
+  }, [api, pagination.responsables.perPage, pagination.responsables.currentPage, debouncedSearchTerm, updatePaginationState]);
+
+  // Wrapper de compatibilité pour recharger toutes les données
+  const fetchDashboardData = useCallback(async () => {
+      await Promise.all([
+          fetchGlobalData(),
+          fetchAppelsOffres(),
+          fetchFournisseurs(),
+          fetchResponsables()
+      ]);
+  }, [fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]);
+
+  // Initial Load
   useEffect(() => {
     const roleName = getRoleName(authUser);
-    const isAdmin = roleName === "ADMIN" || (authUser as any)?.role_id === 1;
+    const isAdmin = roleName === "ADMIN" || getRoleId(authUser) === 1;
   
     if (!authUser || !isAdmin) {
-      setError("Accès non autorisé.");
       setLoading(false);
       return;
     }
-  
-    fetchDashboardData();
-  }, [authUser, fetchDashboardData]);
+
+    const init = async () => {
+        setLoading(true);
+        await Promise.all([
+            fetchGlobalData(),
+            fetchAppelsOffres(),
+            fetchFournisseurs(),
+            fetchResponsables()
+        ]);
+        setLoading(false);
+    };
+    init();
+  }, [authUser, fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]); 
+
+  // Effets de pagination séparés
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { 
+      setIsMounted(true); 
+      return () => setIsMounted(false);
+  }, []);
+
+  useEffect(() => {
+      if (isMounted) fetchAppelsOffres();
+  }, [fetchAppelsOffres, isMounted]);
+
+  useEffect(() => {
+      if (isMounted) fetchFournisseurs();
+  }, [fetchFournisseurs, isMounted]);
+
+  useEffect(() => {
+      if (isMounted) fetchResponsables();
+  }, [fetchResponsables, isMounted]);
 
   // Effet pour rendre l'overlay transparent pour la modale "Voir Dossier"
   useEffect(() => {
@@ -476,7 +620,7 @@ const AdminDashboard: React.FC = () => {
       setIsCreateResponsableOpen(false);
       setNewResponsable({ name: "", email: "", password: "", departement: "", fonction: "", telephone: "" });
       fetchDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur création responsable:", error);
       toast({ title: "Erreur", description: "Erreur lors de la création.", variant: "destructive" });
     }
@@ -490,7 +634,7 @@ const AdminDashboard: React.FC = () => {
       await api.delete(`${API_BASE_URL}/api/admin/responsables/${id}`);
       toast({ title: "Succès", description: "Responsable supprimé." });
       fetchDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
     }
   };
@@ -523,13 +667,13 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Succès", description: "Responsable mis à jour." });
       setIsEditResponsableOpen(false);
       fetchDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ title: "Erreur", description: "Impossible de mettre à jour.", variant: "destructive" });
     }
   };
 
   const getActivityIcon = (action: string) => {
-    const icons: Record<string, any> = {
+    const icons: Record<string, React.ComponentType<{ className?: string }>> = {
       validate_fournisseur: UserCheck,
       reject_fournisseur: UserX,
       accept_candidature: CheckCircle,
@@ -547,7 +691,7 @@ const AdminDashboard: React.FC = () => {
       await api.post(`${API_BASE_URL}/api/admin/fournisseurs/${fournisseurId}/validate`);
       toast({ title: "Succès", description: "Fournisseur validé." });
       fetchDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ title: "Erreur", description: "Impossible de valider.", variant: "destructive" });
     }
   };
@@ -558,7 +702,7 @@ const AdminDashboard: React.FC = () => {
       await api.post(`${API_BASE_URL}/api/admin/fournisseurs/${fournisseurId}/reject`);
       toast({ title: "Succès", description: "Fournisseur rejeté.", variant: "destructive" });
       fetchDashboardData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ title: "Erreur", description: "Impossible de rejeter.", variant: "destructive" });
     }
   };
@@ -578,8 +722,8 @@ const AdminDashboard: React.FC = () => {
         if (!api) throw new Error("API non disponible");
         await api.put(`/api/admin/suggestions/${suggestionId}`, { statut: status });
         toast({ title: "Succès", description: "Statut de la suggestion mis à jour." });
-        setSuggestions(prev => prev.map(s => s.id === suggestionId ? { ...s, statut: status as any } : s));
-      } catch (error: any) {
+        setSuggestions(prev => prev.map(s => s.id === suggestionId ? { ...s, statut: status as Suggestion['statut'] } : s));
+      } catch (error: unknown) {
         toast({ title: "Erreur", description: "Impossible de mettre à jour le statut.", variant: "destructive" });
       }
   };
@@ -605,8 +749,8 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Succès", description: "Votre mot de passe a été mis à jour." });
       setIsSettingsOpen(false);
       setPasswordData({ current: "", new: "", confirm: "" });
-    } catch (error: any) {
-        const message = error.response?.data?.message || "Erreur lors de la mise à jour du mot de passe.";
+    } catch (error: unknown) {
+        const message = getErrorMessage(error, "Erreur lors de la mise à jour du mot de passe.");
         toast({ title: "Erreur", description: message, variant: "destructive" });
     }
   };
@@ -620,7 +764,7 @@ const AdminDashboard: React.FC = () => {
       });
       // S'assurer que nous avons toujours un tableau
       const data = res.data;
-      let rawData: any[] = [];
+      let rawData: Array<Record<string, unknown>> = [];
       
       if (Array.isArray(data)) {
         rawData = data;
@@ -632,30 +776,34 @@ const AdminDashboard: React.FC = () => {
 
       // Mapper les données pour assurer la compatibilité avec l'interface AppelOffreAdmin
       // La ressource API renvoie responsable.user.name, alors que l'interface attend responsable.name
-      const mappedData = rawData.map((item: any) => {
+      const mappedData: AppelOffreAdmin[] = rawData.map((item) => {
+        const typedItem = item as unknown as AppelOffreAdmin & {
+          responsable?: { name?: string; user?: { name?: string } };
+          responsable_marche?: { user?: { name?: string } };
+        };
         let responsableObj = null;
         
         // Cas 1 : Structure Resource (responsable.user.name)
-        if (item.responsable && item.responsable.user) {
-            responsableObj = { name: item.responsable.user.name };
+        if (typedItem.responsable?.user?.name) {
+            responsableObj = { name: typedItem.responsable.user.name };
         }
         // Cas 2 : Structure directe (responsable.name) - rare ici mais possible
-        else if (item.responsable && item.responsable.name) {
-            responsableObj = item.responsable;
+        else if (typedItem.responsable?.name) {
+            responsableObj = { name: typedItem.responsable.name };
         }
         // Cas 3 : Fallback sur responsable_marche
-        else if (item.responsable_marche && item.responsable_marche.user) {
-            responsableObj = { name: item.responsable_marche.user.name };
+        else if (typedItem.responsable_marche?.user?.name) {
+            responsableObj = { name: typedItem.responsable_marche.user.name };
         }
 
         return {
-            ...item,
+            ...typedItem,
             responsable: responsableObj
         };
       });
 
       setMesAppelsOffres(mappedData);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur chargement appels d'offres:", error);
       setMesAppelsOffres([]); // S'assurer que c'est toujours un tableau même en cas d'erreur
       toast({
@@ -678,11 +826,18 @@ const AdminDashboard: React.FC = () => {
       setIsCreateAOOpen(false);
       setNewTender({ titre: "", description: "", date_limite_depot: "" });
       loadMesAppelsOffres();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur création:", error);
-      const message = error.response?.data?.message || "Erreur lors de la création.";
-      if (error.response?.data?.errors) {
-         const errors = Object.values(error.response.data.errors).flat().join('\n');
+      const message = getErrorMessage(error, "Erreur lors de la création.");
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        (error as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors
+      ) {
+         const errors = Object.values(
+          (error as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors || {}
+         ).flat().join('\n');
          toast({ title: "Erreur de validation", description: errors, variant: "destructive" });
       } else {
          toast({ title: "Erreur", description: message, variant: "destructive" });
@@ -744,9 +899,9 @@ const AdminDashboard: React.FC = () => {
       });
       setCandidaturesAO(prev => prev.map(c => c.id === candidatureId ? { ...c, statut: decision === 'accept' ? 'accepted' : 'rejected' } : c));
       loadMesAppelsOffres();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur évaluation:", error);
-      const message = error.response?.data?.message || "Action impossible.";
+      const message = getErrorMessage(error, "Action impossible.");
       toast({ title: "Erreur", description: message, variant: "destructive" });
     }
   };
@@ -774,7 +929,7 @@ const AdminDashboard: React.FC = () => {
         fournisseur: c.fournisseur?.nom_entreprise || 'Inconnu',
         email: c.fournisseur?.email_contact || 'N/A',
         date_soumission: c.date_soumission ? new Date(c.date_soumission).toLocaleDateString() : 'N/A',
-        montant: c.montant_propose ? `${Number(c.montant_propose).toLocaleString()} FCFA` : 'Non spécifié',
+        montant: c.montant_propose ? `${Number(c.montant_propose).toLocaleString('fr-FR').replace(/[\s\u00A0\u202F]/g, ' ')} FCFA` : 'Non spécifié',
         statut: c.statut === 'accepted' ? 'Retenu' : c.statut === 'rejected' ? 'Rejeté' : 'En attente',
         documents_complets: 'Oui', 
       })),
@@ -819,11 +974,11 @@ const AdminDashboard: React.FC = () => {
       
       const commentsData = commentsRes.data;
       setComments(Array.isArray(commentsData) ? commentsData : []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur chargement documents:", error);
       toast({ 
         title: "Erreur", 
-        description: error.response?.data?.message || "Impossible de charger les documents.", 
+        description: getErrorMessage(error, "Impossible de charger les documents."), 
         variant: "destructive" 
       });
       setLegalDocuments([]);
@@ -852,11 +1007,11 @@ const AdminDashboard: React.FC = () => {
         title: "Commentaire ajouté",
         description: "Votre commentaire a été envoyé au fournisseur.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur ajout commentaire:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible d'ajouter le commentaire.",
+        description: getErrorMessage(error, "Impossible d'ajouter le commentaire."),
         variant: "destructive"
       });
     } finally {
@@ -865,7 +1020,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const getStatutBadgeAO = (statut: string) => {
-    const map: Record<string, any> = {
+    const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       draft: { label: "Brouillon", variant: "secondary" },
       published: { label: "Publié", variant: "default" },
       closed: { label: "Clôturé", variant: "destructive" },
@@ -889,9 +1044,9 @@ const AdminDashboard: React.FC = () => {
       setSelectedAOForAssign(null);
       setSelectedResponsableId(null);
       loadMesAppelsOffres();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur assignation:", error);
-      const message = error.response?.data?.message || "Impossible d'assigner l'appel d'offre.";
+      const message = getErrorMessage(error, "Impossible d'assigner l'appel d'offre.");
       toast({ 
         title: "Erreur", 
         description: message, 
@@ -913,7 +1068,7 @@ const AdminDashboard: React.FC = () => {
       let endpoint = '';
       let fileName = '';
       let title = '';
-      let columns: any[] = [];
+      let columns: Array<{ header: string; key: string; format?: (v: string) => string }> = [];
 
       switch (type) {
         case 'appelsOffres':
@@ -963,7 +1118,7 @@ const AdminDashboard: React.FC = () => {
       }
 
       // Préparation des paramètres
-      const params: any = {
+      const params: Record<string, DashboardFilterValue> = {
         all: true,
         search: searchTerm
       };
@@ -999,59 +1154,27 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Reset advanced filters when switching tabs
+  // Reset filtres avancés et recherche au changement d'onglet
   useEffect(() => {
     setAdvancedFilters({});
+    setSearchTerm("");
+    setDebouncedSearchTerm("");
   }, [activeTab]);
 
-  const handleAdvancedSearch = (filters: Record<string, any>) => {
+  const handleAdvancedSearch = (filters: Record<string, DashboardFilterValue>) => {
     setAdvancedFilters(filters);
     
+    // Réinitialiser la pagination à la page 1
     if (activeTab === 'appels-offres') {
-      fetchWithFilters(filters, 'appelsOffres');
+      setPagination(prev => ({ 
+        ...prev, 
+        appelsOffres: { ...prev.appelsOffres, currentPage: 1 } 
+      }));
     } else if (activeTab === 'fournisseurs') {
-      fetchWithFilters(filters, 'fournisseurs');
-    }
-  };
-
-  const fetchWithFilters = async (newFilters: Record<string, any>, type: 'appelsOffres' | 'fournisseurs' = 'appelsOffres') => {
-    if (!api) return;
-    setLoading(true);
-    try {
-        let endpoint = '';
-        let perPage = 15;
-        
-        if (type === 'appelsOffres') {
-            endpoint = '/api/admin/appels-offres-dashboard';
-            perPage = pagination.appelsOffres.perPage;
-        } else if (type === 'fournisseurs') {
-            endpoint = '/api/admin/fournisseurs-dashboard';
-            perPage = pagination.fournisseurs.perPage;
-        }
-
-        const params = {
-            page: 1,
-            per_page: perPage,
-            search: searchTerm,
-            statut: filterStatut,
-            ...newFilters
-        };
-        
-        const response = await api.get(endpoint, { params });
-        
-        if (response.data.data) {
-            if (type === 'appelsOffres') {
-                setAppelsOffres(response.data.data);
-                updatePaginationState('appelsOffres', response.data);
-            } else if (type === 'fournisseurs') {
-                setFournisseurs(response.data.data);
-                updatePaginationState('fournisseurs', response.data);
-            }
-        }
-    } catch (error) {
-        console.error("Erreur filtre avancé:", error);
-    } finally {
-        setLoading(false);
+      setPagination(prev => ({ 
+        ...prev, 
+        fournisseurs: { ...prev.fournisseurs, currentPage: 1 } 
+      }));
     }
   };
 
@@ -1067,61 +1190,28 @@ const AdminDashboard: React.FC = () => {
       return;
     }
 
-    try {
-      setLoading(true);
-      const perPage = pagination[type].perPage;
-      let endpoint = '';
-      
-      switch(type) {
-        case 'appelsOffres':
-          endpoint = '/api/admin/appels-offres-dashboard';
-          break;
-        case 'fournisseurs':
-          endpoint = '/api/admin/fournisseurs-dashboard';
-          break;
-        case 'responsables':
-          endpoint = '/api/admin/responsables-dashboard';
-          break;
-      }
-
-      if (endpoint) {
-        // Fusionner les filtres standard et avancés
-        const params: any = { 
-          page, 
-          per_page: perPage, 
-          search: searchTerm, 
-          statut: filterStatut,
-          ...advancedFilters // Ajouter les filtres avancés (date_debut, date_fin, etc.)
-        };
-
-        const response = await api.get(endpoint, { params });
-        
-        if (response.data.data) {
-          switch(type) {
-            case 'appelsOffres': setAppelsOffres(response.data.data); break;
-            case 'fournisseurs': setFournisseurs(response.data.data); break;
-            case 'responsables': setResponsables(response.data.data); break;
-          }
-          updatePaginationState(type, response.data);
-        }
-      }
-    } catch (error) {
-      console.error("Erreur pagination:", error);
-    } finally {
-      setLoading(false);
-    }
+    // Pour les types gérés par useEffect (appelsOffres, fournisseurs, responsables),
+    // on met juste à jour l'état, ce qui déclenchera le chargement via les hooks.
+    setPagination(prev => ({
+      ...prev,
+      [type]: { ...prev[type], currentPage: page }
+    }));
   };
 
   const handlePerPageChange = async (type: keyof typeof pagination, perPage: number) => {
-    setPagination(prev => ({
-      ...prev,
-      [type]: { ...prev[type], perPage, currentPage: 1 }
-    }));
     // Recharger avec la nouvelle limite (page 1)
     if (type === 'mesAppelsOffres') {
+      setPagination(prev => ({
+        ...prev,
+        [type]: { ...prev[type], perPage, currentPage: 1 }
+      }));
       loadMesAppelsOffres(1, perPage);
     } else {
-      handlePageChange(type, 1);
+      // Pour les autres, on met à jour l'état et le useEffect fera le reste
+      setPagination(prev => ({
+        ...prev,
+        [type]: { ...prev[type], perPage, currentPage: 1 }
+      }));
     }
   };
 
@@ -1140,7 +1230,7 @@ const AdminDashboard: React.FC = () => {
   }
 
   const roleName = getRoleName(authUser);
-  const isAdmin = roleName === "ADMIN" || (authUser as any)?.role_id === 1;
+  const isAdmin = roleName === "ADMIN" || getRoleId(authUser) === 1;
 
   if (error || !authUser || !isAdmin) {
     return (
@@ -1616,7 +1706,7 @@ const AdminDashboard: React.FC = () => {
                       <AdvancedSearch 
                         onSearch={handleAdvancedSearch}
                         configs={[
-                          { key: 'domaines', label: 'Domaines d\'activité', type: 'text', placeholder: 'Ex: BTP, Informatique' }
+                          { key: 'raison_sociale', label: 'Raison Sociale', type: 'text', placeholder: 'Ex: Entreprise X' },
                         ]}
                       />
                     </div>
@@ -2422,10 +2512,10 @@ const AdminDashboard: React.FC = () => {
                                             document.body.removeChild(link);
                                             window.URL.revokeObjectURL(url);
                                           }
-                                        } catch (error: any) {
+                                        } catch (error: unknown) {
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                             variant: "destructive"
                                           });
                                         }
@@ -2522,10 +2612,10 @@ const AdminDashboard: React.FC = () => {
                                             document.body.removeChild(link);
                                             window.URL.revokeObjectURL(url);
                                           }
-                                        } catch (error: any) {
+                                        } catch (error: unknown) {
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                             variant: "destructive"
                                           });
                                         }

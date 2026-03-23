@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Filter, X } from 'lucide-react';
+import { Filter } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 
 export interface FilterConfig {
@@ -27,15 +27,15 @@ export interface FilterConfig {
 
 interface AdvancedSearchProps {
   configs: FilterConfig[];
-  onSearch: (filters: Record<string, any>) => void;
+  onSearch: (filters: Record<string, string | number>) => void;
   className?: string;
 }
 
 const AdvancedSearch: React.FC<AdvancedSearchProps> = ({ configs, onSearch, className }) => {
-  const [filters, setFilters] = useState<Record<string, any>>({});
+  const [filters, setFilters] = useState<Record<string, string | number>>({});
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleChange = (key: string, value: any) => {
+  const handleChange = (key: string, value: string | number) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 

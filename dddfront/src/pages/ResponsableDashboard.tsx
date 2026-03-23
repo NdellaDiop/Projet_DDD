@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,6 +93,22 @@ interface DocumentLegal {
   created_at: string;
 }
 
+interface CommentItem {
+  id: number;
+  message: string;
+  created_at: string;
+  user?: { id: number; name: string };
+  document?: { nom_fichier: string };
+}
+
+interface ResponsableProfile {
+  departement?: string;
+  fonction?: string;
+  telephone?: string;
+}
+
+type DashboardFilterValue = string | number | boolean;
+
 export default function ResponsableDashboard() {
   const { api, user, logout } = useAuth();
   const navigate = useNavigate();
@@ -101,11 +117,13 @@ export default function ResponsableDashboard() {
   const [selectedAppelOffre, setSelectedAppelOffre] = useState<AppelOffre | null>(null);
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Pagination et Filtres
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [filterStatut, setFilterStatut] = useState("tous");
-  const [advancedFilters, setAdvancedFilters] = useState<Record<string, any>>({});
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, DashboardFilterValue>>({});
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -113,7 +131,15 @@ export default function ResponsableDashboard() {
     perPage: 15,
   });
 
-  // États pour la création
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  // État pour la création
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTender, setNewTender] = useState({
     titre: "",
@@ -129,7 +155,7 @@ export default function ResponsableDashboard() {
   const [selectedCandidature, setSelectedCandidature] = useState<Candidature | null>(null);
   const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -140,7 +166,7 @@ export default function ResponsableDashboard() {
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
 
   // État pour le profil responsable
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<ResponsableProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
     departement: "",
@@ -149,18 +175,20 @@ export default function ResponsableDashboard() {
   });
 
 
-  useEffect(() => {
-    if (activeTab === 'appels-offres') {
-      loadAppelsOffres();
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+    ) {
+      return (error as { response?: { data?: { message?: string } } }).response?.data?.message as string;
     }
-  }, [api, activeTab, pagination.currentPage, pagination.perPage]);
+    if (error instanceof Error) return error.message;
+    return fallback;
+  };
 
-  // Chargement initial du profil
-  useEffect(() => {
-    loadProfile();
-  }, [api]);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!api) return;
     try {
       const profileRes = await api.get("/api/responsable/profile");
@@ -173,17 +201,18 @@ export default function ResponsableDashboard() {
     } catch (error) {
       console.error("Erreur chargement profil:", error);
     }
-  };
+  }, [api]);
 
-  const loadAppelsOffres = async () => {
+  const loadAppelsOffres = useCallback(async () => {
     if (!api) return;
     try {
-      setLoading(true);
+      if (!appelsOffres.length) setLoading(true);
+      else setIsRefreshing(true);
       
-      const params: any = {
+      const params: Record<string, DashboardFilterValue> = {
         page: pagination.currentPage,
         per_page: pagination.perPage,
-        search: searchTerm,
+        search: debouncedSearchTerm,
         ...advancedFilters
       };
 
@@ -193,7 +222,7 @@ export default function ResponsableDashboard() {
 
       const response = await api.get("/api/responsable/mes-appels-offres", { params });
       
-      if (response.data.data) {
+      if (response.data.data && response.data.meta) {
         setAppelsOffres(response.data.data);
         setPagination(prev => ({
             ...prev,
@@ -203,14 +232,34 @@ export default function ResponsableDashboard() {
             perPage: response.data.meta.per_page,
         }));
       } else {
-        setAppelsOffres(response.data);
+        const data = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        setAppelsOffres(data);
+        setPagination(prev => ({
+            ...prev,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: data.length,
+            perPage: data.length || 15
+        }));
       }
     } catch (error) {
       console.error("Erreur chargement AO:", error);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [api, appelsOffres.length, pagination.currentPage, pagination.perPage, debouncedSearchTerm, advancedFilters, filterStatut]);
+
+  useEffect(() => {
+    if (activeTab === 'appels-offres') {
+      loadAppelsOffres();
+    }
+  }, [activeTab, loadAppelsOffres]);
+
+  // Chargement initial du profil
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
   const loadData = async () => {
      // Legacy function kept for compatibility if needed, but logic moved to separate functions
@@ -225,7 +274,7 @@ export default function ResponsableDashboard() {
     setPagination(prev => ({ ...prev, perPage, currentPage: 1 }));
   };
 
-  const handleAdvancedSearch = (filters: Record<string, any>) => {
+  const handleAdvancedSearch = (filters: Record<string, DashboardFilterValue>) => {
     setAdvancedFilters(filters);
     setPagination(prev => ({ ...prev, currentPage: 1 })); // Reset pagination
     // L'effet useEffect déclenchera le rechargement car pagination ou activeTab a changé
@@ -234,18 +283,12 @@ export default function ResponsableDashboard() {
     // Astuce : on peut ajouter advancedFilters aux dépendances du useEffect.
   };
 
-  // Ajout de advancedFilters et searchTerm aux dépendances pour rechargement auto
-  useEffect(() => {
-     if (activeTab === 'appels-offres') {
-        loadAppelsOffres();
-     }
-  }, [searchTerm, filterStatut, advancedFilters]);
 
 
   const handleExportData = async (format: 'excel' | 'pdf') => {
     if (!api) return;
     try {
-        const params: any = {
+        const params: Record<string, DashboardFilterValue> = {
             all: true,
             search: searchTerm,
             ...advancedFilters
@@ -291,12 +334,17 @@ export default function ResponsableDashboard() {
       setIsCreateOpen(false);
       setNewTender({ titre: "", description: "", date_limite_depot: "" });
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur création:", error);
-      const message = error.response?.data?.message || "Erreur lors de la création.";
+      const message = getErrorMessage(error, "Erreur lors de la création.");
       // Si on a des erreurs de validation précises
-      if (error.response?.data?.errors) {
-         const errors = Object.values(error.response.data.errors).flat().join('\n');
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        (error as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors
+      ) {
+         const errors = Object.values((error as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors || {}).flat().join('\n');
          toast({ title: "Erreur de validation", description: errors, variant: "destructive" });
       } else {
          toast({ title: "Erreur", description: message, variant: "destructive" });
@@ -349,9 +397,9 @@ export default function ResponsableDashboard() {
         variant: decision === 'accept' ? "default" : "destructive"
       });
       setCandidatures(prev => Array.isArray(prev) ? prev.map(c => c.id === candidatureId ? { ...c, statut: decision === 'accept' ? 'accepted' : 'rejected' } : c) : []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur évaluation:", error);
-      const message = error.response?.data?.message || "Action impossible.";
+      const message = getErrorMessage(error, "Action impossible.");
       toast({ title: "Erreur", description: message, variant: "destructive" });
     }
   };
@@ -404,11 +452,11 @@ export default function ResponsableDashboard() {
       // Charger les commentaires
       const commentsData = commentsRes.data;
       setComments(Array.isArray(commentsData) ? commentsData : []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur chargement documents:", error);
       toast({ 
         title: "Erreur", 
-        description: error.response?.data?.message || "Impossible de charger les documents.", 
+        description: getErrorMessage(error, "Impossible de charger les documents."), 
         variant: "destructive" 
       });
       setLegalDocuments([]);
@@ -437,11 +485,11 @@ export default function ResponsableDashboard() {
         title: "Commentaire ajouté",
         description: "Votre commentaire a été envoyé au fournisseur.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur ajout commentaire:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible d'ajouter le commentaire.",
+        description: getErrorMessage(error, "Impossible d'ajouter le commentaire."),
         variant: "destructive"
       });
     } finally {
@@ -450,7 +498,7 @@ export default function ResponsableDashboard() {
   };
 
   const getStatutBadge = (statut: string) => {
-    const map: Record<string, any> = {
+    const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       draft: { label: "Brouillon", variant: "secondary" },
       published: { label: "Publié", variant: "default" },
       closed: { label: "Clôturé", variant: "destructive" },
@@ -478,7 +526,7 @@ export default function ResponsableDashboard() {
         fournisseur: c.fournisseur.nom_entreprise,
         email: c.fournisseur.email_contact,
         date_soumission: new Date(c.date_soumission).toLocaleDateString(),
-        montant: c.montant_propose ? `${c.montant_propose.toLocaleString()} FCFA` : 'Non spécifié',
+        montant: c.montant_propose ? `${Number(c.montant_propose).toLocaleString('fr-FR').replace(/[\s\u00A0\u202F]/g, ' ')} FCFA` : 'Non spécifié',
         statut: c.statut === 'accepted' ? 'Retenu' : c.statut === 'rejected' ? 'Rejeté' : 'En attente',
         documents_complets: 'Oui', // À dynamiser si on vérifie les docs
       })),
@@ -542,17 +590,20 @@ export default function ResponsableDashboard() {
         title: "Profil mis à jour",
         description: "Vos informations ont été enregistrées avec succès",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur mise à jour profil:", error);
-      console.error("Response data:", error.response?.data);
+      const responseData =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { errors?: Record<string, string[]>, message?: string } } }).response?.data
+          : undefined;
       
       let errorMessage = "Erreur lors de la mise à jour";
       
-      if (error.response?.data?.errors) {
+      if (responseData?.errors) {
         // Afficher toutes les erreurs de validation
-        const errors = error.response.data.errors;
+        const errors = responseData.errors;
         const errorList = Object.entries(errors)
-          .map(([field, messages]: [string, any]) => {
+          .map(([field, messages]: [string, string[]]) => {
             const fieldName = field === 'departement' ? 'Département' :
                             field === 'fonction' ? 'Fonction' :
                             field === 'telephone' ? 'Téléphone' :
@@ -561,8 +612,8 @@ export default function ResponsableDashboard() {
           })
           .join('; ');
         errorMessage = errorList;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      } else if (responseData?.message) {
+        errorMessage = responseData.message;
       }
       
       toast({
@@ -592,8 +643,8 @@ export default function ResponsableDashboard() {
       toast({ title: "Succès", description: "Votre mot de passe a été mis à jour." });
       setIsSettingsOpen(false);
       setPasswordData({ current: "", new: "", confirm: "" });
-    } catch (error: any) {
-        const message = error.response?.data?.message || "Erreur lors de la mise à jour du mot de passe.";
+    } catch (error: unknown) {
+        const message = getErrorMessage(error, "Erreur lors de la mise à jour du mot de passe.");
         toast({ title: "Erreur", description: message, variant: "destructive" });
     }
   };
@@ -746,7 +797,7 @@ export default function ResponsableDashboard() {
 
                 <Card className="border-none shadow-sm">
                     <CardContent className="p-0">
-                        <div className="rounded-lg border border-slate-100 overflow-hidden bg-white">
+                        <div className={`rounded-lg border border-slate-100 overflow-hidden bg-white ${isRefreshing ? 'opacity-60 pointer-events-none transition-opacity' : ''}`}>
                             <Table>
                               <TableHeader className="bg-slate-50">
                                 <TableRow>
@@ -823,55 +874,7 @@ export default function ResponsableDashboard() {
         {/* TAB: STATISTIQUES */}
         {activeTab === "statistiques" && (
             <div className="space-y-6 animate-in fade-in duration-500">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                        <CardContent className="p-6 flex flex-col items-center text-center">
-                            <div className="p-3 bg-blue-50 rounded-full mb-4">
-                                <Briefcase className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <p className="text-sm font-medium text-muted-foreground">Total Appels d'Offres</p>
-                            <h3 className="text-3xl font-bold text-slate-800 mt-2">{Array.isArray(appelsOffres) ? appelsOffres.length : 0}</h3>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                        <CardContent className="p-6 flex flex-col items-center text-center">
-                            <div className="p-3 bg-green-50 rounded-full mb-4">
-                                <Megaphone className="w-6 h-6 text-green-600" />
-                            </div>
-                            <p className="text-sm font-medium text-muted-foreground">En cours de publication</p>
-                            <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {Array.isArray(appelsOffres) ? appelsOffres.filter(ao => ao.statut === 'published').length : 0}
-                            </h3>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                        <CardContent className="p-6 flex flex-col items-center text-center">
-                            <div className="p-3 bg-purple-50 rounded-full mb-4">
-                                <Users className="w-6 h-6 text-purple-600" />
-                            </div>
-                            <p className="text-sm font-medium text-muted-foreground">Candidatures reçues</p>
-                            <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {Array.isArray(appelsOffres) ? appelsOffres.reduce((acc, ao) => acc + (ao.candidatures_count || 0), 0) : 0}
-                            </h3>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
-                        <CardContent className="p-6 flex flex-col items-center text-center">
-                            <div className="p-3 bg-orange-50 rounded-full mb-4">
-                                <Archive className="w-6 h-6 text-orange-600" />
-                            </div>
-                            <p className="text-sm font-medium text-muted-foreground">Marchés clôturés</p>
-                            <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                                {Array.isArray(appelsOffres) ? appelsOffres.filter(ao => ao.statut === 'closed').length : 0}
-                            </h3>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Statistiques Avancées */}
+                {/* Statistiques Avancées (Inclut désormais les cartes globales) */}
                 <ResponsableAdvancedStats />
 
                 {/* Liste des derniers AO pour stats rapides */}
@@ -1182,11 +1185,11 @@ export default function ResponsableDashboard() {
                                             document.body.removeChild(link);
                                             window.URL.revokeObjectURL(url);
                                           }
-                                        } catch (error: any) {
+                                        } catch (error: unknown) {
                                           console.error("Erreur ouverture document:", error);
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                             variant: "destructive"
                                           });
                                         }
@@ -1294,11 +1297,11 @@ export default function ResponsableDashboard() {
                                             document.body.removeChild(link);
                                             window.URL.revokeObjectURL(url);
                                           }
-                                        } catch (error: any) {
+                                        } catch (error: unknown) {
                                           console.error("Erreur ouverture document:", error);
                                           toast({
                                             title: "Erreur",
-                                            description: error.response?.data?.message || "Impossible d'ouvrir le document.",
+                                            description: getErrorMessage(error, "Impossible d'ouvrir le document."),
                                             variant: "destructive"
                                           });
                                         }

@@ -71,7 +71,10 @@ export const DataTablePagination: React.FC<DataTablePaginationProps> = ({
     <div className="flex items-center justify-between px-2 py-4">
       <div className="flex items-center space-x-2">
         <p className="text-sm text-muted-foreground">
-          Affichage de {startItem} à {endItem} sur {totalItems} résultats
+          {totalItems > 0 
+            ? `Affichage de ${startItem} à ${endItem} sur ${totalItems} résultats`
+            : `Aucun résultat`
+          }
         </p>
         <div className="flex items-center space-x-2">
           <p className="text-sm text-muted-foreground">Par page:</p>

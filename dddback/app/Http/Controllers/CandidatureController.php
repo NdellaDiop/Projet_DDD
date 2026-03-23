@@ -186,9 +186,9 @@ class CandidatureController extends Controller
                     $candidature
                 );
                 $this->notificationService->notifyUser(
-                    $candidature->fournisseur->user->id,
-                    'Votre candidature a été acceptée.'
-                );
+            $candidature->fournisseur->user->id,
+            'Votre candidature a été acceptée.'
+        );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email acceptation candidature: " . $e->getMessage());
             }
@@ -224,9 +224,9 @@ class CandidatureController extends Controller
                     $candidature
                 );
                 $this->notificationService->notifyUser(
-                    $candidature->fournisseur->user->id,
-                    'Votre candidature a été rejetée.'
-                );
+            $candidature->fournisseur->user->id,
+            'Votre candidature a été rejetée.'
+        );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email rejet candidature: " . $e->getMessage());
             }

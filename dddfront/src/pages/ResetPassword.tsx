@@ -57,11 +57,18 @@ export default function ResetPassword() {
         description: "Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
       });
       setTimeout(() => navigate("/connexion"), 3000);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
+      const errorMessage =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : "Impossible de réinitialiser le mot de passe.";
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible de réinitialiser le mot de passe.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

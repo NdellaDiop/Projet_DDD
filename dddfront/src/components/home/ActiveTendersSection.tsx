@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Calendar, Tag, Clock, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { toast } from "@/components/ui/use-toast";
 
 interface AppelOffre {
   id: number;
@@ -74,7 +73,7 @@ const ActiveTendersSection = () => {
         const fetchedTenders = tendersToProcess.filter(tender => tender.statut === 'published');
         // On ne garde que les 4 plus récents pour l'accueil
         setAppelsOffres(fetchedTenders.slice(0, 4));
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur lors de la récupération des appels d'offres:", err);
         setError(null); // On ne veut pas afficher d'erreur critique sur la home, juste pas d'appels d'offres
       } finally {
@@ -154,7 +153,10 @@ const ActiveTendersSection = () => {
           {appelsOffres.map((tender) => {
             const daysLeft = calculateDaysLeft(tender.date_limite_depot);
             const simulatedCategory = "Fournitures"; 
-            const simulatedReference = (tender as any).reference || `AO-${tender.id}`;
+            const simulatedReference =
+              typeof tender === "object" && tender !== null && "reference" in tender
+                ? ((tender as { reference?: string }).reference ?? `AO-${tender.id}`)
+                : `AO-${tender.id}`;
 
             return (
               <Link

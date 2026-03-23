@@ -35,11 +35,18 @@ export default function ForgotPassword() {
         title: "Email envoyé",
         description: "Si un compte existe avec cet email, vous recevrez un lien de réinitialisation.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
+      const errorMessage =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : "Une erreur est survenue.";
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Une erreur est survenue.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

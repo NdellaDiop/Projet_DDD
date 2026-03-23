@@ -51,7 +51,7 @@ export default function Register() {
   };
 
   const validateForm = () => {
-    let errors: Record<string, string> = {};
+    const errors: Record<string, string> = {};
     let isValid = true;
 
     if (!formData.nom_entreprise) { errors.nom_entreprise = "La raison sociale est obligatoire."; isValid = false; }
@@ -119,9 +119,15 @@ export default function Register() {
         title: "Inscription réussie !",
         description: "Vous êtes maintenant connecté.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur d'inscription:", error);
-      const errorMessage = error.response?.data?.message || "Une erreur inattendue est survenue.";
+      const errorMessage =
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } }).response?.data?.message === "string"
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : "Une erreur inattendue est survenue.";
       setApiError(errorMessage);
       toast({
         title: "Erreur d'inscription",

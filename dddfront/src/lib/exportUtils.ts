@@ -9,14 +9,14 @@ export type ExportFormat = 'excel' | 'pdf';
 interface ExportColumn {
   header: string;
   key: string;
-  format?: (value: any) => string;
+  format?: (value: unknown) => string;
 }
 
 interface ExportOptions {
   fileName: string;
   title: string;
   columns: ExportColumn[];
-  data: any[];
+  data: Record<string, unknown>[];
 }
 
 /**
@@ -25,16 +25,20 @@ interface ExportOptions {
 const exportToExcel = ({ fileName, data, columns }: ExportOptions) => {
   // Préparer les données pour Excel en ne gardant que les colonnes demandées
   const excelData = data.map(item => {
-    const row: Record<string, any> = {};
+    const row: Record<string, unknown> = {};
     columns.forEach(col => {
-      let value = item[col.key];
+      let value: unknown = item[col.key];
       // Gérer les clés imbriquées (ex: 'user.name')
       if (col.key.includes('.')) {
         const keys = col.key.split('.');
-        value = item;
+        let nestedValue: unknown = item;
         for (const key of keys) {
-          value = value ? value[key] : '';
+          nestedValue =
+            typeof nestedValue === 'object' && nestedValue !== null
+              ? (nestedValue as Record<string, unknown>)[key]
+              : '';
         }
+        value = nestedValue;
       }
       
       row[col.header] = col.format ? col.format(value) : value;
@@ -67,16 +71,21 @@ const exportToPDF = ({ fileName, title, data, columns }: ExportOptions) => {
   // Préparer les données pour le tableau
   const tableData = data.map(item => {
     return columns.map(col => {
-      let value = item[col.key];
+      let value: unknown = item[col.key];
       // Gérer les clés imbriquées (ex: 'user.name')
       if (col.key.includes('.')) {
         const keys = col.key.split('.');
-        value = item;
+        let nestedValue: unknown = item;
         for (const key of keys) {
-          value = value ? value[key] : '';
+          nestedValue =
+            typeof nestedValue === 'object' && nestedValue !== null
+              ? (nestedValue as Record<string, unknown>)[key]
+              : '';
         }
+        value = nestedValue;
       }
-      return col.format ? col.format(value) : (value || '');
+      if (col.format) return col.format(value);
+      return value !== null && value !== undefined ? String(value) : '';
     });
   });
 
