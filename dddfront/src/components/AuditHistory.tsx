@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   Table,
@@ -47,10 +47,14 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
     totalItems: 0,
     perPage: 20,
   });
+  const lastFetchRef = useRef(0);
 
   useEffect(() => {
     const fetchLogs = async () => {
       if (!api) return;
+      const now = Date.now();
+      if (now - lastFetchRef.current < 600) return;
+      lastFetchRef.current = now;
       setLoading(true);
       try {
         const params: Record<string, string | number> = {

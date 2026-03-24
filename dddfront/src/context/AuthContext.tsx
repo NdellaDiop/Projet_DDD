@@ -72,6 +72,10 @@ const api: AxiosInstance = axios.create({
   }
 });
 
+type RetryableConfig = {
+  __retryCount?: number;
+};
+
 // Intercepteur pour ajouter le token XSRF
 api.interceptors.request.use(
   (config) => {
@@ -81,9 +85,6 @@ api.interceptors.request.use(
     if (xsrfCookie) {
       const xsrfToken = decodeURIComponent(xsrfCookie.split('=')[1]);
       config.headers['X-XSRF-TOKEN'] = xsrfToken;
-      console.log('✅ X-XSRF-TOKEN ajouté au header');
-    } else {
-      console.warn('⚠️ XSRF-TOKEN non trouvé dans les cookies');
     }
     
     // Si c'est un FormData, ne pas définir Content-Type (Axios le fera automatiquement avec le bon boundary)
@@ -94,6 +95,27 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status;
+    const config = (error?.config || {}) as RetryableConfig & { headers?: Record<string, string> };
+
+    if (status === 429) {
+      const retryCount = config.__retryCount ?? 0;
+      if (retryCount < 1) {
+        config.__retryCount = retryCount + 1;
+        const retryAfterHeader = error?.response?.headers?.['retry-after'];
+        const retryAfterMs = Number(retryAfterHeader) > 0 ? Number(retryAfterHeader) * 1000 : 1200;
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        return api.request(config);
+      }
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
@@ -33,6 +33,7 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   const { api } = useAuth();
+  const hasFetchedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     aoEvolution: AOEvolutionItem[];
@@ -43,6 +44,8 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   useEffect(() => {
     const fetchStats = async () => {
       if (!api) return;
+      if (hasFetchedRef.current) return;
+      hasFetchedRef.current = true;
       try {
         const response = await api.get('/api/admin/dashboard-advanced-stats');
         setData(response.data);

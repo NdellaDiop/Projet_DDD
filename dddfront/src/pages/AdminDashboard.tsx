@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -332,6 +332,10 @@ const AdminDashboard: React.FC = () => {
   const [responsables, setResponsables] = useState<ResponsableMarche[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const lastGlobalFetchRef = useRef(0);
+  const lastAppelsFetchRef = useRef(0);
+  const lastFournisseursFetchRef = useRef(0);
+  const lastResponsablesFetchRef = useRef(0);
 
   // États de filtres et recherche
   const [searchTerm, setSearchTerm] = useState("");
@@ -404,6 +408,9 @@ const AdminDashboard: React.FC = () => {
 
   const fetchGlobalData = useCallback(async () => {
     if (!api) return;
+    const now = Date.now();
+    if (now - lastGlobalFetchRef.current < 800) return;
+    lastGlobalFetchRef.current = now;
     try {
       const [statsRes, suggestionsRes, activitiesRes] = await Promise.all([
         api.get('/api/admin/dashboard-stats'),
@@ -420,6 +427,9 @@ const AdminDashboard: React.FC = () => {
 
   const fetchAppelsOffres = useCallback(async () => {
     if (!api) return;
+    const now = Date.now();
+    if (now - lastAppelsFetchRef.current < 800) return;
+    lastAppelsFetchRef.current = now;
     try {
       const params: Record<string, DashboardFilterValue> = {
           per_page: pagination.appelsOffres.perPage,
@@ -449,6 +459,9 @@ const AdminDashboard: React.FC = () => {
 
   const fetchFournisseurs = useCallback(async () => {
     if (!api) return;
+    const now = Date.now();
+    if (now - lastFournisseursFetchRef.current < 800) return;
+    lastFournisseursFetchRef.current = now;
     try {
       const params: Record<string, DashboardFilterValue> = {
           per_page: pagination.fournisseurs.perPage,
@@ -474,6 +487,9 @@ const AdminDashboard: React.FC = () => {
 
   const fetchResponsables = useCallback(async () => {
     if (!api) return;
+    const now = Date.now();
+    if (now - lastResponsablesFetchRef.current < 800) return;
+    lastResponsablesFetchRef.current = now;
     try {
       const params: Record<string, DashboardFilterValue> = {
           per_page: pagination.responsables.perPage,
@@ -518,12 +534,7 @@ const AdminDashboard: React.FC = () => {
 
     const init = async () => {
         setLoading(true);
-        await Promise.all([
-            fetchGlobalData(),
-            fetchAppelsOffres(),
-            fetchFournisseurs(),
-            fetchResponsables()
-        ]);
+        await fetchGlobalData();
         setLoading(false);
     };
     init();
