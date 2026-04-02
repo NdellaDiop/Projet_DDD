@@ -60,6 +60,14 @@ class DocumentPolicy
 
         // Un FOURNISSEUR peut voir les documents liés à ses candidatures ou qu'il a uploadés
         if ($user->role->name === 'FOURNISSEUR') {
+            // Un fournisseur peut voir les documents joints à un appel d'offre publié/clôturé
+            // (pièces mises à disposition pour préparer la candidature)
+            if ($document->appelOffre) {
+                $document->loadMissing('appelOffre');
+                if (in_array($document->appelOffre->statut, [\App\Models\AppelOffre::STATUS_PUBLISHED, \App\Models\AppelOffre::STATUS_CLOSED])) {
+                    return true;
+                }
+            }
             if ($document->user_id === $user->id) { // Si le fournisseur a uploadé le document
                 return true;
             }
@@ -101,8 +109,19 @@ class DocumentPolicy
             return true;
         }
 
-        // Seul l'utilisateur qui a uploadé le document peut le supprimer
-        return $user->id === $document->user_id;
+        if ($user->id === $document->user_id) {
+            return true;
+        }
+
+        // Responsable : peut retirer une pièce jointe à un AO dont il est responsable (fichier erroné, etc.)
+        if ($user->role->name === 'RESPONSABLE_MARCHE' && $user->responsableMarche && $document->appel_offre_id) {
+            $document->loadMissing('appelOffre');
+            if ($document->appelOffre && $document->appelOffre->responsable_marche_id === $user->responsableMarche->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

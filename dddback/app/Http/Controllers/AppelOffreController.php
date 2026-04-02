@@ -11,6 +11,7 @@ use App\Http\Requests\UpdateAppelOffreRequest;
 use App\Http\Requests\PublishAppelOffreRequest;
 use App\Http\Requests\CloseAppelOffreRequest;
 use App\Http\Resources\AppelOffreResource;
+use App\Models\Document;
 use Illuminate\Http\Request;
 
 class AppelOffreController extends Controller
@@ -78,7 +79,7 @@ class AppelOffreController extends Controller
             }
         }
 
-        $appelOffre->load('responsableMarche.user')->loadCount('candidatures');
+        $appelOffre->load(['responsableMarche.user', 'documents'])->loadCount('candidatures');
         return new AppelOffreResource($appelOffre);
     }
     
@@ -99,6 +100,27 @@ class AppelOffreController extends Controller
     public function publish(PublishAppelOffreRequest $request, AppelOffre $appelOffre)
     {
         $this->authorize('publish', $appelOffre);
+
+        // Exiger les documents AO minimum avant publication (workflow 2 temps)
+        $requiredAoDocs = ['CAHIER_DES_CHARGES', 'REGLEMENT_CONSULTATION'];
+        $present = Document::where('appel_offre_id', $appelOffre->id)
+            ->whereIn('categorie', $requiredAoDocs)
+            ->pluck('categorie')
+            ->unique()
+            ->toArray();
+        $missing = array_values(array_diff($requiredAoDocs, $present));
+        if (!empty($missing)) {
+            $labels = [
+                'CAHIER_DES_CHARGES' => 'Cahier des charges',
+                'REGLEMENT_CONSULTATION' => 'Règlement de consultation',
+            ];
+            $missingLabels = array_map(fn ($c) => $labels[$c] ?? $c, $missing);
+            return response()->json([
+                'message' => "Documents AO manquants. Ajoutez : ".implode(', ', $missingLabels)." avant de publier.",
+                'missing_documents' => $missing,
+            ], 422);
+        }
+
         $appelOffre = $this->appelOffreService->publishAppelOffre($appelOffre);
         $this->log('publish_appel_offre', "Publication AO #{$appelOffre->id}");
         return new AppelOffreResource($appelOffre);

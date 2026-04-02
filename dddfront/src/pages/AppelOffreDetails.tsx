@@ -18,7 +18,8 @@ import {
   User,
   CheckCircle,
   AlertCircle,
-  Upload
+  Upload,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,12 +44,12 @@ interface AppelOffre {
     name: string;
     email: string;
   };
-  documents?: { id: number; nom: string; url: string }[];
+  documents?: { id: number; nom_fichier: string; categorie: string; download_url: string }[];
 }
 
 const AppelOffreDetails = () => {
   const { id } = useParams();
-  const { api, user, isAuthenticated, isFournisseur } = useAuth();
+  const { api, user, isAuthenticated, isFournisseur, isAdmin, isResponsableMarche } = useAuth();
   const navigate = useNavigate();
   const [appelOffre, setAppelOffre] = useState<AppelOffre | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +63,21 @@ const AppelOffreDetails = () => {
   const [offreTechnique, setOffreTechnique] = useState<File | null>(null);
   const [offreFinanciere, setOffreFinanciere] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Documents joints à l'AO (cahier/règlement/annexes)
+  const [isUploadAoDocOpen, setIsUploadAoDocOpen] = useState(false);
+  const [aoDocCategory, setAoDocCategory] = useState<"CAHIER_DES_CHARGES" | "REGLEMENT_CONSULTATION" | "ANNEXE_AO">("CAHIER_DES_CHARGES");
+  const [aoDocFile, setAoDocFile] = useState<File | null>(null);
+  const [uploadingAoDoc, setUploadingAoDoc] = useState(false);
+  const [deletingAoDocId, setDeletingAoDocId] = useState<number | null>(null);
+
+  const canManageAoDocs = isAuthenticated && (isAdmin || isResponsableMarche);
+
+  const aoDocCategoryLabel: Record<string, string> = {
+    CAHIER_DES_CHARGES: "Cahier des charges",
+    REGLEMENT_CONSULTATION: "Règlement de consultation",
+    ANNEXE_AO: "Annexe",
+  };
 
   // Calcul des jours restants
   const calculateDaysLeft = (deadline: string) => {
@@ -91,6 +108,114 @@ const AppelOffreDetails = () => {
         fetchDetails();
     }
   }, [id, api]);
+
+  const refreshDetails = async () => {
+    if (!api || !id) return;
+    const response = await api.get(`/api/appels-offres/${id}`);
+    setAppelOffre(response.data.data || response.data);
+  };
+
+  const downloadAoDocument = async (doc: { id: number; nom_fichier: string; download_url: string }) => {
+    if (!api) return;
+    try {
+      const response = await api.get(doc.download_url, { responseType: "blob" });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = doc.nom_fichier || `document-${doc.id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: unknown) {
+      console.error("Erreur téléchargement document AO:", err);
+      toast({
+        title: "Erreur",
+        description: "Impossible de télécharger ce document.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const uploadAoDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!api || !appelOffre || !aoDocFile) return;
+
+    try {
+      setUploadingAoDoc(true);
+      const formData = new FormData();
+      formData.append("file", aoDocFile);
+      formData.append("categorie", aoDocCategory);
+      formData.append("appel_offre_id", String(appelOffre.id));
+
+      await api.post("/api/documents", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast({
+        title: "Document ajouté",
+        description: `${aoDocCategoryLabel[aoDocCategory]} joint à l'appel d'offres.`,
+      });
+
+      setAoDocFile(null);
+      setIsUploadAoDocOpen(false);
+      await refreshDetails();
+    } catch (err: unknown) {
+      console.error("Erreur upload document AO:", err);
+      const responseData =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response?.data
+          : undefined;
+
+      let description = "Impossible d'ajouter le document à l'appel d'offres.";
+      if (responseData?.errors) {
+        description = Object.entries(responseData.errors)
+          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(", ") : String(messages)}`)
+          .join(" | ");
+      } else if (typeof responseData?.message === "string") {
+        description = responseData.message;
+      }
+
+      toast({
+        title: "Erreur",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingAoDoc(false);
+    }
+  };
+
+  const deleteAoDocument = async (doc: { id: number; nom_fichier: string }) => {
+    if (!api) return;
+    if (!window.confirm(`Supprimer « ${doc.nom_fichier} » ? Cette action est définitive.`)) return;
+
+    try {
+      setDeletingAoDocId(doc.id);
+      await api.delete(`/api/documents/${doc.id}`);
+      toast({
+        title: "Document supprimé",
+        description: "La pièce jointe a été retirée de l'appel d'offres.",
+      });
+      await refreshDetails();
+    } catch (err: unknown) {
+      console.error("Erreur suppression document AO:", err);
+      const responseData =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data
+          : undefined;
+      toast({
+        title: "Erreur",
+        description:
+          typeof responseData?.message === "string"
+            ? responseData.message
+            : "Impossible de supprimer ce document.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAoDocId(null);
+    }
+  };
 
   const handlePostuler = () => {
     if (!isAuthenticated) {
@@ -233,6 +358,7 @@ const AppelOffreDetails = () => {
 
   const daysLeft = calculateDaysLeft(appelOffre.date_limite_depot);
   const isClosed = daysLeft === 0 || appelOffre.statut === 'closed';
+  const dashboardBackHref = isAdmin ? "/admin" : isResponsableMarche ? "/responsable/dashboard" : "/appels-offres";
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -241,10 +367,17 @@ const AppelOffreDetails = () => {
         <div className="container max-w-5xl">
             
             {/* Bouton Retour (Hors de la grille pour aligner les blocs en dessous) */}
-            <div className="mb-6">
-                <Button variant="ghost" className="pl-0 hover:bg-transparent hover:text-primary" onClick={() => navigate(-1)}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Retour aux résultats
+            <div className="mb-6 flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  className="pl-0 hover:bg-transparent hover:text-primary"
+                  onClick={() => navigate(dashboardBackHref)}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Retour au dashboard
+                </Button>
+                <Button variant="ghost" className="pl-0 hover:bg-transparent hover:text-primary" onClick={() => navigate("/appels-offres")}>
+                  Retour à la liste publique
                 </Button>
             </div>
 
@@ -286,6 +419,14 @@ const AppelOffreDetails = () => {
                                     <FileText className="h-5 w-5 text-primary" />
                                     Documents joints
                                 </h3>
+                                {canManageAoDocs && (
+                                  <div className="mb-4">
+                                    <Button variant="outline" size="sm" onClick={() => setIsUploadAoDocOpen(true)}>
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Ajouter un document
+                                    </Button>
+                                  </div>
+                                )}
                                 {appelOffre.documents && appelOffre.documents.length > 0 ? (
                                     <div className="grid gap-3">
                                         {appelOffre.documents.map((doc) => (
@@ -294,14 +435,39 @@ const AppelOffreDetails = () => {
                                                     <div className="bg-white p-2 rounded border">
                                                         <FileText className="h-5 w-5 text-slate-400" />
                                                     </div>
-                                                    <span className="font-medium text-slate-700">{doc.nom}</span>
+                                                    <div className="flex flex-col">
+                                                      <span className="font-medium text-slate-700">{doc.nom_fichier}</span>
+                                                      <span className="text-xs text-muted-foreground">{aoDocCategoryLabel[doc.categorie] ?? doc.categorie}</span>
+                                                    </div>
                                                 </div>
-                                                <Button variant="ghost" size="sm" asChild>
-                                                    <a href={doc.url} target="_blank" rel="noopener noreferrer" download>
-                                                        <Download className="h-4 w-4 mr-2" />
-                                                        Télécharger
-                                                    </a>
-                                                </Button>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                      downloadAoDocument({
+                                                        id: doc.id,
+                                                        nom_fichier: doc.nom_fichier,
+                                                        download_url: doc.download_url,
+                                                      })
+                                                    }
+                                                  >
+                                                    <Download className="h-4 w-4 mr-2" />
+                                                    Télécharger
+                                                  </Button>
+                                                  {canManageAoDocs && (
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                      disabled={deletingAoDocId === doc.id}
+                                                      onClick={() => deleteAoDocument({ id: doc.id, nom_fichier: doc.nom_fichier })}
+                                                    >
+                                                      <Trash2 className="h-4 w-4 mr-2" />
+                                                      {deletingAoDocId === doc.id ? "…" : "Supprimer"}
+                                                    </Button>
+                                                  )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -390,11 +556,66 @@ const AppelOffreDetails = () => {
         </div>
       </main>
 
+      {/* Modale ajout document AO (admin/responsable) */}
+      <Dialog open={isUploadAoDocOpen} onOpenChange={setIsUploadAoDocOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Ajouter un document à l'appel d'offres</DialogTitle>
+            <DialogDescription>
+              Joignez le cahier des charges et le règlement de consultation avant publication.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={uploadAoDocument} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Type de document</Label>
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={aoDocCategory}
+                onChange={(e) => setAoDocCategory(e.target.value as typeof aoDocCategory)}
+              >
+                <option value="CAHIER_DES_CHARGES">Cahier des charges (obligatoire)</option>
+                <option value="REGLEMENT_CONSULTATION">Règlement de consultation (obligatoire)</option>
+                <option value="ANNEXE_AO">Annexe (optionnel)</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fichier</Label>
+              <Input
+                type="file"
+                accept=".pdf,.zip,.doc,.docx,.xls,.xlsx"
+                onChange={(e) => setAoDocFile(e.target.files?.[0] || null)}
+                className="cursor-pointer"
+              />
+              {aoDocFile && (
+                <p className="text-xs text-muted-foreground">
+                  Fichier sélectionné : <span className="font-medium">{aoDocFile.name}</span>
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">Taille max : 10 MB.</p>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsUploadAoDocOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={!aoDocFile || uploadingAoDoc}>
+                {uploadingAoDoc ? "Envoi..." : "Ajouter"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Modale de soumission */}
       <Dialog open={isPostulerOpen} onOpenChange={setIsPostulerOpen}>
         <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
                 <DialogTitle>Postuler à l'appel d'offre</DialogTitle>
+                <DialogDescription>
+                  Renseignez le montant et joignez vos documents d'offre si nécessaire.
+                </DialogDescription>
             </DialogHeader>
             <form onSubmit={submitCandidature} className="space-y-4 py-4">
                 <div className="space-y-2">

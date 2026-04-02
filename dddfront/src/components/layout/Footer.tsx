@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, Mail, Phone, MapPin, Facebook, Linkedin, Twitter } from "lucide-react";
+import { Mail, Phone, MapPin, Facebook, Linkedin, Twitter } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -8,7 +8,7 @@ const Footer = () => {
     <footer className="bg-footer text-footer-foreground">
       {/* Main Footer */}
       <div className="container py-12 md:py-16">
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="flex flex-col items-start group">
@@ -57,30 +57,6 @@ const Footer = () => {
                 { href: "/comment-ca-marche", label: "Comment ça marche" },
                 { href: "/inscription", label: "Devenir fournisseur" },
                 { href: "/faq", label: "FAQ" },
-              ].map((link) => (
-                <li key={link.href}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-footer-foreground/80 hover:text-accent transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div className="space-y-4">
-            <h3 className="font-display text-sm font-semibold uppercase tracking-wider">
-              Informations Légales
-            </h3>
-            <ul className="space-y-2">
-              {[
-                { href: "/mentions-legales", label: "Mentions légales" },
-                { href: "/politique-confidentialite", label: "Politique de confidentialité" },
-                { href: "/conditions-utilisation", label: "Conditions d'utilisation" },
-                { href: "/accessibilite", label: "Accessibilité" },
               ].map((link) => (
                 <li key={link.href}>
                   <Link

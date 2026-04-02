@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -32,6 +33,7 @@ import {
   CheckCircle,
   XCircle,
   Users,
+  LayoutDashboard,
   BarChart3,
   Briefcase,
   Settings,
@@ -49,6 +51,7 @@ import {
 } from "lucide-react";
 import AdvancedSearch from "@/components/AdvancedSearch";
 import ResponsableAdvancedStats from "@/components/ResponsableAdvancedStats";
+import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import { exportData } from "@/lib/exportUtils";
 import { generatePVReport } from "@/lib/reportUtils";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
@@ -109,14 +112,28 @@ interface ResponsableProfile {
 
 type DashboardFilterValue = string | number | boolean;
 
+function roleDisplayLabel(roleName?: string): string {
+  switch (roleName) {
+    case "RESPONSABLE_MARCHE":
+      return "Responsable marché";
+    case "ADMIN":
+      return "Administrateur";
+    case "FOURNISSEUR":
+      return "Fournisseur";
+    default:
+      return roleName ? roleName.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : "Utilisateur";
+  }
+}
+
 export default function ResponsableDashboard() {
   const { api, user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("appels-offres");
+  const [activeTab, setActiveTab] = useState<"overview" | "appels-offres" | "statistiques">("overview");
   const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
   const [selectedAppelOffre, setSelectedAppelOffre] = useState<AppelOffre | null>(null);
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingAppelsOffres, setLoadingAppelsOffres] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Pagination et Filtres
@@ -161,8 +178,9 @@ export default function ResponsableDashboard() {
   const [loadingComments, setLoadingComments] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
 
-  // État pour les paramètres
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Compte (profil / paramètres)
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [accountTab, setAccountTab] = useState<"profile" | "settings">("profile");
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
 
   // État pour le profil responsable
@@ -191,6 +209,7 @@ export default function ResponsableDashboard() {
   const loadProfile = useCallback(async () => {
     if (!api) return;
     try {
+      setLoadingProfile(true);
       const profileRes = await api.get("/api/responsable/profile");
       setProfile(profileRes.data);
       setProfileForm({
@@ -200,13 +219,15 @@ export default function ResponsableDashboard() {
       });
     } catch (error) {
       console.error("Erreur chargement profil:", error);
+    } finally {
+      setLoadingProfile(false);
     }
   }, [api]);
 
   const loadAppelsOffres = useCallback(async () => {
     if (!api) return;
     try {
-      if (!appelsOffres.length) setLoading(true);
+      if (!appelsOffres.length) setLoadingAppelsOffres(true);
       else setIsRefreshing(true);
       
       const params: Record<string, DashboardFilterValue> = {
@@ -245,10 +266,19 @@ export default function ResponsableDashboard() {
     } catch (error) {
       console.error("Erreur chargement AO:", error);
     } finally {
-      setLoading(false);
+      setLoadingAppelsOffres(false);
       setIsRefreshing(false);
     }
   }, [api, appelsOffres.length, pagination.currentPage, pagination.perPage, debouncedSearchTerm, advancedFilters, filterStatut]);
+
+  const overviewStats = (() => {
+    const total = appelsOffres.length;
+    const draft = appelsOffres.filter((a) => a.statut === "draft").length;
+    const published = appelsOffres.filter((a) => a.statut === "published").length;
+    const closed = appelsOffres.filter((a) => a.statut === "closed").length;
+    const candidatures = appelsOffres.reduce((sum, a) => sum + (a.candidatures_count ?? 0), 0);
+    return { total, draft, published, closed, candidatures };
+  })();
 
   useEffect(() => {
     if (activeTab === 'appels-offres') {
@@ -564,12 +594,13 @@ export default function ResponsableDashboard() {
     }
     
     try {
-      const formData = new FormData();
-      formData.append('departement', profileForm.departement.trim());
-      formData.append('fonction', profileForm.fonction.trim());
-      formData.append('telephone', profileForm.telephone.trim());
-      
-      const response = await api.put("/api/responsable/profile", formData);
+      const payload = {
+        departement: profileForm.departement.trim(),
+        fonction: profileForm.fonction.trim(),
+        telephone: profileForm.telephone.trim(),
+      };
+
+      const response = await api.put("/api/responsable/profile", payload);
       setProfile(response.data);
       setEditingProfile(false);
       
@@ -641,7 +672,7 @@ export default function ResponsableDashboard() {
       });
 
       toast({ title: "Succès", description: "Votre mot de passe a été mis à jour." });
-      setIsSettingsOpen(false);
+      setIsAccountOpen(false);
       setPasswordData({ current: "", new: "", confirm: "" });
     } catch (error: unknown) {
         const message = getErrorMessage(error, "Erreur lors de la mise à jour du mot de passe.");
@@ -649,7 +680,7 @@ export default function ResponsableDashboard() {
     }
   };
 
-  if (loading) {
+  if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -661,29 +692,54 @@ export default function ResponsableDashboard() {
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-100">
+    <div className="min-h-screen bg-slate-100">
+      <DashboardNavbar
+        title="Espace Responsable"
+        onOpenProfile={() => {
+          setAccountTab("profile");
+          setIsAccountOpen(true);
+        }}
+        onOpenSettings={() => {
+          setAccountTab("settings");
+          setIsAccountOpen(true);
+        }}
+        onLogout={handleLogout}
+      />
+      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
       
       {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 fixed inset-y-0 left-0 z-50 flex flex-col shadow-sm">
-        
-        {/* EN-TÊTE PROFIL */}
-        <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
-            <div className="relative mb-3">
-              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
-                {user?.name?.charAt(0).toUpperCase()}
-              </div>
+      <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+        {/* Résumé profil (comme maquette) */}
+        <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
+          <div className="flex flex-col items-center text-center">
+            <div
+              className="h-14 w-14 rounded-full bg-primary/12 flex items-center justify-center text-lg font-semibold text-primary mb-3 ring-2 ring-primary/15"
+              aria-hidden
+            >
+              {user?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
             </div>
-            <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={user?.name}>
-              {user?.name}
-            </h2>
-            <p className="text-xs text-muted-foreground truncate w-full">{user?.email}</p>
-            <Badge variant="outline" className="mt-2 text-xs border-primary/20 text-primary bg-primary/5">
-              Responsable Marché
+            <p className="font-semibold text-slate-800 text-sm leading-tight">{user?.name ?? "—"}</p>
+            <p className="text-xs text-slate-500 mt-1.5 px-1 break-all leading-snug">{user?.email ?? ""}</p>
+            <Badge
+              variant="outline"
+              className="mt-3 text-xs font-medium border-primary/35 text-primary bg-white hover:bg-primary/5"
+            >
+              {roleDisplayLabel(user?.role?.name)}
             </Badge>
+          </div>
         </div>
 
         {/* NAVIGATION */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+          <Button
+            variant={activeTab === "overview" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "overview" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+            onClick={() => setActiveTab("overview")}
+          >
+            <LayoutDashboard className="w-4 h-4 mr-3" />
+            Vue d'ensemble
+          </Button>
+
           <Button
             variant={activeTab === "appels-offres" ? "default" : "ghost"}
             className={`w-full justify-start ${activeTab === "appels-offres" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
@@ -703,38 +759,28 @@ export default function ResponsableDashboard() {
           </Button>
         </nav>
 
-        {/* PIED DE PAGE : PARAMÈTRES ET DÉCONNEXION */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2">
-            <Button 
-                variant="outline" 
-                className="flex-1 border-slate-200 hover:bg-white text-slate-600" 
-                onClick={() => setIsSettingsOpen(true)}
-                title="Paramètres"
-            >
-                <Settings className="w-4 h-4" />
-            </Button>
-            <Button 
-                variant="destructive" 
-                className="flex-1 hover:bg-red-600" 
-                onClick={handleLogout}
-                title="Déconnexion"
-            >
-                <LogOut className="w-4 h-4" />
-            </Button>
+        {/* PIED DE PAGE */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50">
+          <p className="text-xs text-slate-400 text-center">
+            Utilisez le menu en haut à droite pour votre profil et la déconnexion.
+          </p>
         </div>
       </aside>
 
       {/* CONTENU PRINCIPAL */}
-      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
+      <main className="flex-1 ml-64 overflow-y-auto h-screen">
+        <div className="p-8">
         
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
            <div>
               <h1 className="text-2xl font-bold text-slate-800">
+                {activeTab === 'overview' && "Vue d'ensemble"}
                 {activeTab === 'appels-offres' && "Gestion des Appels d'Offres"}
                 {activeTab === 'statistiques' && "Tableau de Bord Statistiques"}
               </h1>
               <p className="text-slate-500 mt-1">
+                {activeTab === 'overview' && "Un aperçu rapide de vos activités et actions prioritaires."}
                 {activeTab === 'appels-offres' && "Créez, publiez et gérez vos appels d'offres et candidatures."}
                 {activeTab === 'statistiques' && "Analysez les performances de vos marchés."}
               </p>
@@ -750,6 +796,103 @@ export default function ResponsableDashboard() {
               )}
            </div>
         </div>
+
+        {/* TAB: VUE D'ENSEMBLE */}
+        {activeTab === "overview" && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500">Appels d'offres</p>
+                  <p className="text-2xl font-bold text-slate-800">{overviewStats.total}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500">Brouillons</p>
+                  <p className="text-2xl font-bold text-slate-800">{overviewStats.draft}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500">Publiés</p>
+                  <p className="text-2xl font-bold text-slate-800">{overviewStats.published}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500">Clôturés</p>
+                  <p className="text-2xl font-bold text-slate-800">{overviewStats.closed}</p>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-xs text-slate-500">Candidatures reçues</p>
+                  <p className="text-2xl font-bold text-slate-800">{overviewStats.candidatures}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-800">Actions rapides</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => setIsCreateOpen(true)}>
+                      <PlusCircle className="w-4 h-4 mr-2" />
+                      Nouvel appel d'offre
+                    </Button>
+                    <Button variant="outline" onClick={() => setActiveTab("appels-offres")}>
+                      <Briefcase className="w-4 h-4 mr-2" />
+                      Voir mes AO
+                    </Button>
+                    <Button variant="outline" onClick={() => setActiveTab("statistiques")}>
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Statistiques
+                    </Button>
+                  </div>
+                  {overviewStats.draft > 0 && (
+                    <div className="mt-4 p-3 rounded-md bg-amber-50 border border-amber-100 text-sm text-amber-900">
+                      Vous avez <strong>{overviewStats.draft}</strong> AO en brouillon. Pensez à ajouter les documents (cahier des charges + règlement) avant publication.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-800">Derniers appels d'offres</h3>
+                    <Button variant="link" className="px-0" onClick={() => setActiveTab("appels-offres")}>
+                      Tout voir
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {Array.isArray(appelsOffres) && appelsOffres.slice(0, 5).map((ao) => (
+                      <div key={ao.id} className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-800 truncate">{ao.titre}</div>
+                          <div className="text-xs text-slate-500 truncate">{ao.reference}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {getStatutBadge(ao.statut)}
+                          <Button size="sm" variant="outline" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
+                            Détails
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {Array.isArray(appelsOffres) && appelsOffres.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Aucun appel d'offre pour le moment.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
 
         {/* TAB: MES APPELS D'OFFRES */}
         {activeTab === "appels-offres" && (
@@ -797,7 +940,7 @@ export default function ResponsableDashboard() {
 
                 <Card className="border-none shadow-sm">
                     <CardContent className="p-0">
-                        <div className={`rounded-lg border border-slate-100 overflow-hidden bg-white ${isRefreshing ? 'opacity-60 pointer-events-none transition-opacity' : ''}`}>
+                        <div className={`rounded-lg border border-slate-100 overflow-hidden bg-white ${isRefreshing || loadingAppelsOffres ? 'opacity-60 pointer-events-none transition-opacity' : ''}`}>
                             <Table>
                               <TableHeader className="bg-slate-50">
                                 <TableRow>
@@ -836,6 +979,15 @@ export default function ResponsableDashboard() {
                                     </TableCell>
                                     <TableCell className="text-right">
                                       <div className="flex justify-end gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8"
+                                          onClick={() => navigate(`/appels-offres/${ao.id}`)}
+                                          title="Ouvrir le détail (documents & infos)"
+                                        >
+                                          <FileText className="w-3 h-3 mr-1" /> Détails
+                                        </Button>
                                         {ao.statut === 'draft' && (
                                             <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handlePublish(ao.id)} title="Publier">
                                                 <Megaphone className="w-3 h-3 mr-1" /> Publier
@@ -901,7 +1053,9 @@ export default function ResponsableDashboard() {
             </div>
         )}
 
+        </div>
       </main>
+      </div>
 
       {/* Modale Création */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -1436,86 +1590,141 @@ export default function ResponsableDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Modale Paramètres */}
-      <Dialog open={isSettingsOpen} onOpenChange={(open) => {
-        setIsSettingsOpen(open);
+      {/* Mon compte : Profil / Paramètres */}
+      <Dialog open={isAccountOpen} onOpenChange={(open) => {
+        setIsAccountOpen(open);
         if (!open) {
           setPasswordData({ current: "", new: "", confirm: "" });
+          setAccountTab("profile");
         }
       }}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Paramètres du compte</DialogTitle>
+            <DialogTitle>{accountTab === "profile" ? "Mon profil" : "Paramètres"}</DialogTitle>
+            <DialogDescription>
+              {accountTab === "profile"
+                ? "Consultez et mettez à jour vos informations professionnelles."
+                : "Gérez les paramètres de sécurité de votre compte."}
+            </DialogDescription>
           </DialogHeader>
-          
-          {/* Section Profil */}
-          <div className="space-y-4 py-4 border-b">
-            <h3 className="font-semibold text-sm">Profil</h3>
-            <form onSubmit={handleProfileUpdate} className="grid gap-4">
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Département</Label>
-                  <Input
-                    value={profileForm.departement}
-                    onChange={(e) => setProfileForm({ ...profileForm, departement: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Fonction</Label>
-                  <Input
-                    value={profileForm.fonction}
-                    onChange={(e) => setProfileForm({ ...profileForm, fonction: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Téléphone</Label>
-                <Input
-                  value={profileForm.telephone}
-                  onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })}
-                  required
-                />
-              </div>
-              <Button type="submit" size="sm">Enregistrer le profil</Button>
-            </form>
+          <div className="flex gap-2 border-b pb-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={accountTab === "profile" ? "default" : "outline"}
+              onClick={() => setAccountTab("profile")}
+            >
+              Mon profil
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={accountTab === "settings" ? "default" : "outline"}
+              onClick={() => setAccountTab("settings")}
+            >
+              Paramètres
+            </Button>
           </div>
 
-          {/* Section Mot de passe */}
-          <form onSubmit={handleUpdatePassword} className="grid gap-4 py-4">
-             <div className="grid gap-2">
-              <Label>Mot de passe actuel</Label>
-              <Input 
-                type="password" 
-                value={passwordData.current}
-                onChange={(e) => setPasswordData({...passwordData, current: e.target.value})}
-                required 
-              />
+          {accountTab === "profile" ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-6">
+              <div className="md:col-span-1">
+                <div className="bg-slate-50 border rounded-lg p-5">
+                  <div className="flex flex-col items-center text-center gap-3">
+                    <div className="h-20 w-20 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-3xl">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800">{user?.name}</div>
+                      <div className="text-sm text-slate-500">{user?.email}</div>
+                    </div>
+                    <Badge variant="outline" className="text-xs border-primary/20 text-primary bg-primary/5">
+                      Responsable Marché
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-semibold text-slate-700 mb-4">Informations professionnelles</h3>
+                <form onSubmit={handleProfileUpdate} className="grid gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Département</Label>
+                      <Input
+                        value={profileForm.departement}
+                        onChange={(e) => setProfileForm({ ...profileForm, departement: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Fonction</Label>
+                      <Input
+                        value={profileForm.fonction}
+                        onChange={(e) => setProfileForm({ ...profileForm, fonction: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Téléphone</Label>
+                    <Input
+                      value={profileForm.telephone}
+                      onChange={(e) =>
+                        setProfileForm({
+                          ...profileForm,
+                          telephone: e.target.value.replace(/\s+/g, "").slice(0, 20),
+                        })
+                      }
+                      maxLength={20}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">Max 20 caractères, sans espaces.</p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit">Sauvegarder</Button>
+                  </div>
+                </form>
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Nouveau mot de passe</Label>
-              <Input 
-                type="password"
-                value={passwordData.new}
-                onChange={(e) => setPasswordData({...passwordData, new: e.target.value})}
-                required 
-              />
+          ) : (
+            <div className="py-6">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">Sécurité</h3>
+              <form onSubmit={handleUpdatePassword} className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label>Mot de passe actuel</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.current}
+                    onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Nouveau mot de passe</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.new}
+                    onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Confirmer le nouveau mot de passe</Label>
+                  <Input
+                    type="password"
+                    value={passwordData.confirm}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                    required
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Mettre à jour</Button>
+                </DialogFooter>
+              </form>
             </div>
-            <div className="grid gap-2">
-              <Label>Confirmer le nouveau mot de passe</Label>
-              <Input 
-                type="password"
-                value={passwordData.confirm}
-                onChange={(e) => setPasswordData({...passwordData, confirm: e.target.value})}
-                required 
-              />
-            </div>
-            <DialogFooter>
-              <Button type="submit">Mettre à jour</Button>
-            </DialogFooter>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

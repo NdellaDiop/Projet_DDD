@@ -38,13 +38,10 @@ import {
   Eye,
   Search,
   BarChart3,
-  Shield,
-  Settings,
   Activity,
   AlertCircle,
   UserCheck,
   UserX,
-  LogOut,
   LayoutDashboard,
   Users,
   Briefcase,
@@ -67,7 +64,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import { Textarea } from "@/components/ui/textarea";
 import { exportData } from "@/lib/exportUtils";
 import { generatePVReport } from "@/lib/reportUtils";
@@ -237,6 +236,7 @@ const AdminDashboard: React.FC = () => {
   const [isViewFournisseurOpen, setIsViewFournisseurOpen] = useState(false);
   const [selectedFournisseur, setSelectedFournisseur] = useState<Fournisseur | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAccountProfileOpen, setIsAccountProfileOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
   const [newResponsable, setNewResponsable] = useState({
     name: "",
@@ -1296,28 +1296,38 @@ const AdminDashboard: React.FC = () => {
   // ============================================
 
   return (
-    <div className="min-h-screen flex bg-slate-100">
-      
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 fixed inset-y-0 left-0 z-50 flex flex-col shadow-sm">
-        
-        {/* EN-TÊTE : PROFIL UTILISATEUR (Déplacé en haut) */}
-        <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl mb-3">
-              {authUser?.name?.charAt(0).toUpperCase()}
+    <div className="min-h-screen bg-slate-100">
+      <DashboardNavbar
+        title="Espace Administrateur"
+        onOpenProfile={() => setIsAccountProfileOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onLogout={handleLogout}
+      />
+      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
+      <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+        <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
+          <div className="flex flex-col items-center text-center">
+            <div
+              className="h-14 w-14 rounded-full bg-primary/12 flex items-center justify-center text-lg font-semibold text-primary mb-3 ring-2 ring-primary/15"
+              aria-hidden
+            >
+              {authUser?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
             </div>
-            <h2 className="font-bold text-lg text-slate-800">{authUser?.name}</h2>
-            <p className="text-xs text-muted-foreground">{authUser?.email}</p>
-            <Badge variant="outline" className="mt-2 text-xs border-blue-200 text-blue-600 bg-blue-50">
+            <p className="font-semibold text-slate-800 text-sm leading-tight">{authUser?.name ?? "—"}</p>
+            <p className="text-xs text-slate-500 mt-1.5 px-1 break-all leading-snug">{authUser?.email ?? ""}</p>
+            <Badge
+              variant="outline"
+              className="mt-3 text-xs font-medium border-primary/35 text-primary bg-white hover:bg-primary/5"
+            >
               Administrateur
             </Badge>
-            
+          </div>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
           <Button
             variant={activeTab === "vue-ensemble" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "vue-ensemble" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "vue-ensemble" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("vue-ensemble")}
           >
             <LayoutDashboard className="w-4 h-4 mr-3" />
@@ -1326,7 +1336,7 @@ const AdminDashboard: React.FC = () => {
           
           <Button
             variant={activeTab === "appels-offres" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "appels-offres" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "appels-offres" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("appels-offres")}
           >
             <Briefcase className="w-4 h-4 mr-3" />
@@ -1335,7 +1345,7 @@ const AdminDashboard: React.FC = () => {
 
           <Button
             variant={activeTab === "fournisseurs" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "fournisseurs" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "fournisseurs" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("fournisseurs")}
           >
             <Building2 className="w-4 h-4 mr-3" />
@@ -1344,7 +1354,7 @@ const AdminDashboard: React.FC = () => {
 
           <Button
             variant={activeTab === "responsables" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "responsables" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "responsables" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("responsables")}
           >
             <Users className="w-4 h-4 mr-3" />
@@ -1353,7 +1363,7 @@ const AdminDashboard: React.FC = () => {
 
           <Button
             variant={activeTab === "suggestions" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "suggestions" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "suggestions" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("suggestions")}
           >
             <MessageSquare className="w-4 h-4 mr-3" />
@@ -1362,7 +1372,7 @@ const AdminDashboard: React.FC = () => {
 
           <Button
             variant={activeTab === "gestion-ao" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "gestion-ao" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "gestion-ao" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => {
               setActiveTab("gestion-ao");
               loadMesAppelsOffres();
@@ -1374,37 +1384,23 @@ const AdminDashboard: React.FC = () => {
 
           <Button
             variant={activeTab === "audit" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "audit" ? "bg-primary/10 text-primary" : "text-slate-600"}`}
+            className={`w-full justify-start ${activeTab === "audit" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("audit")}
           >
             <FileClock className="w-4 h-4 mr-3" />
             Historique Audit
           </Button>
         </nav>
- {/* PIED DE PAGE : PARAMÈTRES ET DÉCONNEXION */}
- <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-2">
-            <Button 
-                variant="outline" 
-                className="flex-1 border-slate-200 hover:bg-white text-slate-600" 
-                onClick={() => setIsSettingsOpen(true)}
-                title="Paramètres"
-            >
-                <Settings className="w-4 h-4" />
-            </Button>
-            <Button 
-                variant="destructive" 
-                className="flex-1 hover:bg-red-600" 
-                onClick={handleLogout}
-                title="Déconnexion"
-            >
-                <LogOut className="w-4 h-4" />
-            </Button>
+
+        <div className="p-4 border-t border-slate-100 bg-slate-50">
+          <p className="text-xs text-slate-400 text-center">
+            Utilisez le menu en haut à droite pour votre profil, les paramètres et la déconnexion.
+          </p>
         </div>
       </aside>
 
-      {/* CONTENU PRINCIPAL */}
-      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
-        
+      <main className="flex-1 ml-64 overflow-y-auto h-screen">
+        <div className="p-8">
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
            <div>
@@ -1996,7 +1992,9 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
+        </div>
       </main>
+      </div>
 
       {/* Modale Création Responsable */}
       <Dialog open={isCreateResponsableOpen} onOpenChange={setIsCreateResponsableOpen}>
@@ -2817,11 +2815,49 @@ const AdminDashboard: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Mon profil (aperçu compte admin) */}
+      <Dialog open={isAccountProfileOpen} onOpenChange={setIsAccountProfileOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mon profil</DialogTitle>
+            <DialogDescription>
+              Informations du compte administrateur connecté.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center text-center gap-3 py-4">
+            <div className="h-20 w-20 rounded-full bg-primary/12 text-primary flex items-center justify-center text-2xl font-semibold">
+              {authUser?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800">{authUser?.name}</p>
+              <p className="text-sm text-slate-500 break-all">{authUser?.email}</p>
+            </div>
+            <Badge variant="outline" className="border-primary/35 text-primary">
+              Administrateur
+            </Badge>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setIsAccountProfileOpen(false)}>
+              Fermer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modale Paramètres */}
-      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+      <Dialog
+        open={isSettingsOpen}
+        onOpenChange={(open) => {
+          setIsSettingsOpen(open);
+          if (!open) setPasswordData({ current: "", new: "", confirm: "" });
+        }}
+      >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Paramètres du compte</DialogTitle>
+            <DialogDescription>
+              Modifiez votre mot de passe pour sécuriser votre compte administrateur.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUpdatePassword} className="grid gap-4 py-4">
              <div className="grid gap-2">

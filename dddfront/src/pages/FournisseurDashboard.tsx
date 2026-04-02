@@ -22,10 +22,7 @@ import {
   MapPin,
   AlertCircle,
   Award,
-  LogOut,
   LayoutDashboard,
-  Settings,
-  User as UserIcon,
   MessageSquare,
   Send
 } from "lucide-react";
@@ -36,7 +33,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { exportData } from "@/lib/exportUtils";
 import { Download } from "lucide-react";
@@ -129,6 +128,8 @@ export default function FournisseurDashboard() {
   const [expandedCandidatureId, setExpandedCandidatureId] = useState<number | null>(null);
   const [newComments, setNewComments] = useState<Record<number, string>>({});
   const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
+  const [isPasswordSettingsOpen, setIsPasswordSettingsOpen] = useState(false);
+  const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
 
   const getErrorMessage = (error: unknown, fallback: string): string => {
     if (
@@ -601,6 +602,36 @@ export default function FournisseurDashboard() {
     navigate("/connexion");
   };
 
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordData.new !== passwordData.confirm) {
+      toast({
+        title: "Erreur",
+        description: "Les mots de passe ne correspondent pas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (!api) throw new Error("API non disponible");
+      await api.put("/api/update-password", {
+        current_password: passwordData.current,
+        new_password: passwordData.new,
+        new_password_confirmation: passwordData.confirm,
+      });
+      toast({ title: "Succès", description: "Votre mot de passe a été mis à jour." });
+      setIsPasswordSettingsOpen(false);
+      setPasswordData({ current: "", new: "", confirm: "" });
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Erreur lors de la mise à jour du mot de passe."),
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -613,90 +644,82 @@ export default function FournisseurDashboard() {
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-100">
-      
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 fixed inset-y-0 left-0 z-50 flex flex-col shadow-sm">
-        
-        {/* EN-TÊTE PROFIL */}
-        <div className="p-6 border-b border-slate-100 flex flex-col items-center text-center">
-            <div className="relative mb-3">
-              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
-                {profile?.nom_entreprise?.charAt(0).toUpperCase() || user?.name?.charAt(0).toUpperCase()}
+    <div className="min-h-screen bg-slate-100">
+      <DashboardNavbar
+        title="Espace Fournisseur"
+        onOpenProfile={() => setActiveTab("profile")}
+        onOpenSettings={() => setIsPasswordSettingsOpen(true)}
+        onLogout={handleLogout}
+      />
+      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
+        {/* SIDEBAR — même principe que l’espace responsable */}
+        <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+          <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
+            <div className="flex flex-col items-center text-center">
+              <div
+                className="h-14 w-14 rounded-full bg-primary/12 flex items-center justify-center text-lg font-semibold text-primary mb-3 ring-2 ring-primary/15"
+                aria-hidden
+              >
+                {user?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
+              </div>
+              <p className="font-semibold text-slate-800 text-sm leading-tight">{user?.name ?? "—"}</p>
+              <p className="text-xs text-slate-500 mt-1.5 px-1 break-all leading-snug">{user?.email ?? ""}</p>
+              <Badge
+                variant="outline"
+                className="mt-3 text-xs font-medium border-primary/35 text-primary bg-white hover:bg-primary/5"
+              >
+                Fournisseur
+              </Badge>
             </div>
-            </div>
-            <h2 className="font-bold text-lg text-slate-800 line-clamp-1" title={profile?.nom_entreprise || user?.name}>
-              {profile?.nom_entreprise || user?.name}
-            </h2>
-            <p className="text-xs text-muted-foreground truncate w-full">{user?.email}</p>
-            <Badge variant="outline" className="mt-2 text-xs border-blue-200 text-blue-600 bg-blue-50">
-              Fournisseur
-            </Badge>
-        </div>
+          </div>
 
-        {/* NAVIGATION */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          <Button
-            variant={activeTab === "overview" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "overview" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
-            onClick={() => setActiveTab("overview")}
-          >
-            <LayoutDashboard className="w-4 h-4 mr-3" />
-            Vue d'ensemble
-          </Button>
-
-          <Button
-            variant={activeTab === "candidatures" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "candidatures" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
-            onClick={() => setActiveTab("candidatures")}
-          >
-            <FileText className="w-4 h-4 mr-3" />
-            Mes candidatures
-          </Button>
-
-          <Button
-            variant={activeTab === "documents" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "documents" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
-            onClick={() => setActiveTab("documents")}
-          >
-            <Upload className="w-4 h-4 mr-3" />
-            Documents légaux
-          </Button>
-
-          <Button
-            variant={activeTab === "suggestions" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "suggestions" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
-            onClick={() => setActiveTab("suggestions")}
-          >
-            <MessageSquare className="w-4 h-4 mr-3" />
-            Boîte à idées
-          </Button>
-
-          <Button
-            variant={activeTab === "profile" ? "default" : "ghost"}
-            className={`w-full justify-start ${activeTab === "profile" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
-            onClick={() => setActiveTab("profile")}
-          >
-            <UserIcon className="w-4 h-4 mr-3" />
-            Mon profil
-          </Button>
-        </nav>
-
-        {/* PIED DE PAGE : DECONNEXION */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50">
-            <Button 
-                variant="destructive" 
-                className="w-full justify-start hover:bg-red-600" 
-                onClick={handleLogout}
+          <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+            <Button
+              variant={activeTab === "overview" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "overview" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("overview")}
             >
-                <LogOut className="w-4 h-4 mr-3" />
-                 Déconnexion
-               </Button>
-            </div>
-      </aside>
+              <LayoutDashboard className="w-4 h-4 mr-3" />
+              Vue d&apos;ensemble
+            </Button>
 
-      {/* CONTENU PRINCIPAL */}
-      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
+            <Button
+              variant={activeTab === "candidatures" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "candidatures" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("candidatures")}
+            >
+              <FileText className="w-4 h-4 mr-3" />
+              Mes candidatures
+            </Button>
+
+            <Button
+              variant={activeTab === "documents" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "documents" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("documents")}
+            >
+              <Upload className="w-4 h-4 mr-3" />
+              Documents légaux
+            </Button>
+
+            <Button
+              variant={activeTab === "suggestions" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "suggestions" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("suggestions")}
+            >
+              <MessageSquare className="w-4 h-4 mr-3" />
+              Boîte à idées
+            </Button>
+          </nav>
+
+          <div className="p-4 border-t border-slate-100 bg-slate-50">
+            <p className="text-xs text-slate-400 text-center">
+              Utilisez le menu en haut à droite pour votre profil, les paramètres et la déconnexion.
+            </p>
+          </div>
+        </aside>
+
+        <main className="flex-1 ml-64 overflow-y-auto h-screen">
+          <div className="p-8">
         
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
@@ -1456,7 +1479,61 @@ export default function FournisseurDashboard() {
             </div>
         )}
 
+          </div>
       </main>
+      </div>
+
+      <Dialog
+        open={isPasswordSettingsOpen}
+        onOpenChange={(open) => {
+          setIsPasswordSettingsOpen(open);
+          if (!open) setPasswordData({ current: "", new: "", confirm: "" });
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Paramètres du compte</DialogTitle>
+            <DialogDescription>
+              Modifiez votre mot de passe pour sécuriser votre compte fournisseur.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdatePassword} className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>Mot de passe actuel</Label>
+              <Input
+                type="password"
+                value={passwordData.current}
+                onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Nouveau mot de passe</Label>
+              <Input
+                type="password"
+                value={passwordData.new}
+                onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Confirmer le nouveau mot de passe</Label>
+              <Input
+                type="password"
+                value={passwordData.confirm}
+                onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsPasswordSettingsOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit">Mettre à jour</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* MODALE DE MODIFICATION DU PROFIL (NOUVEAU) */}
       <Dialog 

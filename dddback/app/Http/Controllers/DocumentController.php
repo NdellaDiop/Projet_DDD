@@ -17,7 +17,7 @@ class DocumentController extends Controller
 
         $request->validate([
             'file' => 'required|file|max:10240',
-            'categorie' => 'required|in:RCCM,NINEA,QUITUS_FISCAL,OFFRE_TECHNIQUE,OFFRE_FINANCIERE,PIECE_ADMINISTRATIVE',
+            'categorie' => 'required|in:RCCM,NINEA,QUITUS_FISCAL,OFFRE_TECHNIQUE,OFFRE_FINANCIERE,PIECE_ADMINISTRATIVE,CAHIER_DES_CHARGES,REGLEMENT_CONSULTATION,ANNEXE_AO',
             'candidature_id' => 'nullable|exists:candidatures,id',
             'appel_offre_id' => 'nullable|exists:appels_offres,id',
         ]);

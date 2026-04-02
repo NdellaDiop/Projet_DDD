@@ -27,6 +27,17 @@ class AppelOffreResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'candidatures_count' => $this->whenCounted('candidatures'),
+            'documents' => $this->whenLoaded('documents', function () {
+                return $this->documents->map(function ($doc) {
+                    return [
+                        'id' => $doc->id,
+                        'nom_fichier' => $doc->nom_fichier,
+                        'categorie' => $doc->categorie,
+                        'download_url' => url("/api/documents/{$doc->id}/download"),
+                        'created_at' => $doc->created_at,
+                    ];
+                })->values();
+            }),
             'responsable' => $this->whenLoaded('responsableMarche', function () {
                 if (!$this->responsableMarche) {
                     return null;
