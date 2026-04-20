@@ -1,8 +1,20 @@
 import { Link } from "react-router-dom";
-import { Mail, Phone, MapPin, Facebook, Linkedin, Twitter } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Mail, Phone, MapPin, Facebook, Linkedin, Twitter, Instagram } from "lucide-react";
+
+/** Fichiers dans `public/` sont servis à la racine : utiliser `/image.png`, pas `/public/image.png`. */
+const socialNetworkLinks: { label: string; Icon: LucideIcon; envUrl: string | undefined }[] = [
+  { label: "Facebook", Icon: Facebook, envUrl: import.meta.env.VITE_SOCIAL_FACEBOOK_URL },
+  { label: "LinkedIn", Icon: Linkedin, envUrl: import.meta.env.VITE_SOCIAL_LINKEDIN_URL },
+  { label: "Instagram", Icon: Instagram, envUrl: import.meta.env.VITE_SOCIAL_INSTAGRAM_URL },
+  { label: "X (Twitter)", Icon: Twitter, envUrl: import.meta.env.VITE_SOCIAL_TWITTER_URL },
+];
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const activeSocial = socialNetworkLinks
+    .map((item) => ({ ...item, href: item.envUrl?.trim() ?? "" }))
+    .filter((item) => item.href.length > 0);
 
   return (
     <footer className="bg-footer text-footer-foreground">
@@ -12,7 +24,7 @@ const Footer = () => {
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="flex flex-col items-start group">
-              <img src="/public/image.png" alt="Dakar Dem Dikk Logo" className="h-10 w-auto mb-1" />
+              <img src="/image.png" alt="Dakar Dem Dikk Logo" className="h-10 w-auto mb-1" />
               <span className="text-[10px] font-medium uppercase tracking-wider text-footer-foreground/70">
                   Portail Appels d'Offres
                 </span>
@@ -21,29 +33,29 @@ const Footer = () => {
               Plateforme officielle de gestion des appels d'offres de Dakar Dem Dikk. 
               Transparence, efficacité et équité.
             </p>
-            <div className="flex gap-3">
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-footer-foreground/10 hover:bg-primary hover:text-primary-foreground transition-colors"
-                aria-label="Facebook"
-              >
-                <Facebook className="h-4 w-4" />
-              </a>
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-footer-foreground/10 hover:bg-primary hover:text-primary-foreground transition-colors"
-                aria-label="LinkedIn"
-              >
-                <Linkedin className="h-4 w-4" />
-              </a>
-              <a
-                href="#"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-footer-foreground/10 hover:bg-primary hover:text-primary-foreground transition-colors"
-                aria-label="Twitter"
-              >
-                <Twitter className="h-4 w-4" />
-              </a>
-            </div>
+            {activeSocial.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {activeSocial.map(({ label, Icon, href }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-footer-foreground/10 hover:bg-primary hover:text-primary-foreground transition-colors"
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            ) : import.meta.env.DEV ? (
+              <p className="text-xs text-footer-foreground/50 max-w-xs">
+                Réseaux sociaux : définissez dans{" "}
+                <code className="rounded bg-footer-foreground/10 px-1">.env</code> par exemple{" "}
+                <code className="rounded bg-footer-foreground/10 px-1">VITE_SOCIAL_FACEBOOK_URL</code>,{" "}
+                <code className="rounded bg-footer-foreground/10 px-1">VITE_SOCIAL_LINKEDIN_URL</code>, etc.
+              </p>
+            ) : null}
           </div>
 
           {/* Quick Links */}

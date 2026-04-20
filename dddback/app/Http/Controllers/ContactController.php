@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\ContactMessageNotification;
 use App\Models\ContactMessage;
 use App\Models\LogActivite;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class ContactController extends Controller
 {
@@ -39,6 +42,19 @@ class ContactController extends Controller
         }
 
         $contactMessage = ContactMessage::create($data);
+
+        $recipient = config('contact.mail_to');
+        if (is_string($recipient) && $recipient !== '') {
+            try {
+                Mail::to($recipient)->send(new ContactMessageNotification($contactMessage));
+            } catch (\Throwable $e) {
+                Log::error('Échec envoi e-mail message contact', [
+                    'contact_message_id' => $contactMessage->id,
+                    'recipient' => $recipient,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         // Logger l'activité si l'utilisateur est authentifié
         if (auth()->check()) {

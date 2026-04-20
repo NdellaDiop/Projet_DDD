@@ -40,7 +40,7 @@ class CandidatureSubmitted extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.candidature_submitted',
+            view: 'emails.candidature_submitted',
         );
     }
 

@@ -43,7 +43,7 @@ class AppelOffreAssigned extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.appel_offre_assigned',
+            view: 'emails.appel_offre_assigned',
         );
     }
 

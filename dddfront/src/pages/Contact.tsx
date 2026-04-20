@@ -73,7 +73,8 @@ export default function Contact() {
       });
       toast({
         title: "Message envoyé !",
-        description: "Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.",
+        description:
+          "Votre message a bien été transmis. L'équipe en a été informée par e-mail et pourra vous répondre directement.",
       });
     } catch (error: unknown) {
       console.error("Erreur envoi message:", error);
