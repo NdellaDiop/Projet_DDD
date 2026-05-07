@@ -16,21 +16,23 @@ const steps = [
   {
     icon: FileUp,
     step: "03",
-    title: "Soumettez votre dossier",
-    description: "Déposez votre offre technique et financière avec tous les documents requis avant la date limite.",
+    title: "Préparez puis déposez au siège",
+    description:
+      "Constituez vos plis selon l'avis et le cahier des charges. Le dépôt des offres se fait en présentiel au lieu, à la date et à l'heure indiqués sur chaque marché.",
   },
   {
     icon: CheckCircle2,
     step: "04",
-    title: "Suivez votre candidature",
-    description: "Recevez des notifications à chaque étape et accédez aux résultats depuis votre espace.",
+    title: "Suivez les suites dans le portail",
+    description:
+      "Notifications et historique dans votre espace lorsque le service des marchés actualise votre dossier.",
   },
 ];
 
 const HowItWorksSection = () => {
   return (
     <section className="py-20 md:py-28 bg-secondary text-secondary-foreground overflow-hidden">
-      <div className="container">
+      <div className="container max-w-5xl">
         {/* Header */}
         <div className="mx-auto max-w-2xl text-center mb-16">
           <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider bg-accent text-accent-foreground rounded-full">

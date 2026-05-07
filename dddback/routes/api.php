@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Importez tous les contrôleurs nécessaires
@@ -23,6 +22,11 @@ use App\Http\Controllers\SuggestionController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CandidatureCommentController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\FournisseurChatController;
+use App\Http\Controllers\CahierPaiementController;
+use App\Http\Controllers\CahierPaiementSimulationController;
+use App\Http\Controllers\Webhooks\OrangeMoneyCahierWebhookController;
+use App\Http\Controllers\Webhooks\WaveCahierWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +48,10 @@ Route::get('appels-offres/{appel_offre}', [AppelOffreController::class, 'show'])
 
 // Contact (accessible à tous)
 Route::post('contact', [ContactController::class, 'store']);
+
+// Webhooks prestataires de paiement (pas d’auth Sanctum — signature / secret)
+Route::post('webhooks/wave/cahier', [WaveCahierWebhookController::class, 'handle']);
+Route::post('webhooks/orange-money/cahier', [OrangeMoneyCahierWebhookController::class, 'handle']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
@@ -72,6 +80,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // CANDIDATURES
     Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware('role:FOURNISSEUR');
+    Route::post('appels-offres/{appel_offre}/cahier/paiement/initier', [CahierPaiementController::class, 'initier'])
+        ->middleware('role:FOURNISSEUR');
+    Route::get('paiements/cahier/simulation/preview', [CahierPaiementSimulationController::class, 'preview'])
+        ->middleware('role:FOURNISSEUR');
+    Route::post('paiements/cahier/simulation/confirmer', [CahierPaiementSimulationController::class, 'confirmer'])
+        ->middleware('role:FOURNISSEUR');
+    Route::post('appels-offres/{appel_offre}/cahier/paiement/verifier-wave', [CahierPaiementController::class, 'verifierSessionWave'])
+        ->middleware('role:FOURNISSEUR');
     Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware('role:FOURNISSEUR');
     Route::get('candidatures', [CandidatureController::class, 'index']);
     Route::get('candidatures/{candidature}', [CandidatureController::class, 'show']);
@@ -129,6 +145,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('fournisseur/documents-legaux', [DocumentController::class, 'indexLegal']);
         Route::post('fournisseur/documents-legaux', [DocumentController::class, 'storeLegal']);
         Route::delete('fournisseur/documents-legaux/{document}', [DocumentController::class, 'destroyLegal']);
+        
+        // Chatbot IA fournisseur (rate-limit)
+        Route::post('fournisseur/chat', [FournisseurChatController::class, 'chat'])->middleware('throttle:10,1');
         
         // Suggestions
         Route::get('suggestions', [SuggestionController::class, 'index']);

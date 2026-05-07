@@ -60,7 +60,7 @@ export const generatePVReport = (data: PVReportData) => {
   doc.text(`Titre : ${data.appelOffre.titre}`, 20, 86);
   doc.text(`Date de publication : ${data.appelOffre.date_publication}`, 20, 92);
   doc.text(`Date de clôture : ${data.appelOffre.date_cloture}`, 120, 92);
-  doc.text(`Responsable du dossier : ${data.appelOffre.responsable}`, 20, 98);
+  doc.text(`Personne responsable du marché (PRM) : ${data.appelOffre.responsable}`, 20, 98);
 
   // 4. Tableau des Candidatures
   doc.setFontSize(12);

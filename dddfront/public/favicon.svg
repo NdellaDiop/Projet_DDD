@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Dem Dikk">
+  <!-- Reprise simplifi�e du logo (carr� jaune + chevrons) pour favicon -->
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="#f5cc00" />
+  <path d="M8 23V9l7 7-7 7z" fill="#3a9d67" />
+  <path d="M15 16L24 9v14l-9-7z" fill="#3a3f45" />
+</svg>

@@ -43,8 +43,7 @@ class DocumentPolicy
                 }
             }
             // Si le document est un document légal d'un fournisseur qui a postulé à un de ses appels d'offres
-            // (documents légaux : RCCM, NINEA, QUITUS_FISCAL)
-            if (in_array($document->categorie, ['RCCM', 'NINEA', 'QUITUS_FISCAL'])) {
+            if (in_array($document->categorie, \App\Models\Document::allLegalUploadCategories(), true)) {
                 // Vérifier si ce fournisseur a des candidatures pour les appels d'offres du responsable
                 $hasCandidature = \App\Models\Candidature::whereHas('appelOffre', function ($q) use ($user) {
                     $q->where('responsable_marche_id', $user->responsableMarche->id);
@@ -60,12 +59,12 @@ class DocumentPolicy
 
         // Un FOURNISSEUR peut voir les documents liés à ses candidatures ou qu'il a uploadés
         if ($user->role->name === 'FOURNISSEUR') {
-            // Un fournisseur peut voir les documents joints à un appel d'offre publié/clôturé
-            // (pièces mises à disposition pour préparer la candidature)
+            // Pièces jointes à un AO publié/clôturé : avis / règlement / annexe libres ;
+            // cahier des charges soumis à achat si configuré sur l’AO.
             if ($document->appelOffre) {
                 $document->loadMissing('appelOffre');
                 if (in_array($document->appelOffre->statut, [\App\Models\AppelOffre::STATUS_PUBLISHED, \App\Models\AppelOffre::STATUS_CLOSED])) {
-                    return true;
+                    return $document->fournisseurPeutTelechargerPieceAoPubliee($user);
                 }
             }
             if ($document->user_id === $user->id) { // Si le fournisseur a uploadé le document

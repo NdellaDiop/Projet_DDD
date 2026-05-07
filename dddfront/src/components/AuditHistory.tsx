@@ -123,7 +123,7 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
       case 'Fournisseur': return "Fournisseur";
       case 'User': return "Utilisateur";
       case 'Candidature': return "Candidature";
-      case 'ResponsableMarche': return "Responsable";
+      case 'ResponsableMarche': return "Personne responsable du marché (PRM)";
       default: return model;
     }
   };

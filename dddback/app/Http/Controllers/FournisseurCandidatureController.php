@@ -139,7 +139,12 @@ class FournisseurCandidatureController extends Controller
         if (!$fournisseur) {
             return response()->json(['message' => 'Profil fournisseur introuvable.'], 404);
         }
-        return response()->json($fournisseur->load('user'));
+        $payload = $fournisseur->load('user')->toArray();
+        $payload['portail'] = [
+            'candidature_en_ligne' => (bool) config('portail.candidature_en_ligne'),
+        ];
+
+        return response()->json($payload);
     }
 
     public function updateProfile(Request $request)
@@ -166,6 +171,7 @@ class FournisseurCandidatureController extends Controller
             'ninea' => 'nullable|string|max:50',
             'rccm' => 'nullable|string|max:50',
             'quitus_fiscal' => 'nullable|string|max:50',
+            'references_professionnelles' => 'nullable|string|max:8000',
         ]);
 
         // Utiliser les valeurs validées directement
@@ -185,6 +191,10 @@ class FournisseurCandidatureController extends Controller
         }
         if (isset($validated['quitus_fiscal']) && $validated['quitus_fiscal'] !== null && $validated['quitus_fiscal'] !== '') {
             $data['quitus_fiscal'] = trim($validated['quitus_fiscal']);
+        }
+        if (array_key_exists('references_professionnelles', $validated)) {
+            $ref = $validated['references_professionnelles'];
+            $data['references_professionnelles'] = $ref === null || $ref === '' ? null : trim($ref);
         }
         
         // Log pour déboguer
@@ -232,14 +242,16 @@ class FournisseurCandidatureController extends Controller
         
         // Recharger les relations pour retourner les données à jour
         $fournisseur->load('user');
-        
-        // Ajouter un indicateur dans la réponse pour savoir si l'email a changé
-        $fournisseur->email_changed = $emailChanged;
-        
+
         $this->log('update_fournisseur_profile', "Mise à jour profil fournisseur #{$fournisseur->id} - nom_entreprise: {$data['nom_entreprise']}, adresse: {$data['adresse']}, telephone: {$data['telephone']}, email_contact: {$data['email_contact']}");
 
-        // Retourner les données mises à jour
-        return response()->json($fournisseur);
+        $payload = $fournisseur->toArray();
+        $payload['email_changed'] = $emailChanged;
+        $payload['portail'] = [
+            'candidature_en_ligne' => (bool) config('portail.candidature_en_ligne'),
+        ];
+
+        return response()->json($payload);
     }
 
     private function log(string $action, string $details): void

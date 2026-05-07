@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Shield, Briefcase, Building2, LogOut, LayoutDashboard, Home, ChevronDown, User as UserIcon, Settings } from "lucide-react";
+import { BRAND_LOGO_PATH, BRAND_LOGO_CLASS_DASHBOARD } from "@/lib/branding";
 
 type Props = {
   title?: string;
@@ -36,12 +37,15 @@ export default function DashboardNavbar({ title, onOpenProfile, onOpenSettings, 
   const handleLogout = onLogout ?? logout;
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-      <div className="w-full px-6">
-        <div className="flex h-16 items-center justify-between">
+    <header
+      className="fixed inset-x-0 top-0 z-50 flex h-16 shrink-0 items-stretch border-b border-slate-200 bg-white shadow-sm supports-[backdrop-filter]:bg-white/95 supports-[backdrop-filter]:backdrop-blur"
+      role="banner"
+    >
+      <div className="flex w-full items-center px-4 sm:px-6">
+        <div className="flex h-16 w-full items-center justify-between">
           {/* Logo (retour Accueil) */}
           <Link to="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="Dakar Dem Dikk" className="h-9 w-auto" />
+            <img src={BRAND_LOGO_PATH} alt="Dakar Dem Dikk — Dem Dikk" className={BRAND_LOGO_CLASS_DASHBOARD} />
           </Link>
 
           {/* Profil à droite */}

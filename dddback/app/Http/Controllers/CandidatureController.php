@@ -75,6 +75,12 @@ class CandidatureController extends Controller
     {
         $this->authorize('create', Candidature::class);
 
+        if (! config('portail.candidature_en_ligne')) {
+            return response()->json([
+                'message' => 'La soumission des offres ne se fait pas en ligne sur ce portail. Consultez l’avis et les modalités de dépôt physique sur la fiche marché, puis déposez vos plis au siège selon les indications du service des marchés.',
+            ], 403);
+        }
+
         if ($appelOffre->statut !== \App\Models\AppelOffre::STATUS_PUBLISHED) {
             return response()->json(['message' => 'Appel d\'offre non ouvert à la candidature.'], 403);
         }
@@ -98,7 +104,7 @@ class CandidatureController extends Controller
         }
 
         // Vérifier que le fournisseur a bien uploadé tous ses documents légaux
-        $requiredDocs = ['RCCM', 'NINEA', 'QUITUS_FISCAL'];
+        $requiredDocs = \App\Models\Document::LEGAL_CATEGORIES;
         $userDocuments = Document::where('user_id', $user->id)
             ->whereIn('categorie', $requiredDocs)
             ->pluck('categorie')
@@ -108,12 +114,8 @@ class CandidatureController extends Controller
         $missingDocs = array_diff($requiredDocs, $userDocuments);
         
         if (!empty($missingDocs)) {
-            $docNames = [
-                'RCCM' => 'RCCM (Registre du Commerce)',
-                'NINEA' => 'NINEA',
-                'QUITUS_FISCAL' => 'Quitus Fiscal'
-            ];
-            $missingNames = array_map(fn($doc) => $docNames[$doc], $missingDocs);
+            $docNames = \App\Models\Document::legalCategoryLabels();
+            $missingNames = array_map(fn($doc) => $docNames[$doc] ?? $doc, $missingDocs);
             return response()->json([
                 'message' => 'Documents légaux manquants. Veuillez uploader les documents suivants avant de postuler : ' . implode(', ', $missingNames),
                 'missing_documents' => $missingDocs
@@ -186,9 +188,9 @@ class CandidatureController extends Controller
                     $candidature
                 );
                 $this->notificationService->notifyUser(
-            $candidature->fournisseur->user->id,
-            'Votre candidature a été acceptée.'
-        );
+                    $candidature->fournisseur->user->id,
+                    'Votre dossier est retenu : la suite du processus (remise des plis, soumission) se poursuit en présentiel. Le service des marchés peut vous contacter ; vérifiez aussi vos notifications ici.'
+                );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email acceptation candidature: " . $e->getMessage());
             }

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Menu, X, LogIn, UserPlus, User } from "lucide-react";
+import { BRAND_LOGO_PATH, BRAND_LOGO_CLASS_HEADER } from "@/lib/branding";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -14,10 +15,10 @@ const Header = () => {
       : undefined;
 
   const getDashboardLink = () => {
-    if (user?.role?.name === 'ADMIN' || roleId === 1) return '/admin';
-    if (user?.role?.name === 'FOURNISSEUR' || roleId === 3) return '/fournisseur/dashboard';
-    if (user?.role?.name === 'RESPONSABLE_MARCHE' || roleId === 2) return '/responsable/dashboard';
-    return '/appels-offres';
+    if (user?.role?.name === "ADMIN" || roleId === 1) return "/admin";
+    if (user?.role?.name === "FOURNISSEUR" || roleId === 3) return "/fournisseur/dashboard";
+    if (user?.role?.name === "RESPONSABLE_MARCHE" || roleId === 2) return "/responsable/dashboard";
+    return "/appels-offres";
   };
 
   const navLinks = [
@@ -31,25 +32,33 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/80">
-      <div className="container flex h-16 items-center justify-between md:h-20">
-        {/* Logo */}
-        <Link to="/" className="flex flex-col items-center group">
-          <img src="/logo.png" alt="Dakar Dem Dikk Logo" className="h-10 w-auto mb-1" />
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Portail Appels d'Offres
-            </span>
+      {/* Pleine largeur « container » (sans max-w-5xl) pour limiter les bandes blanches vides sur grand écran */}
+      <div className="container flex min-h-[3.75rem] items-center justify-between gap-3 py-2 md:min-h-[4.25rem] md:gap-4 md:py-2.5">
+        {/* Marque : logo + libellé sur une ligne (à partir de sm) */}
+        <Link
+          to="/"
+          className="group flex shrink-0 items-center gap-2.5 sm:gap-3.5"
+        >
+          <img
+            src={BRAND_LOGO_PATH}
+            alt="Dakar Dem Dikk — portail des marchés publics"
+            className={BRAND_LOGO_CLASS_HEADER}
+          />
+          <span className="hidden max-w-[11rem] border-l border-border/70 pl-2.5 text-left text-[11px] font-semibold leading-snug text-foreground sm:inline sm:max-w-[13rem] sm:pl-3 md:text-xs">
+            Portail des marchés publics
+          </span>
         </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-1 lg:flex">
+        {/* Desktop : liens centrés pour équilibrer l’espace entre marque et actions */}
+        <nav className="mx-2 hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex xl:gap-1">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               to={link.href}
-              className={`px-4 py-2 text-sm font-medium transition-colors rounded-lg ${
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors xl:px-4 ${
                 isActive(link.href)
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               {link.label}
@@ -57,8 +66,7 @@ const Header = () => {
           ))}
         </nav>
 
-        {/* Desktop Actions */}
-        <div className="hidden items-center gap-3 lg:flex">
+        <div className="hidden shrink-0 items-center gap-2 md:gap-3 lg:flex">
           {isAuthenticated ? (
             <Button size="sm" asChild>
               <Link to={getDashboardLink()} className="gap-2">
@@ -77,41 +85,43 @@ const Header = () => {
               <Button size="sm" asChild>
                 <Link to="/inscription" className="gap-2">
                   <UserPlus className="h-4 w-4" />
-                  S'inscrire
+                  S&apos;inscrire
                 </Link>
               </Button>
             </>
           )}
         </div>
 
-        {/* Mobile Menu Button */}
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-muted lg:hidden"
+          type="button"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-muted lg:hidden"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
-          aria-label="Toggle menu"
+          aria-label="Ouvrir le menu"
         >
           {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Mobile Menu */}
       {isMenuOpen && (
-        <div className="border-t border-border bg-card lg:hidden animate-fade-in">
+        <div className="animate-fade-in border-t border-border bg-card lg:hidden">
           <nav className="container flex flex-col gap-1 py-4">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
                 onClick={() => setIsMenuOpen(false)}
-                className={`px-4 py-3 text-sm font-medium transition-colors rounded-lg ${
+                className={`rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
                   isActive(link.href)
                     ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
+            <p className="px-4 pt-2 text-xs text-muted-foreground">
+              Portail des marchés publics — Dakar Dem Dikk
+            </p>
             <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
               {isAuthenticated ? (
                 <Button asChild className="w-full">
@@ -131,7 +141,7 @@ const Header = () => {
                   <Button asChild className="w-full">
                     <Link to="/inscription" onClick={() => setIsMenuOpen(false)}>
                       <UserPlus className="mr-2 h-4 w-4" />
-                      S'inscrire
+                      S&apos;inscrire
                     </Link>
                   </Button>
                 </>

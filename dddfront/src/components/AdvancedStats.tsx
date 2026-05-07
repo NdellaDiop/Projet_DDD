@@ -150,12 +150,12 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
         </CardContent>
       </Card>
 
-      {/* 3. Top Responsables */}
+      {/* 3. Top PRM */}
       <Card className="col-span-1 md:col-span-3 lg:col-span-3 shadow-sm border-slate-100">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="w-5 h-5 text-amber-500" />
-            Top Responsables de Marché
+            Top personnes responsables du marché (PRM)
           </CardTitle>
           <CardDescription>Par nombre d'appels d'offres gérés</CardDescription>
         </CardHeader>

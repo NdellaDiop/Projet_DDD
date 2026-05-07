@@ -47,14 +47,22 @@ import {
   MessageSquare,
   Send,
   Filter,
-  Search
+  Search,
+  Award
 } from "lucide-react";
 import AdvancedSearch from "@/components/AdvancedSearch";
 import ResponsableAdvancedStats from "@/components/ResponsableAdvancedStats";
 import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import { exportData } from "@/lib/exportUtils";
 import { generatePVReport } from "@/lib/reportUtils";
+import {
+  ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES,
+  legalDocumentLabel,
+  missingLegalCategories,
+} from "@/lib/legalDocuments";
+import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { Switch } from "@/components/ui/switch";
 import {
     Select,
     SelectContent,
@@ -67,8 +75,12 @@ import {
 interface AppelOffre {
   id: number;
   reference: string;
+  source_financement?: string;
+  source_financement_label?: string;
   titre: string;
   description: string;
+  /** Lieu / horaires / contact pour le dépôt physique — saisi par le PRM ou l’admin */
+  modalites_soumission_physique?: string | null;
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
   candidatures_count?: number;
@@ -80,6 +92,7 @@ interface Candidature {
     id: number;
     nom_entreprise: string;
     email_contact: string;
+    references_professionnelles?: string | null;
   };
   date_soumission: string;
   statut: string;
@@ -115,7 +128,7 @@ type DashboardFilterValue = string | number | boolean;
 function roleDisplayLabel(roleName?: string): string {
   switch (roleName) {
     case "RESPONSABLE_MARCHE":
-      return "Responsable marché";
+      return "Personne responsable du marché (PRM)";
     case "ADMIN":
       return "Administrateur";
     case "FOURNISSEUR":
@@ -159,10 +172,20 @@ export default function ResponsableDashboard() {
   // État pour la création
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTender, setNewTender] = useState({
+    reference: "",
+    source_financement: "etat" as SourceFinancement,
     titre: "",
     description: "",
+    modalites_soumission_physique: "",
     date_limite_depot: "",
+    cahier_paiement_requis: false,
+    cahier_prix_xof: "" as string,
   });
+
+  const [isEditModalitesOpen, setIsEditModalitesOpen] = useState(false);
+  const [aoForModalites, setAoForModalites] = useState<AppelOffre | null>(null);
+  const [draftModalites, setDraftModalites] = useState("");
+  const [savingModalites, setSavingModalites] = useState(false);
 
   // État pour voir les candidatures d'un AO
   const [isViewCandidatesOpen, setIsViewCandidatesOpen] = useState(false);
@@ -356,13 +379,43 @@ export default function ResponsableDashboard() {
     e.preventDefault();
     if (!api) return;
     try {
+      if (newTender.cahier_paiement_requis) {
+        const raw = parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10);
+        if (!raw || raw < 1) {
+          toast({
+            title: "Montant manquant",
+            description: "Indiquez un montant en FCFA pour le cahier des charges payant.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      const prix = newTender.cahier_paiement_requis
+        ? Math.max(1, parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10) || 0)
+        : null;
       await api.post("/api/appels-offres", {
-        ...newTender,
-        statut: 'draft'
+        reference: newTender.reference,
+        source_financement: newTender.source_financement,
+        titre: newTender.titre,
+        description: newTender.description,
+        modalites_soumission_physique: newTender.modalites_soumission_physique.trim() || null,
+        date_limite_depot: newTender.date_limite_depot,
+        statut: "draft",
+        cahier_paiement_requis: newTender.cahier_paiement_requis,
+        cahier_prix_xof: newTender.cahier_paiement_requis ? prix : null,
       });
       toast({ title: "Succès", description: "Appel d'offre créé en brouillon." });
       setIsCreateOpen(false);
-      setNewTender({ titre: "", description: "", date_limite_depot: "" });
+      setNewTender({
+        reference: "",
+        source_financement: "etat",
+        titre: "",
+        description: "",
+        modalites_soumission_physique: "",
+        date_limite_depot: "",
+        cahier_paiement_requis: false,
+        cahier_prix_xof: "",
+      });
       loadData();
     } catch (error: unknown) {
       console.error("Erreur création:", error);
@@ -389,7 +442,45 @@ export default function ResponsableDashboard() {
       toast({ title: "Publié", description: "L'appel d'offre est maintenant visible." });
       loadData();
     } catch (error) {
-      toast({ title: "Erreur", description: "Impossible de publier.", variant: "destructive" });
+      const message = getErrorMessage(error, "Impossible de publier.");
+      toast({ title: "Erreur", description: message, variant: "destructive" });
+    }
+  };
+
+  const openEditModalites = (ao: AppelOffre) => {
+    setAoForModalites(ao);
+    setDraftModalites(ao.modalites_soumission_physique ?? "");
+    setIsEditModalitesOpen(true);
+  };
+
+  const handleSaveModalites = async () => {
+    if (!api || !aoForModalites) return;
+    const t = draftModalites.trim();
+    if (aoForModalites.statut === "published" && t === "") {
+      toast({
+        title: "Champ requis",
+        description: "Renseignez les modalités de dépôt : elles doivent rester visibles sur la fiche publique.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingModalites(true);
+    try {
+      await api.put(`/api/appels-offres/${aoForModalites.id}`, {
+        modalites_soumission_physique: t || null,
+      });
+      toast({ title: "Enregistré", description: "Les modalités de dépôt des plis ont été mises à jour." });
+      setIsEditModalitesOpen(false);
+      setAoForModalites(null);
+      loadData();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Mise à jour impossible."),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingModalites(false);
     }
   };
 
@@ -635,7 +726,7 @@ export default function ResponsableDashboard() {
         const errors = responseData.errors;
         const errorList = Object.entries(errors)
           .map(([field, messages]: [string, string[]]) => {
-            const fieldName = field === 'departement' ? 'Département' :
+            const fieldName = field === 'departement' ? 'Direction' :
                             field === 'fonction' ? 'Fonction' :
                             field === 'telephone' ? 'Téléphone' :
                             field;
@@ -692,9 +783,9 @@ export default function ResponsableDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-100">
       <DashboardNavbar
-        title="Espace Responsable"
+        title="Espace PRM"
         onOpenProfile={() => {
           setAccountTab("profile");
           setIsAccountOpen(true);
@@ -705,10 +796,10 @@ export default function ResponsableDashboard() {
         }}
         onLogout={handleLogout}
       />
-      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
+      <div className="flex min-h-0 w-full flex-1 pt-16">
       
       {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+      <aside className="fixed bottom-0 left-0 top-16 z-30 flex w-64 flex-col border-r border-slate-200 bg-white shadow-sm">
         {/* Résumé profil (comme maquette) */}
         <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
           <div className="flex flex-col items-center text-center">
@@ -768,7 +859,7 @@ export default function ResponsableDashboard() {
       </aside>
 
       {/* CONTENU PRINCIPAL */}
-      <main className="flex-1 ml-64 overflow-y-auto h-screen">
+      <main className="ml-64 min-h-0 flex-1 overflow-y-auto">
         <div className="p-8">
         
         {/* En-tête de section dynamique */}
@@ -801,34 +892,189 @@ export default function ResponsableDashboard() {
         {activeTab === "overview" && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <Card className="border-none shadow-sm">
+              <Card
+                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setFilterStatut("tous");
+                  setActiveTab("appels-offres");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFilterStatut("tous");
+                    setActiveTab("appels-offres");
+                  }
+                }}
+                title="Voir tous mes appels d'offres"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-slate-100/60 to-transparent" />
+                </div>
                 <CardContent className="p-5">
-                  <p className="text-xs text-slate-500">Appels d'offres</p>
-                  <p className="text-2xl font-bold text-slate-800">{overviewStats.total}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Appels d'offres</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.total}</p>
+                      <p className="text-xs text-slate-400 mt-1">Total géré</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                      <Briefcase className="h-4 w-4" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="border-none shadow-sm">
+
+              <Card
+                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setFilterStatut("draft");
+                  setActiveTab("appels-offres");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFilterStatut("draft");
+                    setActiveTab("appels-offres");
+                  }
+                }}
+                title="Voir les appels d'offres en brouillon"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-amber-50/80 to-transparent" />
+                </div>
                 <CardContent className="p-5">
-                  <p className="text-xs text-slate-500">Brouillons</p>
-                  <p className="text-2xl font-bold text-slate-800">{overviewStats.draft}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Brouillons</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.draft}</p>
+                      <p className="text-xs text-slate-400 mt-1">À finaliser</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-700">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="border-none shadow-sm">
+
+              <Card
+                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setFilterStatut("published");
+                  setActiveTab("appels-offres");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFilterStatut("published");
+                    setActiveTab("appels-offres");
+                  }
+                }}
+                title="Voir les appels d'offres publiés"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-emerald-50/90 to-transparent" />
+                </div>
                 <CardContent className="p-5">
-                  <p className="text-xs text-slate-500">Publiés</p>
-                  <p className="text-2xl font-bold text-slate-800">{overviewStats.published}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Publiés</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.published}</p>
+                      <p className="text-xs text-slate-400 mt-1">En cours</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
+                      <Megaphone className="h-4 w-4" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="border-none shadow-sm">
+
+              <Card
+                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setFilterStatut("closed");
+                  setActiveTab("appels-offres");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setFilterStatut("closed");
+                    setActiveTab("appels-offres");
+                  }
+                }}
+                title="Voir les appels d'offres clôturés"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-slate-100/70 to-transparent" />
+                </div>
                 <CardContent className="p-5">
-                  <p className="text-xs text-slate-500">Clôturés</p>
-                  <p className="text-2xl font-bold text-slate-800">{overviewStats.closed}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Clôturés</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.closed}</p>
+                      <p className="text-xs text-slate-400 mt-1">Terminés</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                      <Archive className="h-4 w-4" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-              <Card className="border-none shadow-sm">
+
+              <Card
+                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveTab("statistiques")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setActiveTab("statistiques");
+                  }
+                }}
+                title="Aller aux statistiques"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                >
+                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
+                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-blue-50/90 to-transparent" />
+                </div>
                 <CardContent className="p-5">
-                  <p className="text-xs text-slate-500">Candidatures reçues</p>
-                  <p className="text-2xl font-bold text-slate-800">{overviewStats.candidatures}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Candidatures</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.candidatures}</p>
+                      <p className="text-xs text-slate-400 mt-1">Reçues au total</p>
+                    </div>
+                    <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
+                      <Users className="h-4 w-4" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -839,23 +1085,48 @@ export default function ResponsableDashboard() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-800">Actions rapides</h3>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => setIsCreateOpen(true)}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Button onClick={() => setIsCreateOpen(true)} className="justify-start">
                       <PlusCircle className="w-4 h-4 mr-2" />
-                      Nouvel appel d'offre
+                      Créer un appel d'offres
                     </Button>
-                    <Button variant="outline" onClick={() => setActiveTab("appels-offres")}>
+                    <Button variant="outline" onClick={() => setActiveTab("appels-offres")} className="justify-start">
                       <Briefcase className="w-4 h-4 mr-2" />
-                      Voir mes AO
+                      Gérer mes appels d'offres
                     </Button>
-                    <Button variant="outline" onClick={() => setActiveTab("statistiques")}>
+                    <Button variant="outline" onClick={() => setActiveTab("statistiques")} className="justify-start">
                       <BarChart3 className="w-4 h-4 mr-2" />
-                      Statistiques
+                      Voir les statistiques
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAccountOpen(true)}
+                      className="justify-start"
+                      title="Ouvrir mon profil et mes paramètres"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Mon profil / Paramètres
                     </Button>
                   </div>
                   {overviewStats.draft > 0 && (
-                    <div className="mt-4 p-3 rounded-md bg-amber-50 border border-amber-100 text-sm text-amber-900">
-                      Vous avez <strong>{overviewStats.draft}</strong> AO en brouillon. Pensez à ajouter les documents (cahier des charges + règlement) avant publication.
+                    <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                          <AlertCircle className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-amber-900">À finaliser</p>
+                          <p className="text-sm text-amber-900/90 mt-1">
+                            Vous avez <strong>{overviewStats.draft}</strong> appel(s) d&apos;offres en brouillon.
+                            Ajoutez l&apos;avis d&apos;appel d&apos;offres et le cahier des charges avant publication.
+                          </p>
+                          <div className="mt-3">
+                            <Button size="sm" variant="outline" className="border-amber-200 bg-white hover:bg-white" onClick={() => setActiveTab("appels-offres")}>
+                              Voir les brouillons
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -871,21 +1142,36 @@ export default function ResponsableDashboard() {
                   </div>
                   <div className="space-y-3">
                     {Array.isArray(appelsOffres) && appelsOffres.slice(0, 5).map((ao) => (
-                      <div key={ao.id} className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                      <div key={ao.id} className="group flex items-center justify-between gap-3 p-3 border rounded-lg bg-white hover:bg-slate-50/60 transition-colors">
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-800 truncate">{ao.titre}</div>
-                          <div className="text-xs text-slate-500 truncate">{ao.reference}</div>
+                          <div className="font-medium text-slate-800 truncate group-hover:text-slate-900">{ao.titre}</div>
+                          <div className="text-xs text-slate-500 truncate mt-0.5 font-mono">{ao.reference}</div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {getStatutBadge(ao.statut)}
-                          <Button size="sm" variant="outline" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
+                          <Button size="sm" variant="outline" className="h-8" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
+                            <FileText className="w-3 h-3 mr-1" />
                             Détails
                           </Button>
                         </div>
                       </div>
                     ))}
                     {Array.isArray(appelsOffres) && appelsOffres.length === 0 && (
-                      <p className="text-sm text-muted-foreground">Aucun appel d'offre pour le moment.</p>
+                      <div className="rounded-lg border border-dashed bg-white p-6 text-center">
+                        <div className="mx-auto h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+                          <Briefcase className="h-5 w-5" />
+                        </div>
+                        <p className="mt-3 text-sm font-medium text-slate-800">Aucun appel d'offres pour le moment</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Créez votre premier appel d&apos;offres pour commencer à recevoir des candidatures.
+                        </p>
+                        <div className="mt-4 flex justify-center">
+                          <Button onClick={() => setIsCreateOpen(true)}>
+                            <PlusCircle className="w-4 h-4 mr-2" />
+                            Créer un appel d'offres
+                          </Button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -988,6 +1274,17 @@ export default function ResponsableDashboard() {
                                         >
                                           <FileText className="w-3 h-3 mr-1" /> Détails
                                         </Button>
+                                        {(ao.statut === "draft" || ao.statut === "published") && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8"
+                                            onClick={() => openEditModalites(ao)}
+                                            title="Modalités de dépôt des plis (présentiel)"
+                                          >
+                                            <MapPin className="w-3 h-3 mr-1" /> Modalités
+                                          </Button>
+                                        )}
                                         {ao.statut === 'draft' && (
                                             <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handlePublish(ao.id)} title="Publier">
                                                 <Megaphone className="w-3 h-3 mr-1" /> Publier
@@ -1059,11 +1356,44 @@ export default function ResponsableDashboard() {
 
       {/* Modale Création */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[520px]">
             <DialogHeader>
                 <DialogTitle>Créer un Appel d'Offre</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreateTender} className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Référence de l'appel d'offre</Label>
+                  <Input
+                    value={newTender.reference}
+                    onChange={(e) => setNewTender({ ...newTender, reference: e.target.value })}
+                    required
+                    placeholder="Ex: DDD-AO-2026-001"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Référence unique saisie manuellement (vous ou l&apos;administrateur).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Source de financement</Label>
+                  <Select
+                    value={newTender.source_financement}
+                    onValueChange={(v) =>
+                      setNewTender({ ...newTender, source_financement: v as SourceFinancement })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choisir..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label>Titre de l'appel d'offre</Label>
@@ -1094,11 +1424,102 @@ export default function ResponsableDashboard() {
                         className="min-h-[100px]"
                     />
                 </div>
+                <div className="space-y-2">
+                  <Label>Modalités de dépôt des plis (soumission physique)</Label>
+                  <Textarea
+                    value={newTender.modalites_soumission_physique}
+                    onChange={(e) => setNewTender({ ...newTender, modalites_soumission_physique: e.target.value })}
+                    placeholder="Adresse du guichet, horaires, salle de dépôt, téléphone du service des marchés…"
+                    className="min-h-[88px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Obligatoire avant publication : elles s’affichent sur la fiche publique. Sans texte, un message neutre apparaît côté portail.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="text-sm font-medium">Cahier des charges payant</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        L&apos;avis d&apos;appel d&apos;offres reste gratuit. Indiquez un montant si le cahier des charges n&apos;est accessible qu&apos;après paiement (Wave / Orange Money).
+                      </p>
+                    </div>
+                    <Switch
+                      checked={newTender.cahier_paiement_requis}
+                      onCheckedChange={(v) =>
+                        setNewTender((prev) => ({
+                          ...prev,
+                          cahier_paiement_requis: v,
+                          cahier_prix_xof: v ? prev.cahier_prix_xof : "",
+                        }))
+                      }
+                    />
+                  </div>
+                  {newTender.cahier_paiement_requis && (
+                    <div className="space-y-2">
+                      <Label htmlFor="prm_cahier_prix_xof">Montant (FCFA)</Label>
+                      <Input
+                        id="prm_cahier_prix_xof"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={newTender.cahier_prix_xof}
+                        onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
+                        placeholder="Ex: 25000"
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Annuler</Button>
                     <Button type="submit">Créer le brouillon</Button>
                 </DialogFooter>
             </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditModalitesOpen}
+        onOpenChange={(open) => {
+          setIsEditModalitesOpen(open);
+          if (!open) setAoForModalites(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[540px]">
+          <DialogHeader>
+            <DialogTitle>Modalités de dépôt des plis (présentiel)</DialogTitle>
+            <DialogDescription>
+              {aoForModalites && (
+                <>
+                  <span className="font-mono text-foreground">{aoForModalites.reference}</span> — {aoForModalites.titre}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="prm_modalites_depot">Lieu, horaires, contact du service des marchés</Label>
+            <Textarea
+              id="prm_modalites_depot"
+              value={draftModalites}
+              onChange={(e) => setDraftModalites(e.target.value)}
+              className="min-h-[140px]"
+              placeholder="Ex. : accueil du service des marchés, jours et heures, adresse, téléphone…"
+            />
+            {aoForModalites?.statut === "published" && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md px-2 py-1.5">
+                Cet appel d’offre est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditModalitesOpen(false)}>
+              Annuler
+            </Button>
+            <Button type="button" onClick={handleSaveModalites} disabled={savingModalites}>
+              {savingModalites ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1225,6 +1646,26 @@ export default function ResponsableDashboard() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-6 rounded-lg border bg-slate-50/80 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                        <Award className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-slate-800">Références professionnelles</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                          Déclaratif — clients ou marchés antérieurs indiqués par le fournisseur.
+                        </p>
+                        {selectedCandidature.fournisseur.references_professionnelles?.trim() ? (
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                            {selectedCandidature.fournisseur.references_professionnelles}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">Non renseigné</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1258,18 +1699,12 @@ export default function ResponsableDashboard() {
                         <p className="text-sm text-muted-foreground">Chargement des documents...</p>
                       </div>
                     </div>
-                  ) : legalDocuments.length === 0 ? (
-                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
-                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                      <p className="text-muted-foreground">Aucun document légal disponible pour ce fournisseur.</p>
-                    </div>
                   ) : (
                     <div className="space-y-3">
-                      {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                      {ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES.map((categorie) => {
                         const docs = legalDocuments.filter(d => d.categorie === categorie);
-                        const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
-                          : categorie === 'NINEA' ? 'NINEA' 
-                          : 'Quitus Fiscal';
+                        const categorieLabel = legalDocumentLabel(categorie);
+                        const isAutre = categorie === "AUTRE";
                         
                         return (
                           <div key={categorie} className="border rounded-lg p-4 bg-white">
@@ -1278,6 +1713,10 @@ export default function ResponsableDashboard() {
                               {docs.length > 0 ? (
                                 <Badge className="bg-green-100 text-green-700 border-none">
                                   {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : isAutre ? (
+                                <Badge variant="outline" className="text-slate-500 border-slate-200">
+                                  Facultatif — non fourni
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
@@ -1477,7 +1916,7 @@ export default function ResponsableDashboard() {
               </Card>
 
               {/* Avertissement si documents légaux manquants */}
-              {legalDocuments.length < 3 && (
+              {missingLegalCategories(legalDocuments).length > 0 && (
                 <Card className="border-none shadow-sm bg-orange-50 border-orange-200">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
@@ -1485,8 +1924,9 @@ export default function ResponsableDashboard() {
                       <div>
                         <p className="text-sm font-semibold text-orange-800 mb-1">Documents légaux incomplets</p>
                         <p className="text-xs text-orange-700">
-                          Ce fournisseur n'a pas uploadé tous les documents légaux requis (RCCM, NINEA, Quitus Fiscal). 
-                          Il est recommandé de rejeter cette candidature ou de demander la complétion des documents.
+                          Ce fournisseur n'a pas fourni tous les documents légaux obligatoires (RCCM, NINEA, quitus fiscal,
+                          attestations IPRES, CSS, non-faillite, ARCOP). Il est recommandé de demander la complétion du dossier
+                          avant de trancher.
                         </p>
                       </div>
                     </div>
@@ -1640,7 +2080,7 @@ export default function ResponsableDashboard() {
                       <div className="text-sm text-slate-500">{user?.email}</div>
                     </div>
                     <Badge variant="outline" className="text-xs border-primary/20 text-primary bg-primary/5">
-                      Responsable Marché
+                      PRM
                     </Badge>
                   </div>
                 </div>
@@ -1651,7 +2091,7 @@ export default function ResponsableDashboard() {
                 <form onSubmit={handleProfileUpdate} className="grid gap-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                      <Label>Département</Label>
+                      <Label>Direction</Label>
                       <Input
                         value={profileForm.departement}
                         onChange={(e) => setProfileForm({ ...profileForm, departement: e.target.value })}

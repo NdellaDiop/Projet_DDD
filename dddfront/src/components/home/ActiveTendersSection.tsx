@@ -5,35 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Calendar, Tag, Clock, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { sourceFinancementLabel } from "@/lib/appelOffreFinancement";
 
 interface AppelOffre {
   id: number;
   responsable_marche_id: number;
   titre: string;
   description: string;
-  date_publication: string; // Sera une chaîne de date/heure ISO
-  date_limite_depot: string; // Sera une chaîne de date/heure ISO
-  statut: 'draft' | 'published' | 'closed' | 'archived';
-  // Ajoutez d'autres champs si votre API en renvoie (ex: reference, category, budget si non simulés)
+  date_publication: string;
+  date_limite_depot: string;
+  statut: "draft" | "published" | "closed" | "archived";
   created_at: string;
   updated_at: string;
+  reference?: string;
+  source_financement?: string;
+  source_financement_label?: string | null;
 }
-
-const getCategoryColor = (category: string) => {
-  // Cette fonction dépendra de la façon dont les catégories sont gérées dans votre backend
-  // Pour l'instant, nous pouvons la simplifier ou la lier à d'autres propriétés de l'appel d'offre
-  // ou la retirer si la catégorie n'est pas directement retournée
-  switch (category) {
-    case "Fournitures":
-      return "bg-info/10 text-info border-info/20";
-    case "Services":
-      return "bg-primary/10 text-primary border-primary/20";
-    case "Travaux":
-      return "bg-accent/20 text-accent-foreground border-accent/30";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-};
 
 const getUrgencyColor = (daysLeft: number) => {
   if (daysLeft <= 7) return "text-destructive";
@@ -45,7 +32,6 @@ const ActiveTendersSection = () => {
   const { api } = useAuth();
   const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAppelsOffres = async () => {
@@ -75,7 +61,7 @@ const ActiveTendersSection = () => {
         setAppelsOffres(fetchedTenders.slice(0, 4));
       } catch (err: unknown) {
         console.error("Erreur lors de la récupération des appels d'offres:", err);
-        setError(null); // On ne veut pas afficher d'erreur critique sur la home, juste pas d'appels d'offres
+        setAppelsOffres([]);
       } finally {
         setLoading(false);
       }
@@ -97,18 +83,8 @@ const ActiveTendersSection = () => {
   if (loading) {
     return (
       <section className="py-20 md:py-28 bg-muted/50">
-        <div className="container text-center">
+        <div className="container max-w-5xl text-center">
           <p className="text-lg text-muted-foreground">Chargement des appels d'offres...</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="py-20 md:py-28 bg-muted/50">
-        <div className="container text-center">
-          <p className="text-lg text-destructive">{error}</p>
         </div>
       </section>
     );
@@ -117,7 +93,7 @@ const ActiveTendersSection = () => {
   if (appelsOffres.length === 0) {
     return (
       <section className="py-20 md:py-28 bg-muted/50">
-        <div className="container text-center">
+        <div className="container max-w-5xl text-center">
           <p className="text-lg text-muted-foreground">Aucun appel d'offre actif pour le moment.</p>
         </div>
       </section>
@@ -126,7 +102,7 @@ const ActiveTendersSection = () => {
 
   return (
     <section className="py-20 md:py-28 bg-muted/50">
-      <div className="container">
+      <div className="container max-w-5xl">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
           <div>
@@ -137,7 +113,7 @@ const ActiveTendersSection = () => {
               Appels d'Offres en Cours
             </h2>
             <p className="mt-3 text-muted-foreground text-lg max-w-xl">
-              Consultez les dernières opportunités de marchés publics et soumissionnez en ligne.
+              Consultez les avis publiés et les modalités de dépôt des plis (présentiel) pour chaque marché.
             </p>
           </div>
           <Button variant="outline" asChild className="shrink-0">
@@ -152,11 +128,6 @@ const ActiveTendersSection = () => {
         <div className="grid gap-6 md:grid-cols-2">
           {appelsOffres.map((tender) => {
             const daysLeft = calculateDaysLeft(tender.date_limite_depot);
-            const simulatedCategory = "Fournitures"; 
-            const simulatedReference =
-              typeof tender === "object" && tender !== null && "reference" in tender
-                ? ((tender as { reference?: string }).reference ?? `AO-${tender.id}`)
-                : `AO-${tender.id}`;
 
             return (
               <Link
@@ -167,15 +138,12 @@ const ActiveTendersSection = () => {
                 <article className="h-full rounded-2xl border border-border bg-card p-6 transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1">
                   {/* Header */}
                   <div className="flex items-start justify-between gap-4 mb-4">
-                    <Badge
-                      variant="outline"
-                      className={`${getCategoryColor(simulatedCategory)} font-medium`}
-                    >
+                    <Badge variant="outline" className="border-border bg-muted/50 text-muted-foreground font-medium">
                       <Tag className="mr-1.5 h-3 w-3" />
-                      {simulatedCategory}
+                      Marché public
                     </Badge>
                     <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded">
-                      {simulatedReference}
+                      {tender.reference?.trim() ? tender.reference : `AO-${tender.id}`}
                     </span>
                   </div>
 
@@ -188,9 +156,13 @@ const ActiveTendersSection = () => {
                   <div className="grid grid-cols-2 gap-4 mb-5">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Building2 className="h-4 w-4 shrink-0" />
-                      {/* Votre API ne renvoie pas de budget directement. Si vous voulez l'afficher,
-                          il faudra l'ajouter au modèle AppelOffre dans le backend ou le simuler ici. */}
-                      <span className="truncate">Budget : Sur demande</span>
+                      <span className="truncate">
+                        Financement :{" "}
+                        {sourceFinancementLabel(
+                          tender.source_financement,
+                          tender.source_financement_label ?? null
+                        )}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="h-4 w-4 shrink-0" />
@@ -205,7 +177,7 @@ const ActiveTendersSection = () => {
                       {daysLeft} jours restants
                     </div>
                     <span className="inline-flex items-center gap-1 text-sm font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                      Consulter
+                      Consulter les avis
                       <ArrowRight className="h-4 w-4" />
                     </span>
                   </div>

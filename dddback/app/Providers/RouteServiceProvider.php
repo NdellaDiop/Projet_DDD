@@ -25,7 +25,21 @@ class RouteServiceProvider extends ServiceProvider
     public function boot(): void
     {
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            /*
+             * Le front (SPA) enchaîne plusieurs appels au chargement (dashboard fournisseur :
+             * liste + détails par candidature, documents, etc.). 60/min/User déclenchait
+             * facilement du 429 (Too Many Requests).
+             */
+            $authenticated = $request->user() !== null;
+            $perMinute = $authenticated
+                ? max(60, min((int) env('API_RATE_LIMIT_PER_MINUTE', 400), 5000))
+                : max(60, min((int) env('API_RATE_LIMIT_GUEST_PER_MINUTE', 150), 2000));
+
+            $key = $authenticated
+                ? 'api:user:'.$request->user()->id
+                : 'api:ip:'.$request->ip();
+
+            return Limit::perMinute($perMinute)->by($key);
         });
 
         $this->routes(function () {

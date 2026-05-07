@@ -8,6 +8,7 @@ use App\Models\LogActivite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\DocumentResource;
+use Illuminate\Validation\Rule;
 
 class DocumentController extends Controller
 {
@@ -17,7 +18,18 @@ class DocumentController extends Controller
 
         $request->validate([
             'file' => 'required|file|max:10240',
-            'categorie' => 'required|in:RCCM,NINEA,QUITUS_FISCAL,OFFRE_TECHNIQUE,OFFRE_FINANCIERE,PIECE_ADMINISTRATIVE,CAHIER_DES_CHARGES,REGLEMENT_CONSULTATION,ANNEXE_AO',
+            'categorie' => [
+                'required',
+                Rule::in(array_merge(Document::allLegalUploadCategories(), [
+                    'OFFRE_TECHNIQUE',
+                    'OFFRE_FINANCIERE',
+                    'PIECE_ADMINISTRATIVE',
+                    'AVIS_APPEL_OFFRES',
+                    'CAHIER_DES_CHARGES',
+                    'REGLEMENT_CONSULTATION',
+                    'ANNEXE_AO',
+                ])),
+            ],
             'candidature_id' => 'nullable|exists:candidatures,id',
             'appel_offre_id' => 'nullable|exists:appels_offres,id',
         ]);
@@ -53,7 +65,7 @@ class DocumentController extends Controller
         }
         
         $documents = Document::where('user_id', $user->id)
-            ->whereIn('categorie', ['RCCM', 'NINEA', 'QUITUS_FISCAL'])
+            ->whereIn('categorie', Document::allLegalUploadCategories())
             ->latest()
             ->get();
 
@@ -73,7 +85,7 @@ class DocumentController extends Controller
 
         $request->validate([
             'file' => 'required|file|max:10240',
-            'categorie' => 'required|in:RCCM,NINEA,QUITUS_FISCAL',
+            'categorie' => ['required', Rule::in(Document::allLegalUploadCategories())],
         ]);
 
         $file = $request->file('file');
@@ -212,7 +224,7 @@ class DocumentController extends Controller
         }
         
         $documents = Document::where('user_id', $userId)
-            ->whereIn('categorie', ['RCCM', 'NINEA', 'QUITUS_FISCAL'])
+            ->whereIn('categorie', Document::allLegalUploadCategories())
             ->latest()
             ->get();
         

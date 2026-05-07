@@ -5,7 +5,7 @@ import { ArrowRight, UserPlus, FileText } from "lucide-react";
 const CTASection = () => {
   return (
     <section className="py-20 md:py-28">
-      <div className="container">
+      <div className="container max-w-5xl">
         <div className="relative overflow-hidden rounded-3xl gradient-hero p-10 md:p-16">
           {/* Background decorations */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-accent/20 rounded-full blur-3xl" />
@@ -45,7 +45,7 @@ const CTASection = () => {
                 { value: "Gratuit", label: "Inscription et consultation" },
                 { value: "Sécurisé", label: "Données protégées" },
                 { value: "Simple", label: "Interface intuitive" },
-                { value: "Rapide", label: "Soumission en ligne" },
+                { value: "Clair", label: "Modalités de dépôt sur chaque avis" },
               ].map((item, index) => (
                 <div
                   key={index}

@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext"; // Importez useAuth
 import { toast } from "@/components/ui/use-toast"; // Importez toast
+import { sourceFinancementLabel } from "@/lib/appelOffreFinancement";
 
 // Définissez une interface pour le modèle AppelOffre de votre backend
 // Assurez-vous que les noms des champs correspondent exactement à ce que votre API renvoie
@@ -37,7 +38,9 @@ interface AppelOffre {
   statut: 'draft' | 'published' | 'closed' | 'archived';
   created_at?: string;
   updated_at?: string;
-  reference?: string; // Ajout de la référence
+  reference?: string;
+  source_financement?: string;
+  source_financement_label?: string;
 }
 
 const getStatusBadge = (status: AppelOffre['statut']) => {
@@ -269,8 +272,13 @@ setAppelsOffres(tenders);
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
                               <div className="flex items-center gap-2">
                                 <Building2 className="h-4 w-4" />
-                                {/* Budget non spécifié si non retourné par le backend */}
-                                <span>Budget : Sur demande</span>
+                                <span>
+                                  Financement :{" "}
+                                  {sourceFinancementLabel(
+                                    tender.source_financement,
+                                    tender.source_financement_label ?? null
+                                  )}
+                                </span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4" />
@@ -303,7 +311,7 @@ setAppelsOffres(tenders);
                               className="w-full lg:w-auto"
                             >
                               <FileText className="mr-2 h-4 w-4" />
-                              Consulter
+                              Consulter les avis
                               <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
                           </div>

@@ -54,7 +54,8 @@ import {
   Send,
   Filter,
   Download,
-  FileClock
+  FileClock,
+  Award
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -68,8 +69,15 @@ import {
 } from "@/components/ui/dialog";
 import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { exportData } from "@/lib/exportUtils";
 import { generatePVReport } from "@/lib/reportUtils";
+import {
+  ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES,
+  legalDocumentLabel,
+  missingLegalCategories,
+} from "@/lib/legalDocuments";
+import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
 import AuditHistory from "@/components/AuditHistory";
 import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
 import AdvancedStats from "@/components/AdvancedStats";
@@ -118,6 +126,7 @@ interface Fournisseur {
   date_inscription: string;
   nombre_candidatures: number;
   domaines_activite?: string[];
+  references_professionnelles?: string | null;
 }
 
 interface ResponsableMarche {
@@ -159,8 +168,11 @@ interface Suggestion {
 interface AppelOffreAdmin {
   id: number;
   reference: string;
+  source_financement?: string;
+  source_financement_label?: string;
   titre: string;
   description: string;
+  modalites_soumission_physique?: string | null;
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
   candidatures_count?: number;
@@ -170,6 +182,8 @@ interface AppelOffreAdmin {
   } | null;
   date_publication?: string;
   date_cloture?: string;
+  cahier_paiement_requis?: boolean;
+  cahier_prix_xof?: number | null;
 }
 
 interface CandidatureAdmin {
@@ -178,6 +192,7 @@ interface CandidatureAdmin {
     id: number;
     nom_entreprise: string;
     email_contact: string;
+    references_professionnelles?: string | null;
   };
   date_soumission: string;
   statut: string;
@@ -253,10 +268,19 @@ const AdminDashboard: React.FC = () => {
   const [mesAppelsOffres, setMesAppelsOffres] = useState<AppelOffreAdmin[]>([]);
   const [isCreateAOOpen, setIsCreateAOOpen] = useState(false);
   const [newTender, setNewTender] = useState({
+    reference: "",
+    source_financement: "etat" as SourceFinancement,
     titre: "",
     description: "",
+    modalites_soumission_physique: "",
     date_limite_depot: "",
+    cahier_paiement_requis: false,
+    cahier_prix_xof: "" as string,
   });
+  const [isEditModalitesOpen, setIsEditModalitesOpen] = useState(false);
+  const [aoForModalites, setAoForModalites] = useState<AppelOffreAdmin | null>(null);
+  const [draftModalites, setDraftModalites] = useState("");
+  const [savingModalites, setSavingModalites] = useState(false);
   const [selectedAOForCandidatures, setSelectedAOForCandidatures] = useState<AppelOffreAdmin | null>(null);
   const [candidaturesAO, setCandidaturesAO] = useState<CandidatureAdmin[]>([]);
   const [isViewCandidatesOpen, setIsViewCandidatesOpen] = useState(false);
@@ -508,7 +532,7 @@ const AdminDashboard: React.FC = () => {
         setPagination(prev => ({ ...prev, responsables: { ...prev.responsables, totalItems: data.length, totalPages: 1 } }));
       }
     } catch (error) {
-      console.error("Erreur chargement Responsables:", error);
+      console.error("Erreur chargement PRM:", error);
     }
   }, [api, pagination.responsables.perPage, pagination.responsables.currentPage, debouncedSearchTerm, updatePaginationState]);
 
@@ -626,24 +650,24 @@ const AdminDashboard: React.FC = () => {
         telephone: newResponsable.telephone,
       });
 
-      toast({ title: "Succès", description: "Responsable créé avec succès." });
+      toast({ title: "Succès", description: "Personne responsable du marché (PRM) créée avec succès." });
       
       setIsCreateResponsableOpen(false);
       setNewResponsable({ name: "", email: "", password: "", departement: "", fonction: "", telephone: "" });
       fetchDashboardData();
     } catch (error: unknown) {
-      console.error("Erreur création responsable:", error);
+      console.error("Erreur création PRM:", error);
       toast({ title: "Erreur", description: "Erreur lors de la création.", variant: "destructive" });
     }
   };
 
   const handleDeleteResponsable = async (id: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce responsable ?")) return;
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette personne responsable du marché (PRM) ?")) return;
 
     try {
       if (!api) throw new Error("API non disponible");
       await api.delete(`${API_BASE_URL}/api/admin/responsables/${id}`);
-      toast({ title: "Succès", description: "Responsable supprimé." });
+      toast({ title: "Succès", description: "Personne responsable du marché (PRM) supprimée." });
       fetchDashboardData();
     } catch (error: unknown) {
       toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
@@ -675,7 +699,7 @@ const AdminDashboard: React.FC = () => {
         telephone: editingResponsable.telephone,
       });
 
-      toast({ title: "Succès", description: "Responsable mis à jour." });
+      toast({ title: "Succès", description: "Personne responsable du marché (PRM) mise à jour." });
       setIsEditResponsableOpen(false);
       fetchDashboardData();
     } catch (error: unknown) {
@@ -829,13 +853,43 @@ const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!api) return;
     try {
+      if (newTender.cahier_paiement_requis) {
+        const raw = parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10);
+        if (!raw || raw < 1) {
+          toast({
+            title: "Montant manquant",
+            description: "Indiquez un montant en FCFA pour le cahier des charges payant.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      const prix = newTender.cahier_paiement_requis
+        ? Math.max(1, parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10) || 0)
+        : null;
       await api.post("/api/appels-offres", {
-        ...newTender,
-        statut: 'draft'
+        reference: newTender.reference,
+        source_financement: newTender.source_financement,
+        titre: newTender.titre,
+        description: newTender.description,
+        modalites_soumission_physique: newTender.modalites_soumission_physique.trim() || null,
+        date_limite_depot: newTender.date_limite_depot,
+        statut: "draft",
+        cahier_paiement_requis: newTender.cahier_paiement_requis,
+        cahier_prix_xof: newTender.cahier_paiement_requis ? prix : null,
       });
       toast({ title: "Succès", description: "Appel d'offre créé en brouillon." });
       setIsCreateAOOpen(false);
-      setNewTender({ titre: "", description: "", date_limite_depot: "" });
+      setNewTender({
+        reference: "",
+        source_financement: "etat",
+        titre: "",
+        description: "",
+        modalites_soumission_physique: "",
+        date_limite_depot: "",
+        cahier_paiement_requis: false,
+        cahier_prix_xof: "",
+      });
       loadMesAppelsOffres();
     } catch (error: unknown) {
       console.error("Erreur création:", error);
@@ -863,7 +917,44 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Publié", description: "L'appel d'offre est maintenant visible." });
       loadMesAppelsOffres();
     } catch (error) {
-      toast({ title: "Erreur", description: "Impossible de publier.", variant: "destructive" });
+      toast({ title: "Erreur", description: getErrorMessage(error, "Impossible de publier."), variant: "destructive" });
+    }
+  };
+
+  const openEditModalites = (ao: AppelOffreAdmin) => {
+    setAoForModalites(ao);
+    setDraftModalites(ao.modalites_soumission_physique ?? "");
+    setIsEditModalitesOpen(true);
+  };
+
+  const handleSaveModalites = async () => {
+    if (!api || !aoForModalites) return;
+    const t = draftModalites.trim();
+    if (aoForModalites.statut === "published" && t === "") {
+      toast({
+        title: "Champ requis",
+        description: "Renseignez les modalités de dépôt : elles doivent rester visibles sur la fiche publique.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingModalites(true);
+    try {
+      await api.put(`/api/appels-offres/${aoForModalites.id}`, {
+        modalites_soumission_physique: t || null,
+      });
+      toast({ title: "Enregistré", description: "Les modalités de dépôt des plis ont été mises à jour." });
+      setIsEditModalitesOpen(false);
+      setAoForModalites(null);
+      loadMesAppelsOffres();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Mise à jour impossible."),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingModalites(false);
     }
   };
 
@@ -1094,7 +1185,7 @@ const AdminDashboard: React.FC = () => {
             { header: 'Date Publication', key: 'date_publication', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
             { header: 'Date Clôture', key: 'date_cloture', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
             { header: 'Candidatures', key: 'nombre_candidatures' },
-            { header: 'Responsable', key: 'responsable.name' },
+            { header: 'Personne responsable du marché (PRM)', key: 'responsable.name' },
           ];
           break;
         case 'fournisseurs':
@@ -1115,12 +1206,12 @@ const AdminDashboard: React.FC = () => {
         case 'responsables':
           endpoint = '/api/admin/responsables-dashboard';
           fileName = 'responsables_export';
-          title = 'Liste des Responsables de Marché';
+          title = 'Liste des PRM';
           columns = [
             { header: 'ID', key: 'id' },
             { header: 'Nom', key: 'user.name' },
             { header: 'Email', key: 'user.email' },
-            { header: 'Département', key: 'departement' },
+            { header: 'Direction', key: 'departement' },
             { header: 'Fonction', key: 'fonction' },
             { header: 'Téléphone', key: 'telephone' },
             { header: 'Appels d\'Offres', key: 'nombre_appels_offres' },
@@ -1282,7 +1373,7 @@ const AdminDashboard: React.FC = () => {
       bgColor: "bg-purple-50",
     },
     {
-      title: "Responsables",
+      title: "Personnes responsables du marché (PRM)",
       value: stats.totalResponsables,
       subtitle: "Comptes actifs",
       icon: User,
@@ -1296,15 +1387,15 @@ const AdminDashboard: React.FC = () => {
   // ============================================
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-100">
       <DashboardNavbar
         title="Espace Administrateur"
         onOpenProfile={() => setIsAccountProfileOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onLogout={handleLogout}
       />
-      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
-      <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+      <div className="flex min-h-0 w-full flex-1 pt-16">
+      <aside className="fixed bottom-0 left-0 top-16 z-30 flex w-64 flex-col border-r border-slate-200 bg-white shadow-sm">
         <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
           <div className="flex flex-col items-center text-center">
             <div
@@ -1358,7 +1449,7 @@ const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab("responsables")}
           >
             <Users className="w-4 h-4 mr-3" />
-            Responsables
+            PRM
           </Button>
 
           <Button
@@ -1399,7 +1490,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 ml-64 overflow-y-auto h-screen">
+      <main className="ml-64 min-h-0 flex-1 overflow-y-auto">
         <div className="p-8">
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
@@ -1408,7 +1499,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'vue-ensemble' && "Vue d'ensemble"}
                 {activeTab === 'appels-offres' && "Gestion des Appels d'Offres"}
                 {activeTab === 'fournisseurs' && "Annuaire Fournisseurs"}
-                {activeTab === 'responsables' && "Équipe Responsables Marché"}
+                {activeTab === 'responsables' && "Équipe PRM"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
                 {activeTab === 'gestion-ao' && "Gestion Appels d'Offres"}
                 {activeTab === 'audit' && "Historique des modifications"}
@@ -1417,7 +1508,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'vue-ensemble' && "Métriques clés et activités récentes"}
                 {activeTab === 'appels-offres' && "Suivez et gérez tous les appels d'offres de la plateforme"}
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
-                {activeTab === 'responsables' && "Administrez les comptes des responsables de marché"}
+                {activeTab === 'responsables' && "Administrez les comptes des PRM"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres et candidatures"}
                 {activeTab === 'audit' && "Trace des actions effectuées sur la plateforme"}
@@ -1429,7 +1520,7 @@ const AdminDashboard: React.FC = () => {
               {activeTab === 'responsables' && (
                   <Button onClick={() => setIsCreateResponsableOpen(true)}>
                     <PlusCircle className="w-4 h-4 mr-2" />
-                    Nouveau Responsable
+                    Nouveau PRM
                   </Button>
               )}
                {activeTab === 'fournisseurs' && (
@@ -1637,7 +1728,7 @@ const AdminDashboard: React.FC = () => {
                         <TableHead className="font-semibold">Titre</TableHead>
                         <TableHead className="font-semibold">Statut</TableHead>
                         <TableHead className="font-semibold">Clôture</TableHead>
-                        <TableHead className="font-semibold">Responsable</TableHead>
+                        <TableHead className="font-semibold">Personne responsable du marché (PRM)</TableHead>
                         <TableHead className="text-right font-semibold">Candidatures</TableHead>
                         <TableHead className="text-right font-semibold">Actions</TableHead>
                       </TableRow>
@@ -1807,7 +1898,7 @@ const AdminDashboard: React.FC = () => {
                          <CardContent className="mt-4 space-y-3">
                              <div className="grid grid-cols-2 gap-2 text-sm">
                                  <div className="flex flex-col">
-                                     <span className="text-xs text-muted-foreground">Département</span>
+                                     <span className="text-xs text-muted-foreground">Direction</span>
                                      <span className="font-medium">{r.departement}</span>
                                  </div>
                                  <div className="flex flex-col">
@@ -1908,7 +1999,7 @@ const AdminDashboard: React.FC = () => {
                         <TableHead className="font-semibold">Titre</TableHead>
                         <TableHead className="font-semibold">Date Limite</TableHead>
                         <TableHead className="font-semibold">Statut</TableHead>
-                        <TableHead className="font-semibold">Responsable</TableHead>
+                        <TableHead className="font-semibold">Personne responsable du marché (PRM)</TableHead>
                         <TableHead className="font-semibold">Candidatures</TableHead>
                         <TableHead className="text-right font-semibold">Actions</TableHead>
                       </TableRow>
@@ -1948,8 +2039,19 @@ const AdminDashboard: React.FC = () => {
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {!ao.responsable_marche_id && (
-                                <Button size="sm" variant="outline" className="h-8 border border-primary text-primary hover:bg-primary/10" onClick={() => handleOpenAssignModal(ao)} title="Assigner à un responsable">
+                                <Button size="sm" variant="outline" className="h-8 border border-primary text-primary hover:bg-primary/10" onClick={() => handleOpenAssignModal(ao)} title="Assigner à une personne responsable du marché (PRM)">
                                   <User className="w-3 h-3 mr-1" /> Assigner
+                                </Button>
+                              )}
+                              {(ao.statut === "draft" || ao.statut === "published") && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8"
+                                  onClick={() => openEditModalites(ao)}
+                                  title="Modalités de dépôt des plis (présentiel)"
+                                >
+                                  <MapPin className="w-3 h-3 mr-1" /> Modalités
                                 </Button>
                               )}
                               {ao.statut === 'draft' && (
@@ -2000,10 +2102,10 @@ const AdminDashboard: React.FC = () => {
       <Dialog open={isCreateResponsableOpen} onOpenChange={setIsCreateResponsableOpen}>
         <DialogContent className="sm:max-w-[600px]"> {/* Modale plus large */}
           <DialogHeader>
-            <DialogTitle>Ajouter un Responsable Marché</DialogTitle>
+            <DialogTitle>Ajouter un PRM</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateResponsable} className="grid gap-4 py-4">
-            
+
             {/* Ligne 1 : Nom et Email */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -2049,10 +2151,10 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Ligne 3 : Département et Mot de passe */}
+            {/* Ligne 3 : Direction et Mot de passe */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="departement">Département</Label>
+                  <Label htmlFor="departement">Direction</Label>
                   <Input
                     id="departement"
                     value={newResponsable.departement}
@@ -2073,7 +2175,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <DialogFooter>
-              <Button type="submit">Créer le compte</Button>
+              <Button type="submit">Créer le PRM</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2083,7 +2185,7 @@ const AdminDashboard: React.FC = () => {
       <Dialog open={isEditResponsableOpen} onOpenChange={setIsEditResponsableOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Modifier le Responsable</DialogTitle>
+            <DialogTitle>Modifier le PRM</DialogTitle>
           </DialogHeader>
           {editingResponsable && (
             <form onSubmit={handleUpdateResponsable} className="grid gap-4 py-4">
@@ -2109,7 +2211,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
               </div>
 
-              {/* Ligne 2 : Téléphone et Département */}
+              {/* Ligne 2 : Téléphone et Direction */}
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Téléphone</Label>
@@ -2120,7 +2222,7 @@ const AdminDashboard: React.FC = () => {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Département</Label>
+                    <Label>Direction</Label>
                     <Input
                       value={editingResponsable.departement}
                       onChange={(e) => setEditingResponsable({ ...editingResponsable, departement: e.target.value })}
@@ -2184,6 +2286,15 @@ const AdminDashboard: React.FC = () => {
                   <p>{selectedFournisseur.date_inscription}</p>
                 </div>
               </div>
+
+              <div className="rounded-lg border bg-slate-50/80 p-4">
+                <h4 className="font-semibold text-sm text-muted-foreground mb-1">Références professionnelles</h4>
+                {selectedFournisseur.references_professionnelles?.trim() ? (
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedFournisseur.references_professionnelles}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Non renseigné</p>
+                )}
+              </div>
               
               <div className="border-t pt-4 mt-2">
                  <h4 className="font-semibold mb-2">Actions Rapides</h4>
@@ -2236,7 +2347,7 @@ const AdminDashboard: React.FC = () => {
                   <p>{formatDate(selectedAppelOffre.date_cloture)}</p>
                 </div>
                 <div className="col-span-2">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Responsable</h4>
+                  <h4 className="font-semibold text-sm text-muted-foreground">Personne responsable du marché (PRM)</h4>
                   <p>{selectedAppelOffre.responsable?.name}</p>
                 </div>
               </div>
@@ -2250,11 +2361,44 @@ const AdminDashboard: React.FC = () => {
 
       {/* Modale Création Appel d'Offre */}
       <Dialog open={isCreateAOOpen} onOpenChange={setIsCreateAOOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Créer un Appel d'Offre</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateTender} className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Référence de l'appel d'offre</Label>
+              <Input
+                value={newTender.reference}
+                onChange={(e) => setNewTender({ ...newTender, reference: e.target.value })}
+                required
+                placeholder="Ex: DDD-AO-2026-001"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Référence unique saisie manuellement (responsable ou administrateur).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Source de financement</Label>
+              <Select
+                value={newTender.source_financement}
+                onValueChange={(v) =>
+                  setNewTender({ ...newTender, source_financement: v as SourceFinancement })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Titre de l'appel d'offre</Label>
@@ -2285,11 +2429,102 @@ const AdminDashboard: React.FC = () => {
                 className="min-h-[100px]"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Modalités de dépôt des plis (soumission physique)</Label>
+              <Textarea
+                value={newTender.modalites_soumission_physique}
+                onChange={(e) => setNewTender({ ...newTender, modalites_soumission_physique: e.target.value })}
+                placeholder="Adresse du guichet, horaires, salle de dépôt, téléphone du service des marchés…"
+                className="min-h-[88px]"
+              />
+              <p className="text-xs text-muted-foreground">
+                Obligatoire avant publication : affichage sur la fiche publique. Sans texte, un message neutre apparaît sur le portail.
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Cahier des charges payant</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    L&apos;avis d&apos;appel d&apos;offres reste gratuit. Le montant s&apos;applique uniquement au téléchargement du cahier des charges (Wave / Orange Money).
+                  </p>
+                </div>
+                <Switch
+                  checked={newTender.cahier_paiement_requis}
+                  onCheckedChange={(v) =>
+                    setNewTender((prev) => ({
+                      ...prev,
+                      cahier_paiement_requis: v,
+                      cahier_prix_xof: v ? prev.cahier_prix_xof : "",
+                    }))
+                  }
+                />
+              </div>
+              {newTender.cahier_paiement_requis && (
+                <div className="space-y-2">
+                  <Label htmlFor="cahier_prix_xof">Montant (FCFA)</Label>
+                  <Input
+                    id="cahier_prix_xof"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={newTender.cahier_prix_xof}
+                    onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
+                    placeholder="Ex: 25000"
+                    required
+                  />
+                </div>
+              )}
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsCreateAOOpen(false)}>Annuler</Button>
               <Button type="submit">Créer le brouillon</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditModalitesOpen}
+        onOpenChange={(open) => {
+          setIsEditModalitesOpen(open);
+          if (!open) setAoForModalites(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[540px]">
+          <DialogHeader>
+            <DialogTitle>Modalités de dépôt des plis (présentiel)</DialogTitle>
+            <DialogDescription>
+              {aoForModalites && (
+                <>
+                  <span className="font-mono text-foreground">{aoForModalites.reference}</span> — {aoForModalites.titre}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="admin_modalites_depot">Lieu, horaires, contact du service des marchés</Label>
+            <Textarea
+              id="admin_modalites_depot"
+              value={draftModalites}
+              onChange={(e) => setDraftModalites(e.target.value)}
+              className="min-h-[140px]"
+              placeholder="Ex. : accueil du service des marchés, jours et heures, adresse, téléphone…"
+            />
+            {aoForModalites?.statut === "published" && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md px-2 py-1.5">
+                Cet appel d’offre est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditModalitesOpen(false)}>
+              Annuler
+            </Button>
+            <Button type="button" onClick={handleSaveModalites} disabled={savingModalites}>
+              {savingModalites ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2418,6 +2653,26 @@ const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-6 rounded-lg border bg-slate-50/80 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                        <Award className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-slate-800">Références professionnelles</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                          Déclaratif — clients ou marchés antérieurs indiqués par le fournisseur.
+                        </p>
+                        {selectedCandidature.fournisseur.references_professionnelles?.trim() ? (
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                            {selectedCandidature.fournisseur.references_professionnelles}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">Non renseigné</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -2451,18 +2706,12 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-sm text-muted-foreground">Chargement des documents...</p>
                       </div>
                     </div>
-                  ) : legalDocuments.length === 0 ? (
-                    <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
-                      <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                      <p className="text-muted-foreground">Aucun document légal disponible pour ce fournisseur.</p>
-                    </div>
                   ) : (
                     <div className="space-y-3">
-                      {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                      {ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES.map((categorie) => {
                         const docs = legalDocuments.filter(d => d.categorie === categorie);
-                        const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
-                          : categorie === 'NINEA' ? 'NINEA' 
-                          : 'Quitus Fiscal';
+                        const categorieLabel = legalDocumentLabel(categorie);
+                        const isAutre = categorie === "AUTRE";
                         
                         return (
                           <div key={categorie} className="border rounded-lg p-4 bg-white">
@@ -2471,6 +2720,10 @@ const AdminDashboard: React.FC = () => {
                               {docs.length > 0 ? (
                                 <Badge className="bg-green-100 text-green-700 border-none">
                                   {docs.length} document{docs.length > 1 ? 's' : ''}
+                                </Badge>
+                              ) : isAutre ? (
+                                <Badge variant="outline" className="text-slate-500 border-slate-200">
+                                  Facultatif — non fourni
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">
@@ -2646,7 +2899,7 @@ const AdminDashboard: React.FC = () => {
               </Card>
 
               {/* Avertissement si documents légaux manquants */}
-              {legalDocuments.length < 3 && (
+              {missingLegalCategories(legalDocuments).length > 0 && (
                 <Card className="border-none shadow-sm bg-orange-50 border-orange-200">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
@@ -2654,8 +2907,9 @@ const AdminDashboard: React.FC = () => {
                       <div>
                         <p className="text-sm font-semibold text-orange-800 mb-1">Documents légaux incomplets</p>
                         <p className="text-xs text-orange-700">
-                          Ce fournisseur n'a pas uploadé tous les documents légaux requis (RCCM, NINEA, Quitus Fiscal). 
-                          Il est recommandé de rejeter cette candidature ou de demander la complétion des documents.
+                          Ce fournisseur n'a pas fourni tous les documents légaux obligatoires (RCCM, NINEA, quitus fiscal,
+                          attestations IPRES, CSS, non-faillite, ARCOP). Il est recommandé de demander la complétion du dossier
+                          avant de trancher.
                         </p>
                       </div>
                     </div>
@@ -2780,24 +3034,24 @@ const AdminDashboard: React.FC = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="responsable-select">Sélectionner un responsable</Label>
+                <Label htmlFor="responsable-select">Sélectionner une personne responsable du marché (PRM)</Label>
                 <Select 
                   value={selectedResponsableId?.toString() || ""} 
                   onValueChange={(value) => setSelectedResponsableId(parseInt(value))}
                 >
                   <SelectTrigger id="responsable-select">
-                    <SelectValue placeholder="Choisir un responsable..." />
+                    <SelectValue placeholder="Choisir une personne responsable du marché (PRM)..." />
                   </SelectTrigger>
                   <SelectContent>
                     {Array.isArray(responsables) && responsables.map((r) => (
                       <SelectItem key={r.id} value={r.id.toString()}>
-                        {r.user?.name || `Responsable #${r.id}`} - {r.departement}
+                        {r.user?.name || `PRM #${r.id}`} - {r.departement}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {Array.isArray(responsables) && responsables.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Aucun responsable disponible.</p>
+                  <p className="text-xs text-muted-foreground">Aucune personne responsable du marché (PRM) disponible.</p>
                 )}
               </div>
               
@@ -2824,17 +3078,93 @@ const AdminDashboard: React.FC = () => {
               Informations du compte administrateur connecté.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col items-center text-center gap-3 py-4">
-            <div className="h-20 w-20 rounded-full bg-primary/12 text-primary flex items-center justify-center text-2xl font-semibold">
-              {authUser?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
+          <div className="grid gap-5 py-2">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-primary/12 text-primary flex items-center justify-center text-xl font-semibold shrink-0">
+                {authUser?.name?.trim()?.charAt(0)?.toLocaleUpperCase("fr") ?? "?"}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-800 truncate">{authUser?.name ?? "—"}</p>
+                <p className="text-sm text-slate-500 break-all">{authUser?.email ?? "—"}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant="outline" className="border-primary/35 text-primary">
+                    Administrateur
+                  </Badge>
+                  {authUser?.is_active === false ? (
+                    <Badge variant="destructive">Compte désactivé</Badge>
+                  ) : (
+                    <Badge variant="secondary">Compte actif</Badge>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-slate-800">{authUser?.name}</p>
-              <p className="text-sm text-slate-500 break-all">{authUser?.email}</p>
+
+            <div className="rounded-lg border bg-white">
+              <div className="grid grid-cols-1 gap-3 p-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-slate-500">ID</span>
+                  <span className="font-mono text-slate-800">{authUser?.id ?? "—"}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-slate-500">Rôle technique</span>
+                  <span className="font-mono text-slate-800">{authUser?.role?.name ?? "—"}</span>
+                </div>
+                {authUser?.telephone && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500">Téléphone</span>
+                    <span className="text-slate-800">{authUser.telephone}</span>
+                  </div>
+                )}
+                {(authUser as any)?.departement && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500">Direction</span>
+                    <span className="text-slate-800">{String((authUser as any).departement)}</span>
+                  </div>
+                )}
+                {(authUser as any)?.fonction && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500">Fonction</span>
+                    <span className="text-slate-800">{String((authUser as any).fonction)}</span>
+                  </div>
+                )}
+                {authUser?.created_at && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500">Créé le</span>
+                    <span className="text-slate-800">{new Date(authUser.created_at).toLocaleString("fr-FR")}</span>
+                  </div>
+                )}
+                {authUser?.last_login_at && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-slate-500">Dernière connexion</span>
+                    <span className="text-slate-800">{new Date(authUser.last_login_at).toLocaleString("fr-FR")}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <Badge variant="outline" className="border-primary/35 text-primary">
-              Administrateur
-            </Badge>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  if (!authUser?.email) return;
+                  navigator.clipboard?.writeText(authUser.email);
+                }}
+              >
+                Copier l’email
+              </Button>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  setIsAccountProfileOpen(false);
+                  setIsSettingsOpen(true);
+                }}
+              >
+                Paramètres
+              </Button>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" onClick={() => setIsAccountProfileOpen(false)}>

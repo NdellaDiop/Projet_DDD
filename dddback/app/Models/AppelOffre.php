@@ -13,6 +13,22 @@ class AppelOffre extends Model
     public const STATUS_PUBLISHED = 'published';
     public const STATUS_CLOSED = 'closed';
     public const STATUS_ARCHIVED = 'archived';
+
+    public const SOURCE_FONDS_PROPRES = 'fonds_propres';
+    public const SOURCE_ETAT = 'etat';
+    public const SOURCE_FINANCEMENT_EXTERIEURE = 'financement_exterieure';
+
+    /**
+     * @return array<string, string>
+     */
+    public static function sourceFinancementLabels(): array
+    {
+        return [
+            self::SOURCE_FONDS_PROPRES => 'Fonds propres',
+            self::SOURCE_ETAT => 'État',
+            self::SOURCE_FINANCEMENT_EXTERIEURE => 'Financement extérieure',
+        ];
+    }
     
     use HasFactory;
 
@@ -22,26 +38,21 @@ class AppelOffre extends Model
         'responsable_marche_id',
         'titre',
         'reference',
+        'source_financement',
         'description',
+        'modalites_soumission_physique',
         'date_publication',
         'date_limite_depot',
         'statut',
+        'cahier_paiement_requis',
+        'cahier_prix_xof',
     ];
-
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($appelOffre) {
-            if (empty($appelOffre->reference)) {
-                $appelOffre->reference = 'AO-' . date('Y') . '-' . strtoupper(uniqid());
-            }
-        });
-    }
 
     protected $casts = [
         'date_publication' => 'datetime',
         'date_limite_depot' => 'datetime',
+        'cahier_paiement_requis' => 'boolean',
+        'cahier_prix_xof' => 'integer',
     ];
 
     /**
@@ -66,5 +77,15 @@ class AppelOffre extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    /**
+     * Achats d’accès au cahier des charges (Wave / Orange Money, etc.).
+     *
+     * @return HasMany<CahierAccesAchat, $this>
+     */
+    public function cahierAccesAchats(): HasMany
+    {
+        return $this->hasMany(CahierAccesAchat::class, 'appel_offre_id');
     }
 }

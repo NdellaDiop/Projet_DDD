@@ -17,23 +17,54 @@ class AppelOffreResource extends JsonResource
         return [
             'id' => $this->id,
             'reference' => $this->reference,
+            'source_financement' => $this->source_financement,
+            'source_financement_label' => $this->source_financement
+                ? (\App\Models\AppelOffre::sourceFinancementLabels()[$this->source_financement] ?? $this->source_financement)
+                : null,
             'titre' => $this->titre,
             'description' => $this->description,
+            'modalites_soumission_physique' => $this->modalites_soumission_physique,
             'date_publication' => $this->date_publication,
             'date_limite_depot' => $this->date_limite_depot,
             'statut' => $this->statut,
+            'cahier_paiement_requis' => (bool) ($this->cahier_paiement_requis ?? false),
+            'cahier_prix_xof' => $this->when(isset($this->cahier_prix_xof), (int) ($this->cahier_prix_xof ?? 0)),
+            'paiement_wave_active' => (bool) config('paiement.wave.enabled'),
+            'paiement_orange_money_active' => (bool) config('paiement.orange_money.enabled'),
+            'cahier_simulation_active' => (bool) config('paiement.simulation_enabled'),
             'criteres_eligibilite' => $this->criteres_eligibilite,
             'responsable_marche_id' => $this->responsable_marche_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'candidatures_count' => $this->whenCounted('candidatures'),
-            'documents' => $this->whenLoaded('documents', function () {
-                return $this->documents->map(function ($doc) {
+            'documents' => $this->whenLoaded('documents', function () use ($request) {
+                $user = $request->user();
+
+                return $this->documents->map(function ($doc) use ($user) {
+                    $canDownload = false;
+                    if ($user) {
+                        if ($user->role->name === 'ADMIN') {
+                            $canDownload = true;
+                        } elseif ($user->role->name === 'RESPONSABLE_MARCHE' && $user->responsableMarche
+                            && (int) $this->responsable_marche_id === (int) $user->responsableMarche->id) {
+                            $canDownload = true;
+                        } elseif ($user->role->name === 'FOURNISSEUR') {
+                            $canDownload = $doc->fournisseurPeutTelechargerPieceAoPubliee($user);
+                        }
+                    }
+
+                    $blocagePaiement = $doc->categorie === 'CAHIER_DES_CHARGES'
+                        && (bool) ($this->cahier_paiement_requis ?? false)
+                        && (int) ($this->cahier_prix_xof ?? 0) > 0
+                        && !$canDownload;
+
                     return [
                         'id' => $doc->id,
                         'nom_fichier' => $doc->nom_fichier,
                         'categorie' => $doc->categorie,
-                        'download_url' => url("/api/documents/{$doc->id}/download"),
+                        'download_url' => $canDownload ? url("/api/documents/{$doc->id}/download") : null,
+                        'telechargement_bloque' => !$canDownload,
+                        'blocage_paiement_cahier' => $blocagePaiement,
                         'created_at' => $doc->created_at,
                     ];
                 })->values();
@@ -42,15 +73,19 @@ class AppelOffreResource extends JsonResource
                 if (!$this->responsableMarche) {
                     return null;
                 }
+                $user = $this->responsableMarche->user;
+
                 return [
                     'id' => $this->responsableMarche->id,
                     'user_id' => $this->responsableMarche->user_id,
+                    'name' => $user?->name,
+                    'email' => $user?->email,
                     'departement' => $this->responsableMarche->departement,
                     'fonction' => $this->responsableMarche->fonction,
-                    'user' => $this->responsableMarche->user ? [
-                        'id' => $this->responsableMarche->user->id,
-                        'name' => $this->responsableMarche->user->name,
-                        'email' => $this->responsableMarche->user->email,
+                    'user' => $user ? [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
                     ] : null,
                 ];
             }),

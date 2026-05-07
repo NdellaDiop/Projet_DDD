@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Header from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,14 @@ import {
   Building2,
   ArrowLeft,
   Download,
-  Send,
-  User,
+  MapPin,
+  BookOpen,
+  ExternalLink,
   CheckCircle,
   AlertCircle,
   Upload,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import {
   Dialog,
@@ -31,49 +33,94 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { sourceFinancementLabel } from "@/lib/appelOffreFinancement";
+
+interface AppelOffreDocument {
+  id: number;
+  nom_fichier: string;
+  categorie: string;
+  download_url: string | null;
+  telechargement_bloque?: boolean;
+  blocage_paiement_cahier?: boolean;
+  created_at?: string;
+}
 
 interface AppelOffre {
   id: number;
   titre: string;
   reference: string;
+  source_financement?: string;
+  source_financement_label?: string;
   description: string;
+  /** Modalités de dépôt des plis au siège (soumission physique), saisies par le PRM / admin */
+  modalites_soumission_physique?: string | null;
   date_publication: string;
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
+  cahier_paiement_requis?: boolean;
+  cahier_prix_xof?: number | null;
+  paiement_wave_active?: boolean;
+  paiement_orange_money_active?: boolean;
+  /** Vrai si le back autorise le flux PAYER simulé (CAHIER_PAIEMENT_SIMULATION) */
+  cahier_simulation_active?: boolean;
   responsable?: {
-    name: string;
-    email: string;
+    name?: string;
+    email?: string;
+    user?: { name?: string; email?: string };
   };
-  documents?: { id: number; nom_fichier: string; categorie: string; download_url: string }[];
+  documents?: AppelOffreDocument[];
+}
+
+const ORDRE_PIECES_AO = ["AVIS_APPEL_OFFRES", "CAHIER_DES_CHARGES", "REGLEMENT_CONSULTATION", "ANNEXE_AO"] as const;
+
+function trierDocumentsAo(docs: AppelOffreDocument[]): AppelOffreDocument[] {
+  const ordre = [...ORDRE_PIECES_AO];
+  return [...docs].sort((a, b) => {
+    const ia = ordre.indexOf(a.categorie as (typeof ORDRE_PIECES_AO)[number]);
+    const ib = ordre.indexOf(b.categorie as (typeof ORDRE_PIECES_AO)[number]);
+    const sa = ia === -1 ? 99 : ia;
+    const sb = ib === -1 ? 99 : ib;
+    return sa - sb;
+  });
+}
+
+/** Style « fiche avis » type portails institutionnels (ex. ARTP : date limite lisible en premier). */
+function formatDateLimiteFicheAvis(iso: string): string {
+  const d = new Date(iso);
+  const jourSemaine = d.toLocaleDateString("fr-FR", { weekday: "long" });
+  const datePart = d.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return `${jourSemaine} ${datePart} — ${heure}`;
 }
 
 const AppelOffreDetails = () => {
   const { id } = useParams();
   const { api, user, isAuthenticated, isFournisseur, isAdmin, isResponsableMarche } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const waveReturnHandled = useRef(false);
   const [appelOffre, setAppelOffre] = useState<AppelOffre | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // État pour la modale de candidature
-  const [isPostulerOpen, setIsPostulerOpen] = useState(false);
-  const [submissionData, setSubmissionData] = useState({
-    montant_propose: "",
-  });
-  const [offreTechnique, setOffreTechnique] = useState<File | null>(null);
-  const [offreFinanciere, setOffreFinanciere] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [pdfViewer, setPdfViewer] = useState<{ url: string; title: string } | null>(null);
 
-  // Documents joints à l'AO (cahier/règlement/annexes)
+  // Documents joints à l'AO (upload modale : avis + cahier ; autres types possibles en base)
   const [isUploadAoDocOpen, setIsUploadAoDocOpen] = useState(false);
-  const [aoDocCategory, setAoDocCategory] = useState<"CAHIER_DES_CHARGES" | "REGLEMENT_CONSULTATION" | "ANNEXE_AO">("CAHIER_DES_CHARGES");
+  const [aoDocCategory, setAoDocCategory] = useState<"AVIS_APPEL_OFFRES" | "CAHIER_DES_CHARGES">("AVIS_APPEL_OFFRES");
   const [aoDocFile, setAoDocFile] = useState<File | null>(null);
   const [uploadingAoDoc, setUploadingAoDoc] = useState(false);
   const [deletingAoDocId, setDeletingAoDocId] = useState<number | null>(null);
+  const [initPaiementEnCours, setInitPaiementEnCours] = useState(false);
 
   const canManageAoDocs = isAuthenticated && (isAdmin || isResponsableMarche);
 
   const aoDocCategoryLabel: Record<string, string> = {
+    AVIS_APPEL_OFFRES: "Avis d'appel d'offres (PDF, gratuit)",
     CAHIER_DES_CHARGES: "Cahier des charges",
     REGLEMENT_CONSULTATION: "Règlement de consultation",
     ANNEXE_AO: "Annexe",
@@ -109,14 +156,55 @@ const AppelOffreDetails = () => {
     }
   }, [id, api]);
 
+  useEffect(() => {
+    waveReturnHandled.current = false;
+  }, [id]);
+
+  /** Après retour Wave (?paiement=wave&statut=success), tente une vérif serveur si WAVE_ALLOW_SYNC_VERIFY est activé côté API. */
+  useEffect(() => {
+    if (!api || !id || !isFournisseur || waveReturnHandled.current) return;
+    const paiement = searchParams.get("paiement");
+    const statut = searchParams.get("statut");
+    if (paiement !== "wave" || statut !== "success") return;
+
+    waveReturnHandled.current = true;
+    void (async () => {
+      try {
+        const res = await api.post(`/api/appels-offres/${id}/cahier/paiement/verifier-wave`);
+        if (res.data?.deja_acquis || res.data?.statut === "completed") {
+          toast({
+            title: "Paiement confirmé",
+            description:
+              "Vous pouvez télécharger le cahier des charges, le compléter pour répondre aux exigences, puis constituer vos plis pour le dépôt au siège.",
+          });
+        }
+      } catch {
+        /* 403 si vérif synchrone désactivée — normal en prod si webhook seulement */
+      }
+      try {
+        const r = await api.get(`/api/appels-offres/${id}`);
+        setAppelOffre(r.data.data || r.data);
+      } finally {
+        setSearchParams({}, { replace: true });
+      }
+    })();
+  }, [api, id, isFournisseur, searchParams, setSearchParams]);
+
   const refreshDetails = async () => {
     if (!api || !id) return;
     const response = await api.get(`/api/appels-offres/${id}`);
     setAppelOffre(response.data.data || response.data);
   };
 
-  const downloadAoDocument = async (doc: { id: number; nom_fichier: string; download_url: string }) => {
-    if (!api) return;
+  const downloadAoDocument = async (doc: { id: number; nom_fichier: string; download_url: string | null }) => {
+    if (!api || !doc.download_url) {
+      toast({
+        title: "Téléchargement indisponible",
+        description: "Connectez-vous en tant que fournisseur ou acquittez le montant du cahier des charges si demandé.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const response = await api.get(doc.download_url, { responseType: "blob" });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
@@ -134,6 +222,52 @@ const AppelOffreDetails = () => {
         description: "Impossible de télécharger ce document.",
         variant: "destructive",
       });
+    }
+  };
+
+  const initierPaiementCahier = async (provider: "wave" | "orange_money" | "simulation") => {
+    if (!api || !appelOffre) return;
+    if (!isAuthenticated || !isFournisseur) {
+      navigate("/connexion", { state: { from: `/appels-offres/${appelOffre.id}` } });
+      return;
+    }
+    try {
+      setInitPaiementEnCours(true);
+      const res = await api.post(`/api/appels-offres/${appelOffre.id}/cahier/paiement/initier`, { provider });
+      if (res.data?.deja_acquis) {
+        toast({
+          title: "Accès déjà acquis",
+          description:
+            "Téléchargez le cahier, complétez les pièces ou formulaires prévus par le marché, puis préparez votre dossier pour le dépôt physique.",
+        });
+        await refreshDetails();
+        return;
+      }
+      const paymentUrl = res.data?.payment_url;
+      if (typeof paymentUrl === "string" && /^https?:\/\//i.test(paymentUrl)) {
+        window.location.assign(paymentUrl);
+        return;
+      }
+      toast({
+        title: "Paiement",
+        description:
+          typeof res.data?.message === "string"
+            ? res.data.message
+            : "Impossible d’obtenir l’URL de paiement. Vérifiez la configuration Wave / Orange Money sur le serveur.",
+      });
+      await refreshDetails();
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast({
+        title: "Erreur",
+        description: typeof msg === "string" ? msg : "Impossible d’initier le paiement.",
+        variant: "destructive",
+      });
+    } finally {
+      setInitPaiementEnCours(false);
     }
   };
 
@@ -217,111 +351,45 @@ const AppelOffreDetails = () => {
     }
   };
 
-  const handlePostuler = () => {
-    if (!isAuthenticated) {
-        navigate("/connexion"); // Rediriger vers login si pas connecté
-        return;
+  const pdfBlobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
+      }
+    };
+  }, []);
+
+  const closePdfViewer = () => {
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
     }
-    setIsPostulerOpen(true);
+    setPdfViewer(null);
   };
 
-  const submitCandidature = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!api || !appelOffre) return;
-
+  const ouvrirPdfEnLigne = async (doc: AppelOffreDocument) => {
+    if (!api || !doc.download_url) return;
     try {
-        setSubmitting(true);
-        
-        const montant = parseFloat(submissionData.montant_propose);
-        if (isNaN(montant) || montant < 0) {
-            setSubmitting(false);
-            toast({
-                title: "Erreur",
-                description: "Veuillez entrer un montant valide.",
-                variant: "destructive"
-            });
-            return;
-        }
-
-        // Créer la candidature
-        const candidatureResponse = await api.post(`/api/appels-offres/${appelOffre.id}/candidatures`, {
-            montant_propose: montant,
-            fournisseur_id:
-              typeof user === "object" && user !== null && "fournisseur" in user
-                ? (((user as { fournisseur?: { id?: number }; id?: number }).fournisseur?.id) ??
-                  (user as { fournisseur?: { id?: number }; id?: number }).id)
-                : undefined,
-        });
-
-        const candidatureId = candidatureResponse.data.data?.id || candidatureResponse.data.id;
-
-        // Upload des documents si fournis
-        const uploadPromises = [];
-        
-        if (offreTechnique) {
-            const formDataTech = new FormData();
-            formDataTech.append('file', offreTechnique);
-            formDataTech.append('categorie', 'OFFRE_TECHNIQUE');
-            formDataTech.append('candidature_id', candidatureId.toString());
-            uploadPromises.push(
-                api.post('/api/documents', formDataTech, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                })
-            );
-        }
-
-        if (offreFinanciere) {
-            const formDataFin = new FormData();
-            formDataFin.append('file', offreFinanciere);
-            formDataFin.append('categorie', 'OFFRE_FINANCIERE');
-            formDataFin.append('candidature_id', candidatureId.toString());
-            uploadPromises.push(
-                api.post('/api/documents', formDataFin, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                })
-            );
-        }
-
-        // Attendre que tous les uploads soient terminés
-        if (uploadPromises.length > 0) {
-            await Promise.all(uploadPromises);
-        }
-
-        toast({
-            title: "Candidature envoyée",
-            description: "Votre candidature a été soumise avec succès.",
-        });
-        setIsPostulerOpen(false);
-        setSubmissionData({ montant_propose: "" });
-        setOffreTechnique(null);
-        setOffreFinanciere(null);
-        navigate("/fournisseur/dashboard");
-
-    } catch (error: unknown) {
-        console.error("Erreur soumission:", error);
-        const responseData =
-          typeof error === "object" &&
-          error !== null &&
-          "response" in error
-            ? (error as { response?: { data?: { message?: string; missing_documents?: unknown[] } } }).response?.data
-            : undefined;
-        const errorMessage = responseData?.message || "Impossible de soumettre la candidature.";
-        const missingDocs = responseData?.missing_documents;
-        
-        let description = errorMessage;
-        if (missingDocs && Array.isArray(missingDocs)) {
-            description = errorMessage + " Veuillez les uploader dans votre dashboard (section Documents légaux).";
-        }
-        
-        toast({
-            title: "Erreur",
-            description: description,
-            variant: "destructive"
-        });
-    } finally {
-        setSubmitting(false);
+      const res = await api.get(doc.download_url, { responseType: "blob" });
+      const blob = new Blob([res.data], {
+        type: (res.headers["content-type"] as string) || "application/pdf",
+      });
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      pdfBlobUrlRef.current = url;
+      setPdfViewer({ url, title: doc.nom_fichier });
+    } catch {
+      toast({
+        title: "Lecture en ligne",
+        description: "Impossible d'afficher le fichier. Utilisez « Télécharger ».",
+        variant: "destructive",
+      });
     }
   };
+
+  const fichierEstPdf = (nom: string) => nom.toLowerCase().endsWith(".pdf");
 
   if (loading) {
     return (
@@ -377,8 +445,22 @@ const AppelOffreDetails = () => {
                   Retour au dashboard
                 </Button>
                 <Button variant="ghost" className="pl-0 hover:bg-transparent hover:text-primary" onClick={() => navigate("/appels-offres")}>
-                  Retour à la liste publique
+                  Retour à la liste des avis
                 </Button>
+            </div>
+
+            <div className="mb-8 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm text-slate-800 shadow-sm">
+              <div className="flex gap-3">
+                <BookOpen className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
+                <div>
+                  <p className="font-semibold text-slate-900">Consultation publique des avis</p>
+                  <p className="mt-1 leading-relaxed text-slate-700">
+                    Présentation calquée sur les fiches d&apos;avis des portails institutionnels :{" "}
+                    <strong>date limite</strong> et <strong>référence</strong> en tête, texte intégral, puis{" "}
+                    <strong>fichiers attachés</strong>. La <strong>soumission</strong> (dépôt des plis) reste physique au siège, selon le bloc « Dépôt des plis » ci-dessous.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -386,39 +468,106 @@ const AppelOffreDetails = () => {
                 {/* Colonne Principale (Gauche) */}
                 <div className="lg:col-span-2 space-y-6">
                     
-                    {/* En-tête de l'AO */}
-                    <Card className="border-none shadow-sm overflow-hidden h-full">
-                        <div className="h-2 bg-primary w-full"></div>
-                        <CardHeader>
-                            <div className="flex justify-between items-start gap-4">
-                                <div>
-                                    <Badge variant="outline" className="mb-2 border-primary/20 text-primary bg-primary/5">
-                                        {appelOffre.reference}
-                                    </Badge>
-                                    <CardTitle className="text-2xl md:text-3xl font-bold text-slate-800 leading-tight">
-                                        {appelOffre.titre}
-                                    </CardTitle>
-                                </div>
-                                <Badge variant={isClosed ? "secondary" : "default"} className="text-sm px-3 py-1">
-                                    {isClosed ? "Clôturé" : "Ouvert"}
-                                </Badge>
+                    {/* En-tête type « fiche avis » (structure proche ARTP / autorités) */}
+                    <Card className="border border-slate-200 shadow-sm overflow-hidden h-full">
+                        <div className="h-1.5 bg-primary w-full" />
+                        <CardHeader className="space-y-5 pb-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Dakar Dem Dikk — Portail des marchés publics
+                            </p>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-xs font-medium uppercase text-slate-500">Date limite</p>
+                                <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 md:text-2xl">
+                                  {formatDateLimiteFicheAvis(appelOffre.date_limite_depot)}
+                                </p>
+                              </div>
+                              <Badge variant={isClosed ? "secondary" : "default"} className="w-fit shrink-0 text-sm px-3 py-1">
+                                {isClosed ? "Clôturé" : "Ouvert"}
+                              </Badge>
                             </div>
+                            <div>
+                              <CardTitle className="text-2xl md:text-3xl font-bold text-slate-900 leading-snug">
+                                {appelOffre.titre}
+                              </CardTitle>
+                              <p className="mt-3 font-mono text-sm text-slate-600">{appelOffre.reference}</p>
+                            </div>
+                            {(appelOffre.responsable?.name || appelOffre.responsable?.user?.name) && (
+                              <div className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2 text-sm">
+                                <span className="font-medium text-slate-700">Personne responsable du marché — </span>
+                                <span className="text-slate-900">
+                                  {appelOffre.responsable?.name || appelOffre.responsable?.user?.name}
+                                </span>
+                              </div>
+                            )}
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-6 pt-0">
                             <div className="prose prose-slate max-w-none">
-                                <h3 className="text-lg font-semibold text-slate-700 mb-2">Description du besoin</h3>
-                                <p className="text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                <h3 className="text-lg font-semibold text-slate-800 mb-3">
+                                  Texte de l&apos;avis et précisions
+                                </h3>
+                                <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-[15px]">
                                     {appelOffre.description}
                                 </p>
                             </div>
 
+                            <Card className="border-amber-200/80 bg-amber-50/40 shadow-sm">
+                              <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
+                                  <MapPin className="h-5 w-5 text-amber-800 shrink-0" />
+                                  Dépôt des plis — soumission en présentiel
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-3 text-sm text-slate-800">
+                                <p
+                                  className={
+                                    appelOffre.modalites_soumission_physique?.trim()
+                                      ? "whitespace-pre-wrap leading-relaxed"
+                                      : "text-muted-foreground italic leading-relaxed"
+                                  }
+                                >
+                                  {appelOffre.modalites_soumission_physique?.trim()
+                                    ? appelOffre.modalites_soumission_physique
+                                    : "Les modalités de dépôt en présentiel (lieu, horaires, contact du service des marchés) ne figurent pas sur ce portail. Consultez les pièces jointes de l’avis ou contactez l’organisme acheteur."}
+                                </p>
+                                <p className="text-xs text-muted-foreground border-t border-amber-200/60 pt-3">
+                                  Après analyse du dossier, le service des marchés peut vous adresser une notification dans cette application pour la suite de la procédure (convocation, passage au siège, etc.).
+                                </p>
+                                {isFournisseur && (
+                                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                    <p className="font-medium text-slate-900 text-sm mb-1">Documents légaux</p>
+                                    <p className="text-muted-foreground text-xs leading-snug mb-3">
+                                      Les pièces que vous téléchargez dans votre espace permettent aux PRM de préconstituer votre dossier avant votre venue pour déposer la soumission physique.
+                                    </p>
+                                    <Button size="sm" variant="secondary" type="button" onClick={() => navigate("/fournisseur/dashboard")}>
+                                      Mon espace fournisseur — Mes documents
+                                    </Button>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+
                             <Separator />
 
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <h3 className="text-lg font-semibold text-slate-800 mb-1 flex items-center gap-2">
                                     <FileText className="h-5 w-5 text-primary" />
-                                    Documents joints
+                                    Fichiers attachés
                                 </h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                  Avis, cahier des charges, règlement de consultation et annexes (comme sur une fiche d&apos;avis institutionnelle).
+                                </p>
+                                {appelOffre.cahier_paiement_requis && (appelOffre.cahier_prix_xof ?? 0) > 0 && (
+                                  <p className="text-sm rounded-md border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 mb-4">
+                                    Pour ce marché, le <strong>cahier des charges</strong> est payant :{" "}
+                                    <strong>{Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA</strong> (fixé sur la fiche de l&apos;appel d&apos;offres).
+                                  </p>
+                                )}
+                                {!appelOffre.cahier_paiement_requis && (
+                                  <p className="text-sm text-muted-foreground mb-4">
+                                    Pour ce marché, le cahier des charges est <strong>consultable gratuitement</strong> une fois connecté en tant que fournisseur.
+                                  </p>
+                                )}
                                 {canManageAoDocs && (
                                   <div className="mb-4">
                                     <Button variant="outline" size="sm" onClick={() => setIsUploadAoDocOpen(true)}>
@@ -429,32 +578,111 @@ const AppelOffreDetails = () => {
                                 )}
                                 {appelOffre.documents && appelOffre.documents.length > 0 ? (
                                     <div className="grid gap-3">
-                                        {appelOffre.documents.map((doc) => (
-                                            <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="bg-white p-2 rounded border">
+                                        {trierDocumentsAo(appelOffre.documents).map((doc) => (
+                                            <div key={doc.id} className="flex flex-col gap-3 p-3 border rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="bg-white p-2 rounded border shrink-0">
                                                         <FileText className="h-5 w-5 text-slate-400" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                      <span className="font-medium text-slate-700">{doc.nom_fichier}</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                      <span className="font-medium text-slate-700 truncate">{doc.nom_fichier}</span>
                                                       <span className="text-xs text-muted-foreground">{aoDocCategoryLabel[doc.categorie] ?? doc.categorie}</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                      downloadAoDocument({
-                                                        id: doc.id,
-                                                        nom_fichier: doc.nom_fichier,
-                                                        download_url: doc.download_url,
-                                                      })
-                                                    }
-                                                  >
-                                                    <Download className="h-4 w-4 mr-2" />
-                                                    Télécharger
-                                                  </Button>
+                                                <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+                                                  {doc.download_url ? (
+                                                    <>
+                                                      {fichierEstPdf(doc.nom_fichier) && (
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() => void ouvrirPdfEnLigne(doc)}
+                                                        >
+                                                          <BookOpen className="h-4 w-4 mr-2" />
+                                                          Lire en ligne
+                                                        </Button>
+                                                      )}
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          downloadAoDocument({
+                                                            id: doc.id,
+                                                            nom_fichier: doc.nom_fichier,
+                                                            download_url: doc.download_url,
+                                                          })
+                                                        }
+                                                      >
+                                                        <Download className="h-4 w-4 mr-2" />
+                                                        Télécharger
+                                                      </Button>
+                                                    </>
+                                                  ) : doc.blocage_paiement_cahier ? (
+                                                    <>
+                                                      {!isAuthenticated ? (
+                                                        <Button size="sm" variant="secondary" onClick={() => navigate("/connexion")}>
+                                                          Se connecter pour payer
+                                                        </Button>
+                                                      ) : isFournisseur ? (
+                                                        <>
+                                                          {(appelOffre.paiement_wave_active || appelOffre.paiement_orange_money_active || appelOffre.cahier_simulation_active) ? (
+                                                            <>
+                                                              {appelOffre.paiement_wave_active && (
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="default"
+                                                                  disabled={initPaiementEnCours}
+                                                                  onClick={() => initierPaiementCahier("wave")}
+                                                                >
+                                                                  <Wallet className="h-4 w-4 mr-2" />
+                                                                  Wave —{" "}
+                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
+                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
+                                                                    : "payer"}
+                                                                </Button>
+                                                              )}
+                                                              {appelOffre.paiement_orange_money_active && (
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="outline"
+                                                                  disabled={initPaiementEnCours}
+                                                                  onClick={() => initierPaiementCahier("orange_money")}
+                                                                >
+                                                                  Orange Money —{" "}
+                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
+                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
+                                                                    : "payer"}
+                                                                </Button>
+                                                              )}
+                                                              {appelOffre.cahier_simulation_active && (
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="secondary"
+                                                                  disabled={initPaiementEnCours}
+                                                                  onClick={() => initierPaiementCahier("simulation")}
+                                                                >
+                                                                  Payer (simulation / démo) —{" "}
+                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
+                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
+                                                                    : "sans débit"}
+                                                                </Button>
+                                                              )}
+                                                            </>
+                                                          ) : (
+                                                            <span className="text-xs text-muted-foreground">
+                                                              Paiement en ligne non configuré sur le serveur (Wave / Orange / simulation).
+                                                            </span>
+                                                          )}
+                                                        </>
+                                                      ) : (
+                                                        <span className="text-xs text-muted-foreground">Réservé aux fournisseurs</span>
+                                                      )}
+                                                    </>
+                                                  ) : (
+                                                    <Button size="sm" variant="secondary" onClick={() => navigate("/connexion")}>
+                                                      Se connecter pour télécharger
+                                                    </Button>
+                                                  )}
                                                   {canManageAoDocs && (
                                                     <Button
                                                       variant="ghost"
@@ -514,36 +742,67 @@ const AppelOffreDetails = () => {
                                 </div>
 
                                 <div className="flex items-start gap-3">
-                                    <User className="h-5 w-5 text-slate-400 mt-0.5" />
+                                    <Building2 className="h-5 w-5 text-slate-400 mt-0.5" />
                                     <div>
-                                        <p className="text-sm font-medium text-slate-500">Responsable du marché</p>
+                                        <p className="text-sm font-medium text-slate-500">Source de financement</p>
                                         <p className="font-semibold text-slate-800">
-                                            {appelOffre.responsable?.name || "Service des Marchés"}
+                                            {sourceFinancementLabel(
+                                                appelOffre.source_financement,
+                                                appelOffre.source_financement_label ?? null
+                                            )}
                                         </p>
                                     </div>
                                 </div>
+
+                                <div className="flex items-start gap-3">
+                                    <Wallet className="h-5 w-5 text-slate-400 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Cahier des charges</p>
+                                        {appelOffre.cahier_paiement_requis && (appelOffre.cahier_prix_xof ?? 0) > 0 ? (
+                                            <p className="font-semibold text-slate-800">
+                                                Payant — {Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA
+                                            </p>
+                                        ) : (
+                                            <p className="font-semibold text-emerald-700">Gratuit (téléchargement)</p>
+                                        )}
+                                    </div>
+                                </div>
+
                             </div>
 
                             <Separator />
 
                             {isFournisseur ? (
-                                <Button className="w-full" size="lg" onClick={handlePostuler} disabled={isClosed}>
-                                    <Send className="mr-2 h-4 w-4" />
-                                    {isClosed ? "Candidatures fermées" : "Postuler à cette offre"}
-                                </Button>
+                                <div className="space-y-3">
+                                    <p className="text-sm text-slate-600 text-center leading-snug">
+                                      La <strong>soumission</strong> des offres (dépôt des plis) se fait en présentiel. Téléchargez le cahier lorsqu&apos;il est disponible, complétez-le pour répondre aux exigences du marché, puis déposez votre dossier au siège selon les modalités ci-contre. Tenez aussi à jour vos documents légaux dans votre espace.
+                                    </p>
+                                    <Button className="w-full" size="lg" variant="secondary" type="button" onClick={() => navigate("/fournisseur/dashboard")}>
+                                        Mon espace fournisseur
+                                    </Button>
+                                    <a
+                                      href="https://www.openstreetmap.org/search?query=Point%20E%20Dakar%20Birago%20Diop"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex h-9 w-full items-center justify-center whitespace-nowrap rounded-md border border-input bg-background px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground"
+                                    >
+                                      <ExternalLink className="mr-2 h-4 w-4" />
+                                      Itinéraire siège (carte)
+                                    </a>
+                                </div>
                             ) : !isAuthenticated ? (
                                 <div className="space-y-3">
                                     <Button className="w-full" onClick={() => navigate("/connexion")}>
-                                        Se connecter pour postuler
+                                        Se connecter (fournisseur)
                                     </Button>
                                     <p className="text-xs text-center text-muted-foreground">
-                                        Vous devez avoir un compte fournisseur validé.
+                                        Compte fournisseur requis pour le cahier payant et le dépôt de vos pièces légales.
                                     </p>
                                 </div>
                             ) : (
                                 <div className="bg-slate-100 p-3 rounded-md text-sm text-center text-slate-600">
                                     Connecté en tant que {user?.role?.name}. <br/>
-                                    Seuls les fournisseurs peuvent postuler.
+                                    La publication des avis est ouverte à tous ; les fonctionnalités fournisseur concernent le téléchargement du cahier et vos documents.
                                 </div>
                             )}
 
@@ -562,7 +821,7 @@ const AppelOffreDetails = () => {
           <DialogHeader>
             <DialogTitle>Ajouter un document à l'appel d'offres</DialogTitle>
             <DialogDescription>
-              Joignez le cahier des charges et le règlement de consultation avant publication.
+              Joignez l’avis d’appel d’offres (PDF) et le cahier des charges avant publication.
             </DialogDescription>
           </DialogHeader>
 
@@ -572,11 +831,10 @@ const AppelOffreDetails = () => {
               <select
                 className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={aoDocCategory}
-                onChange={(e) => setAoDocCategory(e.target.value as typeof aoDocCategory)}
+                onChange={(e) => setAoDocCategory(e.target.value as "AVIS_APPEL_OFFRES" | "CAHIER_DES_CHARGES")}
               >
+                <option value="AVIS_APPEL_OFFRES">Avis d&apos;appel d&apos;offres — PDF (obligatoire)</option>
                 <option value="CAHIER_DES_CHARGES">Cahier des charges (obligatoire)</option>
-                <option value="REGLEMENT_CONSULTATION">Règlement de consultation (obligatoire)</option>
-                <option value="ANNEXE_AO">Annexe (optionnel)</option>
               </select>
             </div>
 
@@ -608,84 +866,25 @@ const AppelOffreDetails = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modale de soumission */}
-      <Dialog open={isPostulerOpen} onOpenChange={setIsPostulerOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-                <DialogTitle>Postuler à l'appel d'offre</DialogTitle>
-                <DialogDescription>
-                  Renseignez le montant et joignez vos documents d'offre si nécessaire.
-                </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={submitCandidature} className="space-y-4 py-4">
-                <div className="space-y-2">
-                    <Label htmlFor="montant">Montant de votre offre (FCFA)</Label>
-                    <Input 
-                        id="montant"
-                        type="number"
-                        min="0"
-                        placeholder="Ex: 5000000"
-                        value={submissionData.montant_propose}
-                        onChange={(e) => setSubmissionData({...submissionData, montant_propose: e.target.value})}
-                        required
-                    />
-                </div>
-                
-                <div className="space-y-4">
-                    <Label>Documents de l'offre</Label>
-                    
-                    <div className="space-y-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="offre-technique" className="text-sm font-medium">
-                                Offre technique (PDF)
-                            </Label>
-                            <Input
-                                id="offre-technique"
-                                type="file"
-                                accept=".pdf,.doc,.docx"
-                                onChange={(e) => setOffreTechnique(e.target.files?.[0] || null)}
-                                className="cursor-pointer"
-                            />
-                            {offreTechnique && (
-                                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <FileText className="w-3 h-3" />
-                                    {offreTechnique.name}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="offre-financiere" className="text-sm font-medium">
-                                Offre financière (PDF)
-                            </Label>
-                            <Input
-                                id="offre-financiere"
-                                type="file"
-                                accept=".pdf,.doc,.docx"
-                                onChange={(e) => setOffreFinanciere(e.target.files?.[0] || null)}
-                                className="cursor-pointer"
-                            />
-                            {offreFinanciere && (
-                                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <FileText className="w-3 h-3" />
-                                    {offreFinanciere.name}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground">
-                        <strong>Note :</strong> Assurez-vous d'avoir uploadé tous vos documents légaux (RCCM, NINEA, Quitus Fiscal) dans votre dashboard avant de postuler.
-                    </p>
-                </div>
-
-                <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsPostulerOpen(false)}>Annuler</Button>
-                    <Button type="submit" disabled={submitting}>
-                        {submitting ? "Envoi en cours..." : "Confirmer ma candidature"}
-                    </Button>
-                </DialogFooter>
-            </form>
+      <Dialog
+        open={!!pdfViewer}
+        onOpenChange={(open) => {
+          if (!open) closePdfViewer();
+        }}
+      >
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+            <DialogTitle className="truncate pr-8">{pdfViewer?.title ?? "Document"}</DialogTitle>
+            <DialogDescription className="sr-only">Aperçu PDF dans le navigateur</DialogDescription>
+          </DialogHeader>
+          {pdfViewer?.url ? (
+            <iframe title={pdfViewer.title} src={pdfViewer.url} className="flex-1 min-h-[60vh] w-full border-0 bg-slate-100" />
+          ) : null}
+          <DialogFooter className="px-6 py-4 border-t shrink-0">
+            <Button type="button" variant="outline" onClick={closePdfViewer}>
+              Fermer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

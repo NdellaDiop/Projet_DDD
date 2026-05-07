@@ -3,8 +3,9 @@ import { Shield, Clock, FileSearch, Users, Bell, BarChart3 } from "lucide-react"
 const features = [
   {
     icon: FileSearch,
-    title: "Consultation Simplifiée",
-    description: "Parcourez facilement tous les appels d'offres publiés avec des filtres par catégorie, date et statut.",
+    title: "Consultation des avis",
+    description:
+      "Parcourez les appels d'offres publiés, lisez ou téléchargez l'avis (PDF) et les pièces associées, comme sur les portails d'autorités de place.",
   },
   {
     icon: Shield,
@@ -13,30 +14,34 @@ const features = [
   },
   {
     icon: Clock,
-    title: "Suivi en Temps Réel",
-    description: "Suivez l'état de vos candidatures à chaque étape : soumis, en évaluation, retenu ou rejeté.",
+    title: "Notifications & suivi",
+    description:
+      "Recevez des messages dans l'application (convocation, suite de procédure) lorsque le service des marchés actualise votre dossier.",
   },
   {
     icon: Users,
     title: "Espace Fournisseur",
-    description: "Gérez votre compte, vos documents et l'historique de toutes vos participations en un seul endroit.",
+    description:
+      "Tenez à jour vos documents légaux et consultez les avis publiés. La remise des plis (soumission) se fait en présentiel au siège.",
   },
   {
     icon: Bell,
-    title: "Alertes Personnalisées",
-    description: "Recevez des notifications pour les nouveaux appels d'offres correspondant à votre secteur d'activité.",
+    title: "Notifications",
+    description:
+      "Recevez des messages dans l'application lorsque le service des marchés actualise votre dossier ou l'avis d'un marché évolue.",
   },
   {
     icon: BarChart3,
-    title: "Tableau de Bord",
-    description: "Visualisez vos statistiques : appels en cours, marchés gagnés, historique complet.",
+    title: "Tableau de bord",
+    description:
+      "Vue d'ensemble de vos démarches : consultations, documents, candidatures lorsque la fonctionnalité est activée.",
   },
 ];
 
 const FeaturesSection = () => {
   return (
     <section className="py-20 md:py-28">
-      <div className="container">
+      <div className="container max-w-5xl">
         {/* Header */}
         <div className="mx-auto max-w-2xl text-center mb-16">
           <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full">

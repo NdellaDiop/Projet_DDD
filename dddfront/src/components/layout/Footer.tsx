@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import { Mail, Phone, MapPin, Facebook, Linkedin, Twitter, Instagram } from "lucide-react";
+import { BRAND_LOGO_PATH, BRAND_LOGO_CLASS_FOOTER } from "@/lib/branding";
 
-/** Fichiers dans `public/` sont servis à la racine : utiliser `/image.png`, pas `/public/image.png`. */
 const socialNetworkLinks: { label: string; Icon: LucideIcon; envUrl: string | undefined }[] = [
   { label: "Facebook", Icon: Facebook, envUrl: import.meta.env.VITE_SOCIAL_FACEBOOK_URL },
   { label: "LinkedIn", Icon: Linkedin, envUrl: import.meta.env.VITE_SOCIAL_LINKEDIN_URL },
@@ -19,15 +19,15 @@ const Footer = () => {
   return (
     <footer className="bg-footer text-footer-foreground">
       {/* Main Footer */}
-      <div className="container py-12 md:py-16">
+      <div className="container max-w-5xl py-12 md:py-16">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {/* Brand */}
           <div className="space-y-4">
-            <Link to="/" className="flex flex-col items-start group">
-              <img src="/image.png" alt="Dakar Dem Dikk Logo" className="h-10 w-auto mb-1" />
+            <Link to="/" className="group flex flex-col items-start">
+              <img src={BRAND_LOGO_PATH} alt="Dakar Dem Dikk — Dem Dikk" className={BRAND_LOGO_CLASS_FOOTER} />
               <span className="text-[10px] font-medium uppercase tracking-wider text-footer-foreground/70">
-                  Portail Appels d'Offres
-                </span>
+                Portail des marchés Publics
+              </span>
             </Link>
             <p className="text-sm text-footer-foreground/80 leading-relaxed">
               Plateforme officielle de gestion des appels d'offres de Dakar Dem Dikk. 
@@ -48,13 +48,6 @@ const Footer = () => {
                   </a>
                 ))}
               </div>
-            ) : import.meta.env.DEV ? (
-              <p className="text-xs text-footer-foreground/50 max-w-xs">
-                Réseaux sociaux : définissez dans{" "}
-                <code className="rounded bg-footer-foreground/10 px-1">.env</code> par exemple{" "}
-                <code className="rounded bg-footer-foreground/10 px-1">VITE_SOCIAL_FACEBOOK_URL</code>,{" "}
-                <code className="rounded bg-footer-foreground/10 px-1">VITE_SOCIAL_LINKEDIN_URL</code>, etc.
-              </p>
             ) : null}
           </div>
 
@@ -68,7 +61,7 @@ const Footer = () => {
                 { href: "/appels-offres", label: "Appels d'Offres" },
                 { href: "/comment-ca-marche", label: "Comment ça marche" },
                 { href: "/inscription", label: "Devenir fournisseur" },
-                { href: "/faq", label: "FAQ" },
+                { href: "/comment-ca-marche#guide-depot", label: "Dépôt des plis (guide)" },
               ].map((link) => (
                 <li key={link.href}>
                   <Link
@@ -120,7 +113,7 @@ const Footer = () => {
 
       {/* Bottom Bar */}
       <div className="border-t border-footer-foreground/10">
-        <div className="container flex flex-col items-center justify-between gap-4 py-6 md:flex-row">
+        <div className="container max-w-5xl flex flex-col items-center justify-between gap-4 py-6 md:flex-row">
           <p className="text-xs text-footer-foreground/60 text-center md:text-left">
             © {currentYear} Dakar Dem Dikk. Tous droits réservés.
           </p>

@@ -21,6 +21,7 @@ class Fournisseur extends Model
         'ninea',
         'rccm',
         'quitus_fiscal',
+        'references_professionnelles',
         'photo_profil',
     ];
 

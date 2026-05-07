@@ -7,7 +7,12 @@ import { BrowserRouter } from 'react-router-dom'; // Si vous utilisez React Rout
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter> {/* C'est ici que BrowserRouter doit envelopper AuthProvider */}
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <AuthProvider>
         <App />
       </AuthProvider>

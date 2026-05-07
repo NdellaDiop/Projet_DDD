@@ -24,7 +24,12 @@ import {
   Award,
   LayoutDashboard,
   MessageSquare,
-  Send
+  Send,
+  UserCircle,
+  Bell,
+  ChevronDown,
+  ArrowRight,
+  Download,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -35,10 +40,21 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import DashboardNavbar from "@/components/layout/DashboardNavbar";
+import FournisseurChatWidget from "@/components/chat/FournisseurChatWidget";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { exportData } from "@/lib/exportUtils";
-import { Download } from "lucide-react";
+import {
+  LEGAL_DOCUMENT_CATEGORIES,
+  ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES,
+  legalDocumentLabel,
+} from "@/lib/legalDocuments";
 
 interface Candidature {
   id: number;
@@ -76,6 +92,12 @@ interface FournisseurProfile {
   ninea?: string;
   rccm?: string;
   quitus_fiscal?: string;
+  /** Références clients / marchés passés (texte libre). */
+  references_professionnelles?: string | null;
+  /** Préférences portail (alignées sur `config/portail.php`). */
+  portail?: {
+    candidature_en_ligne: boolean;
+  };
 }
 
 interface Suggestion {
@@ -84,6 +106,21 @@ interface Suggestion {
   message: string;
   statut: string;
   created_at: string;
+}
+
+interface InAppNotification {
+  id: number;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+interface AvisOuvertResume {
+  id: number;
+  titre: string;
+  reference: string;
+  date_limite_depot: string;
+  statut?: string;
 }
 
 interface CommentItem {
@@ -107,6 +144,8 @@ export default function FournisseurDashboard() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [newSuggestion, setNewSuggestion] = useState({ sujet: "", message: "" });
   const [profile, setProfile] = useState<FournisseurProfile | null>(null);
+  /** Aligné sur `portail.candidature_en_ligne` (GET /api/fournisseur/profile). */
+  const soumissionEnLigne = profile?.portail?.candidature_en_ligne === true;
   const [loading, setLoading] = useState(true);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const navigate = useNavigate();
@@ -117,6 +156,9 @@ export default function FournisseurDashboard() {
     adresse: "",
     telephone: "",
     email_contact: "",
+    ninea: "",
+    rccm: "",
+    references_professionnelles: "",
   });
 
   // États pour la modification de candidature
@@ -130,6 +172,10 @@ export default function FournisseurDashboard() {
   const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
   const [isPasswordSettingsOpen, setIsPasswordSettingsOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
+  const [portalNotifications, setPortalNotifications] = useState<InAppNotification[]>([]);
+  const [avisOuverts, setAvisOuverts] = useState<AvisOuvertResume[]>([]);
+  const [avisPublishedTotal, setAvisPublishedTotal] = useState(0);
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
 
   const getErrorMessage = (error: unknown, fallback: string): string => {
     if (
@@ -155,14 +201,33 @@ export default function FournisseurDashboard() {
     if (!api) return;
     try {
       setLoading(true);
-      const [candidaturesRes, documentsRes, profileRes, suggestionsRes] = await Promise.all([
+      const [candidaturesRes, documentsRes, profileRes, suggestionsRes, notificationsRes, avisRes] = await Promise.all([
         api.get("/api/fournisseur/candidatures", {
           params: { page: pagination.currentPage, per_page: pagination.perPage }
         }),
         api.get("/api/fournisseur/documents-legaux"),
         api.get("/api/fournisseur/profile"),
         api.get("/api/suggestions"),
+        api.get("/api/notifications").catch(() => ({ data: [] as InAppNotification[] })),
+        api
+          .get("/api/appels-offres", {
+            params: { per_page: 8, statut: "published" },
+          })
+          .catch(() => ({ data: { data: [] as AvisOuvertResume[], meta: { total: 0 } } })),
       ]);
+
+      const rawNotifs = notificationsRes.data;
+      setPortalNotifications(Array.isArray(rawNotifs) ? rawNotifs : []);
+
+      const avisPayload = avisRes.data as {
+        data?: AvisOuvertResume[];
+        meta?: { total?: number };
+      };
+      const avisRows = Array.isArray(avisPayload?.data) ? avisPayload.data : [];
+      setAvisOuverts(avisRows);
+      setAvisPublishedTotal(
+        typeof avisPayload?.meta?.total === "number" ? avisPayload.meta.total : avisRows.length
+      );
 
       const candData = candidaturesRes.data;
       const candidaturesList = Array.isArray(candData.data) ? candData.data : candData;
@@ -185,35 +250,43 @@ export default function FournisseurDashboard() {
         }));
       }
 
-      // Charger les documents et commentaires pour chaque candidature
-      const candidaturesWithDocs = await Promise.all(
-        candidaturesList.map(async (cand: Candidature) => {
-          try {
-            const [candidatureDetail, commentsRes] = await Promise.all([
-              api.get(`/api/candidatures/${cand.id}`),
-              api.get(`/api/candidatures/${cand.id}/comments`).catch(() => ({ data: [] }))
-            ]);
-            const candidatureData = candidatureDetail.data?.data || candidatureDetail.data;
-            const commentsData = commentsRes.data || [];
-            
-            // Stocker les commentaires dans l'état
-            setCandidatureComments(prev => ({
-              ...prev,
-              [cand.id]: Array.isArray(commentsData) ? commentsData : []
-            }));
-            
-            return {
-              ...cand,
-              documents: candidatureData?.documents || []
-            };
-          } catch (err) {
-            console.error(`Erreur chargement documents pour candidature ${cand.id}:`, err);
-            return { ...cand, documents: [] };
-          }
-        })
-      );
-      
-      setCandidatures(candidaturesWithDocs);
+      if (!Array.isArray(candidaturesList) || candidaturesList.length === 0) {
+        setCandidatures([]);
+      } else {
+        const BATCH = 6;
+        const candidaturesWithDocs: Candidature[] = [];
+        for (let i = 0; i < candidaturesList.length; i += BATCH) {
+          const slice = candidaturesList.slice(i, i + BATCH);
+          const batchResults = await Promise.all(
+            slice.map(async (cand: Candidature) => {
+              try {
+                const [candidatureDetail, commentsRes] = await Promise.all([
+                  api.get(`/api/candidatures/${cand.id}`),
+                  api.get(`/api/candidatures/${cand.id}/comments`).catch(() => ({ data: [] })),
+                ]);
+                const candidatureData = candidatureDetail.data?.data || candidatureDetail.data;
+                const commentsData = commentsRes.data || [];
+
+                setCandidatureComments((prev) => ({
+                  ...prev,
+                  [cand.id]: Array.isArray(commentsData) ? commentsData : [],
+                }));
+
+                return {
+                  ...cand,
+                  documents: candidatureData?.documents || [],
+                };
+              } catch (err) {
+                console.error(`Erreur chargement documents pour candidature ${cand.id}:`, err);
+                return { ...cand, documents: [] };
+              }
+            })
+          );
+          candidaturesWithDocs.push(...batchResults);
+        }
+
+        setCandidatures(candidaturesWithDocs);
+      }
 
       const docsData = documentsRes.data;
       setDocuments(Array.isArray(docsData) ? docsData : docsData.data || []);
@@ -226,6 +299,9 @@ export default function FournisseurDashboard() {
         adresse: profileRes.data.adresse || "",
         telephone: profileRes.data.telephone || "",
         email_contact: profileRes.data.email_contact || "",
+        ninea: profileRes.data.ninea ?? "",
+        rccm: profileRes.data.rccm ?? "",
+        references_professionnelles: profileRes.data.references_professionnelles ?? "",
       });
     } catch (error: unknown) {
       console.error("Erreur chargement dashboard:", error);
@@ -275,6 +351,9 @@ export default function FournisseurDashboard() {
         adresse: adresse,
         telephone: telephone,
         email_contact: emailContact,
+        ninea: profileForm.ninea?.trim() || null,
+        rccm: profileForm.rccm?.trim() || null,
+        references_professionnelles: profileForm.references_professionnelles?.trim() || null,
       };
       
       console.log('Données envoyées:', data);
@@ -289,12 +368,16 @@ export default function FournisseurDashboard() {
       console.log('Profil mis à jour - données reçues:', updatedProfile);
       
       // Créer un nouvel objet pour forcer React à détecter le changement
-      const newProfile = {
+      const newProfile: FournisseurProfile = {
         ...updatedProfile,
         nom_entreprise: updatedProfile.nom_entreprise || "",
         adresse: updatedProfile.adresse || "",
         telephone: updatedProfile.telephone || "",
         email_contact: updatedProfile.email_contact || "",
+        ninea: updatedProfile.ninea ?? null,
+        rccm: updatedProfile.rccm ?? null,
+        references_professionnelles: updatedProfile.references_professionnelles ?? null,
+        portail: updatedProfile.portail ?? profile?.portail,
       };
       
       // Mettre à jour le state immédiatement avec les données de la réponse
@@ -306,6 +389,9 @@ export default function FournisseurDashboard() {
         adresse: updatedProfile.adresse || "",
         telephone: updatedProfile.telephone || "",
         email_contact: updatedProfile.email_contact || "",
+        ninea: updatedProfile.ninea ?? "",
+        rccm: updatedProfile.rccm ?? "",
+        references_professionnelles: updatedProfile.references_professionnelles ?? "",
       });
       
       // Rafraîchir les données utilisateur dans le contexte d'authentification
@@ -322,12 +408,16 @@ export default function FournisseurDashboard() {
           const serverProfile = profileRes.data;
           console.log('Profil rechargé depuis serveur:', serverProfile);
           // Créer un nouvel objet pour forcer React à détecter le changement
-          const refreshedProfile = {
+          const refreshedProfile: FournisseurProfile = {
             ...serverProfile,
             nom_entreprise: serverProfile.nom_entreprise || "",
             adresse: serverProfile.adresse || "",
             telephone: serverProfile.telephone || "",
             email_contact: serverProfile.email_contact || "",
+            ninea: serverProfile.ninea ?? null,
+            rccm: serverProfile.rccm ?? null,
+            references_professionnelles: serverProfile.references_professionnelles ?? null,
+            portail: serverProfile.portail ?? profile?.portail,
           };
           // Mettre à jour avec les données du serveur pour garantir la cohérence
           setProfile(refreshedProfile);
@@ -336,6 +426,9 @@ export default function FournisseurDashboard() {
             adresse: refreshedProfile.adresse || "",
             telephone: refreshedProfile.telephone || "",
             email_contact: refreshedProfile.email_contact || "",
+            ninea: refreshedProfile.ninea ?? "",
+            rccm: refreshedProfile.rccm ?? "",
+            references_professionnelles: refreshedProfile.references_professionnelles ?? "",
           });
         } catch (err) {
           console.error("Erreur rechargement profil:", err);
@@ -369,6 +462,7 @@ export default function FournisseurDashboard() {
                             field === 'email_contact' ? 'Email de contact' :
                             field === 'telephone' ? 'Téléphone' :
                             field === 'adresse' ? 'Adresse' :
+                            field === 'references_professionnelles' ? 'Références professionnelles' :
                             field;
             return `${fieldName}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
           })
@@ -463,7 +557,7 @@ export default function FournisseurDashboard() {
 
       toast({
         title: "Document uploadé",
-        description: `${categorie} ajouté avec succès`,
+        description: `${legalDocumentLabel(categorie)} ajouté avec succès`,
       });
 
       loadDashboardData();
@@ -525,10 +619,26 @@ export default function FournisseurDashboard() {
   };
 
   const stats = {
+    notifs_non_lues: portalNotifications.filter((n) => !n.is_read).length,
+    avis_ouverts_total: avisPublishedTotal,
     candidatures_total: candidatures.length,
     candidatures_en_cours: candidatures.filter((c) => c.statut === "submitted" || c.statut === "SOUMISE" || c.statut === "under_review" || c.statut === "EN_EVALUATION").length,
     candidatures_acceptees: candidatures.filter((c) => c.statut === "accepted" || c.statut === "ACCEPTEE").length,
     documents_total: documents.length,
+  };
+
+  const markNotificationRead = async (id: number) => {
+    if (!api) return;
+    try {
+      await api.put(`/api/notifications/${id}`, { is_read: true });
+      setPortalNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de mettre à jour la notification."),
+        variant: "destructive",
+      });
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -580,8 +690,10 @@ export default function FournisseurDashboard() {
 
       // Appeler exportData avec la bonne signature (format, options)
       exportData(type, {
-        fileName: `mes_candidatures_${new Date().toISOString().split('T')[0]}`,
-        title: "Mes Candidatures",
+        fileName: soumissionEnLigne
+          ? `mes_candidatures_${new Date().toISOString().split("T")[0]}`
+          : `historique_portail_${new Date().toISOString().split("T")[0]}`,
+        title: soumissionEnLigne ? "Mes candidatures" : "Historique portail (dossiers enregistrés)",
         columns: columns,
         data: rawData
       });
@@ -643,17 +755,26 @@ export default function FournisseurDashboard() {
     );
   }
 
+  if (!api) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">API non disponible.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-100">
       <DashboardNavbar
         title="Espace Fournisseur"
         onOpenProfile={() => setActiveTab("profile")}
         onOpenSettings={() => setIsPasswordSettingsOpen(true)}
         onLogout={handleLogout}
       />
-      <div className="min-h-[calc(100vh-4rem)] flex pt-16">
+      <FournisseurChatWidget api={api} />
+      <div className="flex min-h-0 w-full flex-1 pt-16">
         {/* SIDEBAR — même principe que l’espace responsable */}
-        <aside className="w-64 bg-white border-r border-slate-200 fixed left-0 top-16 bottom-0 z-40 flex flex-col shadow-sm">
+        <aside className="fixed bottom-0 left-0 top-16 z-30 flex w-64 flex-col border-r border-slate-200 bg-white shadow-sm">
           <div className="px-4 pt-6 pb-5 border-b border-slate-100 shrink-0">
             <div className="flex flex-col items-center text-center">
               <div
@@ -688,8 +809,8 @@ export default function FournisseurDashboard() {
               className={`w-full justify-start ${activeTab === "candidatures" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
               onClick={() => setActiveTab("candidatures")}
             >
-              <FileText className="w-4 h-4 mr-3" />
-              Mes candidatures
+              <Bell className="w-4 h-4 mr-3" />
+              Notifications & avis
             </Button>
 
             <Button
@@ -698,7 +819,16 @@ export default function FournisseurDashboard() {
               onClick={() => setActiveTab("documents")}
             >
               <Upload className="w-4 h-4 mr-3" />
-              Documents légaux
+              Mes documents
+            </Button>
+
+            <Button
+              variant={activeTab === "profile" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "profile" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("profile")}
+            >
+              <UserCircle className="w-4 h-4 mr-3" />
+              Profil entreprise
             </Button>
 
             <Button
@@ -713,30 +843,31 @@ export default function FournisseurDashboard() {
 
           <div className="p-4 border-t border-slate-100 bg-slate-50">
             <p className="text-xs text-slate-400 text-center">
-              Utilisez le menu en haut à droite pour votre profil, les paramètres et la déconnexion.
+              Références clients / marchés : onglet « Profil entreprise ». Paramètres et déconnexion : menu en haut à droite.
             </p>
           </div>
         </aside>
 
-        <main className="flex-1 ml-64 overflow-y-auto h-screen">
-          <div className="p-8">
+        <main className="ml-64 min-h-0 flex-1 overflow-y-auto">
+          <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 md:py-8">
         
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
            <div>
               <h1 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'overview' && "Tableau de bord Fournisseur"}
-                {activeTab === 'candidatures' && "Suivi des Candidatures"}
-                {activeTab === 'documents' && "Gestion Documentaire"}
+                {activeTab === 'candidatures' && "Notifications & avis publiés"}
+                {activeTab === 'documents' && "Mes documents"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
                 {activeTab === 'profile' && "Profil Entreprise"}
               </h1>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'overview' && `Bienvenue, ${profile?.nom_entreprise || user?.name}. Voici un résumé de vos activités.`}
-                {activeTab === 'candidatures' && "Consultez l'historique et le statut de vos soumissions."}
-                {activeTab === 'documents' && "Assurez-vous que vos documents légaux sont à jour."}
+                {activeTab === 'candidatures' &&
+                  "Vous consultez les avis et téléchargez les pièces sur la fiche marché ; le dépôt des offres se fait en présentiel. Notifications et suivi ci-dessous."}
+                {activeTab === 'documents' && "Pièces obligatoires : tenez votre dossier à jour pour que les PRM disposent de vos informations avant votre venue au siège (soumission physique)."}
                 {activeTab === 'suggestions' && "Proposez des améliorations pour la plateforme."}
-                {activeTab === 'profile' && "Mettez à jour les informations de votre entreprise."}
+                {activeTab === 'profile' && "Coordonnées, références professionnelles (clients, marchés passés) et aperçu de vos pièces."}
           </p>
            </div>
         </div>
@@ -744,16 +875,36 @@ export default function FournisseurDashboard() {
         {/* VUE D'ENSEMBLE */}
         {activeTab === "overview" && (
             <div className="space-y-6 animate-in fade-in duration-500">
+                {!soumissionEnLigne && (
+                  <Alert className="border-primary/35 bg-primary/[0.06]">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <AlertTitle className="text-slate-900">Comment répondre à un marché sur ce portail</AlertTitle>
+                    <AlertDescription>
+                      <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm text-slate-700">
+                        <li>Consultez l&apos;avis et les pièces jointes publiées (liste des marchés ou fiche détail).</li>
+                        <li>
+                          Téléchargez le <strong>cahier des charges</strong> — gratuit ou payant selon le marché — puis travaillez ce fichier (ou les modèles fournis) sur votre ordinateur pour{" "}
+                          <strong>répondre aux exigences</strong> : compléter les formulaires, rédiger les pièces demandées, joindre les annexes prévues.
+                        </li>
+                        <li>
+                          Si vous êtes intéressé, constituez votre dossier complet et déplacez-vous pour le{" "}
+                          <strong>dépôt physique des plis</strong> au lieu et aux horaires indiqués (section « Dépôt des plis » sur l&apos;avis). Il n&apos;y a{" "}
+                          <strong>pas de candidature ni de dépôt d&apos;offre en ligne</strong> sur ce portail.
+                        </li>
+                      </ol>
+                    </AlertDescription>
+                  </Alert>
+                )}
         {/* Cartes statistiques */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Candidatures totales</CardTitle>
-                        <div className="bg-blue-50 p-2 rounded-lg"><FileText className="w-4 h-4 text-blue-600" /></div>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Notifications non lues</CardTitle>
+                        <div className="bg-amber-50 p-2 rounded-lg"><Bell className="w-4 h-4 text-amber-600" /></div>
               </CardHeader>
               <CardContent>
-                        <div className="text-2xl font-bold text-slate-800">{stats.candidatures_total}</div>
+                        <div className="text-2xl font-bold text-slate-800">{stats.notifs_non_lues}</div>
               </CardContent>
             </Card>
           </motion.div>
@@ -761,11 +912,11 @@ export default function FournisseurDashboard() {
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">En cours</CardTitle>
-                        <div className="bg-orange-50 p-2 rounded-lg"><Clock className="w-4 h-4 text-orange-600" /></div>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Avis publiés (ouverts)</CardTitle>
+                        <div className="bg-blue-50 p-2 rounded-lg"><FileText className="w-4 h-4 text-blue-600" /></div>
               </CardHeader>
               <CardContent>
-                        <div className="text-2xl font-bold text-slate-800">{stats.candidatures_en_cours}</div>
+                        <div className="text-2xl font-bold text-slate-800">{stats.avis_ouverts_total}</div>
               </CardContent>
             </Card>
           </motion.div>
@@ -773,11 +924,14 @@ export default function FournisseurDashboard() {
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Acceptées</CardTitle>
-                        <div className="bg-green-50 p-2 rounded-lg"><Award className="w-4 h-4 text-green-600" /></div>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Suivi dans le portail</CardTitle>
+                        <div className="bg-slate-100 p-2 rounded-lg"><Clock className="w-4 h-4 text-slate-600" /></div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">{stats.candidatures_acceptees}</div>
+                <div className="text-2xl font-bold text-slate-700">{stats.candidatures_total}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sans dépôt en ligne, ce compteur reste en général à 0 (éventuel historique ou saisie par le service).
+                </p>
               </CardContent>
             </Card>
           </motion.div>
@@ -785,7 +939,7 @@ export default function FournisseurDashboard() {
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Documents</CardTitle>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Mes documents</CardTitle>
                         <div className="bg-purple-50 p-2 rounded-lg"><Upload className="w-4 h-4 text-purple-600" /></div>
               </CardHeader>
               <CardContent>
@@ -796,348 +950,505 @@ export default function FournisseurDashboard() {
         </div>
 
                 <Card className="border-none shadow-sm">
-              <CardHeader>
-                <CardTitle>Dernières candidatures</CardTitle>
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+                <div>
+                  <CardTitle>À traiter en priorité</CardTitle>
+                  <CardDescription>
+                    Notifications du portail ou avis récemment ouverts — même contenu que l&apos;onglet « Notifications & avis ».
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("candidatures")}>
+                  Ouvrir Notifications & avis
+                </Button>
               </CardHeader>
               <CardContent>
-                {candidatures.length === 0 ? (
-                            <p className="text-muted-foreground text-center py-8">Aucune candidature pour le moment.</p>
-                ) : (
-                            <div className="space-y-3">
-                    {candidatures.slice(0, 5).map((candidature) => (
-                                    <div key={candidature.id} className="flex items-center justify-between p-4 border rounded-lg bg-white hover:bg-slate-50 transition-colors">
-                        <div className="flex-1">
-                                            <h4 className="font-semibold text-slate-800">{candidature.appel_offre.titre}</h4>
-                                            <div className="flex gap-4 mt-1">
-                                                <span className="text-xs text-muted-foreground">Réf: {candidature.appel_offre.numero_reference}</span>
-                                                <span className="text-xs text-muted-foreground">Soumis le: {new Date(candidature.date_soumission).toLocaleDateString()}</span>
-                                            </div>
+                {portalNotifications.filter((n) => !n.is_read).length > 0 ? (
+                  <div className="space-y-3">
+                    {portalNotifications
+                      .filter((n) => !n.is_read)
+                      .slice(0, 5)
+                      .map((n) => (
+                        <div
+                          key={n.id}
+                          className="flex flex-col gap-2 rounded-lg border border-amber-100 bg-amber-50/60 p-4 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">{n.message}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(n.created_at).toLocaleString("fr-FR")}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="secondary" onClick={() => void markNotificationRead(n.id)}>
+                            Marquer lu
+                          </Button>
                         </div>
-                        <div>{getStatutBadge(candidature.statut)}</div>
+                      ))}
+                  </div>
+                ) : avisOuverts.length > 0 ? (
+                  <div className="space-y-3">
+                    {avisOuverts.slice(0, 4).map((ao) => (
+                      <div
+                        key={ao.id}
+                        className="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between bg-white"
+                      >
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-slate-800 truncate">{ao.titre}</h4>
+                          <p className="text-xs text-muted-foreground font-mono">{ao.reference}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Clôture :{" "}
+                            {new Date(ao.date_limite_depot).toLocaleString("fr-FR", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        </div>
+                        <Button size="sm" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
+                          Voir la fiche
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
                       </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-            </div>
-        )}
-
-        {/* MES CANDIDATURES */}
-        {activeTab === "candidatures" && (
-            <div className="animate-in fade-in duration-500">
-                <div className="flex justify-between items-center mb-4">
-                    <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleExportData('excel')}>
-                            <Download className="mr-2 h-4 w-4" /> Excel
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleExportData('pdf')}>
-                            <Download className="mr-2 h-4 w-4" /> PDF
-                        </Button>
-                    </div>
-                    <Button onClick={() => navigate("/appels-offres")}>
-                        Voir les offres disponibles
-                    </Button>
-                </div>
-                <Card className="border-none shadow-sm">
-                    <CardContent className="p-6">
-                {candidatures.length === 0 ? (
-                  <div className="text-center py-12">
-                                <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                                <p className="text-muted-foreground">Vous n'avez pas encore postulé à des appels d'offres.</p>
-                                <Button className="mt-4" onClick={() => navigate("/appels-offres")}>
-                                    Consulter les offres disponibles
-                    </Button>
-                  </div>
                 ) : (
-                            <div className="grid gap-4">
-                    {candidatures.map((candidature) => (
-                                    <div key={candidature.id} className="border rounded-lg p-6 bg-white hover:shadow-md transition-all">
-                                        <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-                                            <div className="flex-1 space-y-3">
-                              <div>
-                                                    <h3 className="text-lg font-bold text-slate-800">{candidature.appel_offre.titre}</h3>
-                                                    <Badge variant="outline" className="mt-1">{candidature.appel_offre.numero_reference}</Badge>
-                              </div>
-                                                
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                                                    <div className="flex justify-between md:justify-start gap-2">
-                                                        <span className="text-muted-foreground">Date limite:</span>
-                                                        <span className="font-medium">{new Date(candidature.appel_offre.date_limite).toLocaleDateString()}</span>
-                              </div>
-                                                    <div className="flex justify-between md:justify-start gap-2">
-                                                        <span className="text-muted-foreground">Soumis le:</span>
-                                                        <span className="font-medium">{new Date(candidature.date_soumission).toLocaleDateString()}</span>
-                              </div>
-                                                    {candidature.montant_propose !== null && candidature.montant_propose !== undefined && candidature.montant_propose > 0 && (
-                                                        <div className="flex justify-between md:justify-start gap-2">
-                                                            <span className="text-muted-foreground">Montant:</span>
-                                                            <span className="font-medium text-primary">{candidature.montant_propose.toLocaleString()} FCFA</span>
-                                </div>
-                              )}
-                                                    {(!candidature.montant_propose || candidature.montant_propose === 0) && (
-                                                        <div className="flex justify-between md:justify-start gap-2">
-                                                            <span className="text-muted-foreground">Montant:</span>
-                                                            <span className="font-medium text-orange-600">Non renseigné</span>
-                  </div>
-                )}
-                  </div>
-                                                
-                                                {/* Documents déposés pour cette candidature */}
-                                                {candidature.documents && candidature.documents.length > 0 && (
-                                                  <div className="mt-4 pt-4 border-t border-slate-200">
-                                                    <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                                                      Documents déposés ({candidature.documents.length})
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                      {candidature.documents.map((doc: Document) => (
-                                                        <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100">
-                                                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                                                            <span className="text-xs text-slate-700 truncate" title={doc.nom_fichier}>
-                                                              {doc.nom_fichier}
-                        </span>
-                      </div>
-                        <Button
-                          size="sm"
-                                                            variant="ghost"
-                                                            className="h-7 px-2 shrink-0"
-                                                            onClick={async () => {
-                                                              if (!api) return;
-                                                              try {
-                                                                const response = await api.get(`/api/documents/${doc.id}/download`, {
-                                                                  responseType: 'blob'
-                                                                });
-                                                                
-                                                                const blob = new Blob([response.data]);
-                                                                const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                                                
-                                                                // Pour les PDFs et images, ouvrir dans un nouvel onglet
-                                                                if (contentType.includes('pdf') || contentType.includes('image')) {
-                                                                  const url = window.URL.createObjectURL(blob);
-                                                                  window.open(url, '_blank', 'noopener,noreferrer');
-                                                                  // Nettoyer l'URL après un délai
-                                                                  setTimeout(() => window.URL.revokeObjectURL(url), 100);
-                                                                } else {
-                                                                  // Pour les autres types, télécharger
-                                                                  const url = window.URL.createObjectURL(blob);
-                                                                  const link = document.createElement('a');
-                                                                  link.href = url;
-                                                                  link.target = '_blank';
-                                                                  link.rel = 'noopener noreferrer';
-                                                                  
-                                                                  const extension = contentType.includes('word') ? '.docx'
-                                                                    : contentType.includes('excel') ? '.xlsx'
-                                                                    : '.pdf';
-                                                                  
-                                                                  link.download = doc.nom_fichier || `document${extension}`;
-                                                                  document.body.appendChild(link);
-                                                                  link.click();
-                                                                  document.body.removeChild(link);
-                                                                  window.URL.revokeObjectURL(url);
-                                                                }
-                                                              } catch (error: unknown) {
-                                                                console.error("Erreur ouverture document:", error);
-                                                                toast({
-                                                                  title: "Erreur",
-                                                                  description: getErrorMessage(error, "Impossible d'ouvrir le document."),
-                                                                  variant: "destructive"
-                                                                });
-                                                              }
-                                                            }}
-                        >
-                                                            <Eye className="w-3 h-3 mr-1" />
-                                                            Voir
-                        </Button>
-                                                        </div>
-                                                      ))}
-                                                    </div>
-                                </div>
-                              )}
-                                                
-                                                {/* Section Commentaires */}
-                                                <div className="mt-4 pt-4 border-t border-slate-200">
-                                                  <div className="flex items-center justify-between mb-3">
-                                                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                                                      <MessageSquare className="w-4 h-4" />
-                                                      Commentaires ({candidatureComments[candidature.id]?.length || 0})
-                                                    </h4>
-                        <Button
-                                                      variant="ghost"
-                          size="sm"
-                                                      onClick={() => {
-                                                        if (expandedCandidatureId === candidature.id) {
-                                                          setExpandedCandidatureId(null);
-                                                        } else {
-                                                          setExpandedCandidatureId(candidature.id);
-                                                          // Charger les commentaires si pas encore chargés
-                                                          if (!candidatureComments[candidature.id] && api) {
-                                                            api.get(`/api/candidatures/${candidature.id}/comments`)
-                                                              .then(res => {
-                                                                setCandidatureComments(prev => ({
-                                                                  ...prev,
-                                                                  [candidature.id]: Array.isArray(res.data) ? res.data : []
-                                                                }));
-                                                              })
-                                                              .catch(err => console.error("Erreur chargement commentaires:", err));
-                                                          }
-                                                        }
-                                                      }}
-                                                    >
-                                                      {expandedCandidatureId === candidature.id ? "Masquer" : "Voir"}
-                        </Button>
-                      </div>
-                                                  
-                                                  {expandedCandidatureId === candidature.id && (
-                                                    <div className="space-y-3">
-                                                      {/* Liste des commentaires */}
-                                                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                                                        {candidatureComments[candidature.id]?.length === 0 ? (
-                                                          <p className="text-xs text-muted-foreground text-center py-2">
-                                                            Aucun commentaire pour le moment.
-                                                          </p>
-                                                        ) : (
-                                                          candidatureComments[candidature.id]?.map((comment) => (
-                                                            <div key={comment.id} className={`p-2 rounded-lg border text-xs ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
-                                                              <div className="flex items-start justify-between mb-1">
-                                                                <span className="font-semibold text-slate-700">
-                                                                  {comment.user?.name || 'Utilisateur'}
-                                                                </span>
-                                                                <span className="text-muted-foreground">
-                                                                  {new Date(comment.created_at).toLocaleString()}
-                                                                </span>
-                    </div>
-                                                              <p className="text-slate-600 whitespace-pre-wrap">{comment.message}</p>
-                                                            </div>
-                                                          ))
-                                                        )}
-                </div>
-
-                                                      {/* Formulaire de réponse */}
-                                                      <div className="space-y-2 border-t pt-2">
-                                                        <Textarea
-                                                          placeholder="Répondre au responsable..."
-                                                          value={newComments[candidature.id] || ""}
-                                                          onChange={(e) => setNewComments(prev => ({
-                                                            ...prev,
-                                                            [candidature.id]: e.target.value
-                                                          }))}
-                                                          rows={2}
-                                                          className="resize-none text-xs"
-                                                        />
-                                                        <div className="flex justify-end">
-                        <Button
-                          size="sm"
-                                                            onClick={async () => {
-                                                              if (!api || !newComments[candidature.id]?.trim()) return;
-                                                              
-                                                              setSubmittingComments(prev => ({ ...prev, [candidature.id]: true }));
-                                                              try {
-                                                                const response = await api.post(`/api/candidatures/${candidature.id}/comments`, {
-                                                                  message: newComments[candidature.id].trim()
-                                                                });
-                                                                
-                                                                setCandidatureComments(prev => ({
-                                                                  ...prev,
-                                                                  [candidature.id]: [...(prev[candidature.id] || []), response.data]
-                                                                }));
-                                                                setNewComments(prev => ({ ...prev, [candidature.id]: "" }));
-                                                                toast({
-                                                                  title: "Commentaire envoyé",
-                                                                  description: "Votre réponse a été envoyée au responsable.",
-                                                                });
-                                                              } catch (error: unknown) {
-                                                                console.error("Erreur envoi commentaire:", error);
-                                                                toast({
-                                                                  title: "Erreur",
-                                                                  description: getErrorMessage(error, "Impossible d'envoyer le commentaire."),
-                                                                  variant: "destructive"
-                                                                });
-                                                              } finally {
-                                                                setSubmittingComments(prev => ({ ...prev, [candidature.id]: false }));
-                                                              }
-                                                            }}
-                                                            disabled={!newComments[candidature.id]?.trim() || submittingComments[candidature.id]}
-                                                            className="h-7 text-xs"
-                                                          >
-                                                            {submittingComments[candidature.id] ? (
-                                                              <>
-                                                                <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent mr-1"></div>
-                                                                Envoi...
-                                                              </>
-                                                            ) : (
-                                                              <>
-                                                                <Send className="w-3 h-3 mr-1" />
-                                                                Envoyer
-                                                              </>
-                                                            )}
-                        </Button>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                  )}
-                                                </div>
-                            </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                {getStatutBadge(candidature.statut)}
-                                                {(candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') && 
-                                                 candidature.appel_offre.statut !== 'closed' && (
-                                                  <Button variant="outline" size="sm" onClick={() => handleEditClick(candidature)}>
-                                                      Modifier
-                        </Button>
-                                                )}
-                                                {candidature.appel_offre.statut === 'closed' && (
-                                                  <Badge variant="outline" className="text-xs">
-                                                    Appel d'offre clôturé
-                                                  </Badge>
-                                                )}
-                          </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                )}
-                {candidatures.length > 0 && (
-                  <div className="mt-6">
-                    <DataTablePagination
-                      currentPage={pagination.currentPage}
-                      totalPages={pagination.totalPages}
-                      totalItems={pagination.totalItems}
-                      perPage={pagination.perPage}
-                      onPageChange={handlePageChange}
-                      onPerPageChange={handlePerPageChange}
-                    />
-                  </div>
+                  <p className="text-muted-foreground text-center py-8">
+                    Aucune notification non lue et aucun avis ouvert listé pour le moment. Consultez la liste complète des marchés.
+                  </p>
                 )}
               </CardContent>
             </Card>
             </div>
         )}
 
-        {/* DOCUMENTS LEGAUX */}
+        {/* NOTIFICATIONS & AVIS (ex. Mes démarches) */}
+        {activeTab === "candidatures" && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-800">Notifications & avis</h2>
+                <Button variant="outline" onClick={() => navigate("/appels-offres")}>
+                  Liste complète des marchés
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+
+              <Card className="border-none shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-amber-600" />
+                    Notifications
+                  </CardTitle>
+                  <CardDescription>
+                    Messages envoyés via le portail (convocation, suite de procédure, rappels…).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {portalNotifications.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucune notification pour le moment.</p>
+                  ) : (
+                    <ul className="divide-y rounded-lg border bg-white">
+                      {portalNotifications.map((n) => (
+                        <li
+                          key={n.id}
+                          className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:justify-between ${!n.is_read ? "bg-amber-50/50" : ""}`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="text-sm text-slate-800">{n.message}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(n.created_at).toLocaleString("fr-FR")}
+                            </p>
+                          </div>
+                          {!n.is_read ? (
+                            <Button size="sm" variant="secondary" onClick={() => void markNotificationRead(n.id)}>
+                              Marquer lu
+                            </Button>
+                          ) : (
+                            <Badge variant="outline" className="shrink-0">Lu</Badge>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                    Avis publiés (marchés ouverts)
+                  </CardTitle>
+                  <CardDescription>
+                    Accédez à la fiche avis (PDF, cahier, modalités de dépôt au siège).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {avisOuverts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun avis au statut « publié » pour le moment.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {avisOuverts.map((ao) => (
+                        <li
+                          key={ao.id}
+                          className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-900">{ao.titre}</p>
+                            <p className="text-xs font-mono text-muted-foreground">{ao.reference}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Clôture :{' '}
+                              {new Date(ao.date_limite_depot).toLocaleString('fr-FR', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
+                            </p>
+                          </div>
+                          <Button size="sm" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
+                            Ouvrir la fiche
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Collapsible open={historiqueOuvert} onOpenChange={setHistoriqueOuvert} className="space-y-3">
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between" type="button">
+                    <span>
+                      Dossiers enregistrés dans l&apos;outil — {candidatures.length} ligne(s)
+                    </span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 transition-transform ${historiqueOuvert ? "rotate-180" : ""}`}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Vous ne déposez pas d&apos;offre via ce portail : vous consultez l&apos;avis, téléchargez le cahier puis vous rendez sur place. Les lignes ci-dessous ne correspondent qu&apos;à un éventuel historique ou à une saisie effectuée par le service des marchés.
+                  </p>
+                  {candidatures.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleExportData("excel")}>
+                          <Download className="mr-2 h-4 w-4" /> Excel
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleExportData("pdf")}>
+                          <Download className="mr-2 h-4 w-4" /> PDF
+                        </Button>
+                      </div>
+                      <div className="grid gap-4">
+                                          {candidatures.map((candidature) => (
+                                                          <div key={candidature.id} className="border rounded-lg p-6 bg-white hover:shadow-md transition-all">
+                                                              <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                                                                  <div className="flex-1 space-y-3">
+                                                    <div>
+                                                                          <h3 className="text-lg font-bold text-slate-800">{candidature.appel_offre.titre}</h3>
+                                                                          <Badge variant="outline" className="mt-1">{candidature.appel_offre.numero_reference}</Badge>
+                                                    </div>
+                                                                      
+                                                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                                                                          <div className="flex justify-between md:justify-start gap-2">
+                                                                              <span className="text-muted-foreground">Date limite:</span>
+                                                                              <span className="font-medium">{new Date(candidature.appel_offre.date_limite).toLocaleDateString()}</span>
+                                                    </div>
+                                                                          <div className="flex justify-between md:justify-start gap-2">
+                                                                              <span className="text-muted-foreground">Soumis le:</span>
+                                                                              <span className="font-medium">{new Date(candidature.date_soumission).toLocaleDateString()}</span>
+                                                    </div>
+                                                                          {candidature.montant_propose !== null && candidature.montant_propose !== undefined && candidature.montant_propose > 0 && (
+                                                                              <div className="flex justify-between md:justify-start gap-2">
+                                                                                  <span className="text-muted-foreground">Montant:</span>
+                                                                                  <span className="font-medium text-primary">{candidature.montant_propose.toLocaleString()} FCFA</span>
+                                                      </div>
+                                                    )}
+                                                                          {(!candidature.montant_propose || candidature.montant_propose === 0) && (
+                                                                              <div className="flex justify-between md:justify-start gap-2">
+                                                                                  <span className="text-muted-foreground">Montant:</span>
+                                                                                  <span className="font-medium text-orange-600">Non renseigné</span>
+                                        </div>
+                                      )}
+                                        </div>
+                                                                      
+                                                                      {/* Documents déposés pour cette candidature */}
+                                                                      {candidature.documents && candidature.documents.length > 0 && (
+                                                                        <div className="mt-4 pt-4 border-t border-slate-200">
+                                                                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                                              <FileText className="w-4 h-4" />
+                                                                            Documents déposés ({candidature.documents.length})
+                                                                          </h4>
+                                                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                                            {candidature.documents.map((doc: Document) => (
+                                                                              <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100">
+                                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                                  <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                                                                                  <span className="text-xs text-slate-700 truncate" title={doc.nom_fichier}>
+                                                                                    {doc.nom_fichier}
+                                              </span>
+                                            </div>
+                                              <Button
+                                                size="sm"
+                                                                                  variant="ghost"
+                                                                                  className="h-7 px-2 shrink-0"
+                                                                                  onClick={async () => {
+                                                                                    if (!api) return;
+                                                                                    try {
+                                                                                      const response = await api.get(`/api/documents/${doc.id}/download`, {
+                                                                                        responseType: 'blob'
+                                                                                      });
+                                                                                      
+                                                                                      const blob = new Blob([response.data]);
+                                                                                      const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
+                                                                                      
+                                                                                      // Pour les PDFs et images, ouvrir dans un nouvel onglet
+                                                                                      if (contentType.includes('pdf') || contentType.includes('image')) {
+                                                                                        const url = window.URL.createObjectURL(blob);
+                                                                                        window.open(url, '_blank', 'noopener,noreferrer');
+                                                                                        // Nettoyer l'URL après un délai
+                                                                                        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                                                                                      } else {
+                                                                                        // Pour les autres types, télécharger
+                                                                                        const url = window.URL.createObjectURL(blob);
+                                                                                        const link = document.createElement('a');
+                                                                                        link.href = url;
+                                                                                        link.target = '_blank';
+                                                                                        link.rel = 'noopener noreferrer';
+                                                                                        
+                                                                                        const extension = contentType.includes('word') ? '.docx'
+                                                                                          : contentType.includes('excel') ? '.xlsx'
+                                                                                          : '.pdf';
+                                                                                        
+                                                                                        link.download = doc.nom_fichier || `document${extension}`;
+                                                                                        document.body.appendChild(link);
+                                                                                        link.click();
+                                                                                        document.body.removeChild(link);
+                                                                                        window.URL.revokeObjectURL(url);
+                                                                                      }
+                                                                                    } catch (error: unknown) {
+                                                                                      console.error("Erreur ouverture document:", error);
+                                                                                      toast({
+                                                                                        title: "Erreur",
+                                                                                        description: getErrorMessage(error, "Impossible d'ouvrir le document."),
+                                                                                        variant: "destructive"
+                                                                                      });
+                                                                                    }
+                                                                                  }}
+                                              >
+                                                                                  <Eye className="w-3 h-3 mr-1" />
+                                                                                  Voir
+                                              </Button>
+                                                                              </div>
+                                                                            ))}
+                                                                          </div>
+                                                      </div>
+                                                    )}
+                                                                      
+                                                                      {/* Section Commentaires */}
+                                                                      <div className="mt-4 pt-4 border-t border-slate-200">
+                                                                        <div className="flex items-center justify-between mb-3">
+                                                                          <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                                            <MessageSquare className="w-4 h-4" />
+                                                                            Commentaires ({candidatureComments[candidature.id]?.length || 0})
+                                                                          </h4>
+                                              <Button
+                                                                            variant="ghost"
+                                                size="sm"
+                                                                            onClick={() => {
+                                                                              if (expandedCandidatureId === candidature.id) {
+                                                                                setExpandedCandidatureId(null);
+                                                                              } else {
+                                                                                setExpandedCandidatureId(candidature.id);
+                                                                                // Charger les commentaires si pas encore chargés
+                                                                                if (!candidatureComments[candidature.id] && api) {
+                                                                                  api.get(`/api/candidatures/${candidature.id}/comments`)
+                                                                                    .then(res => {
+                                                                                      setCandidatureComments(prev => ({
+                                                                                        ...prev,
+                                                                                        [candidature.id]: Array.isArray(res.data) ? res.data : []
+                                                                                      }));
+                                                                                    })
+                                                                                    .catch(err => console.error("Erreur chargement commentaires:", err));
+                                                                                }
+                                                                              }
+                                                                            }}
+                                                                          >
+                                                                            {expandedCandidatureId === candidature.id ? "Masquer" : "Voir"}
+                                              </Button>
+                                            </div>
+                                                                        
+                                                                        {expandedCandidatureId === candidature.id && (
+                                                                          <div className="space-y-3">
+                                                                            {/* Liste des commentaires */}
+                                                                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                                                                              {candidatureComments[candidature.id]?.length === 0 ? (
+                                                                                <p className="text-xs text-muted-foreground text-center py-2">
+                                                                                  Aucun commentaire pour le moment.
+                                                                                </p>
+                                                                              ) : (
+                                                                                candidatureComments[candidature.id]?.map((comment) => (
+                                                                                  <div key={comment.id} className={`p-2 rounded-lg border text-xs ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
+                                                                                    <div className="flex items-start justify-between mb-1">
+                                                                                      <span className="font-semibold text-slate-700">
+                                                                                        {comment.user?.name || 'Utilisateur'}
+                                                                                      </span>
+                                                                                      <span className="text-muted-foreground">
+                                                                                        {new Date(comment.created_at).toLocaleString()}
+                                                                                      </span>
+                                          </div>
+                                                                                    <p className="text-slate-600 whitespace-pre-wrap">{comment.message}</p>
+                                                                                  </div>
+                                                                                ))
+                                                                              )}
+                                      </div>
+                      
+                                                                            {/* Formulaire de réponse */}
+                                                                            <div className="space-y-2 border-t pt-2">
+                                                                              <Textarea
+                                                                                placeholder="Répondre au responsable..."
+                                                                                value={newComments[candidature.id] || ""}
+                                                                                onChange={(e) => setNewComments(prev => ({
+                                                                                  ...prev,
+                                                                                  [candidature.id]: e.target.value
+                                                                                }))}
+                                                                                rows={2}
+                                                                                className="resize-none text-xs"
+                                                                              />
+                                                                              <div className="flex justify-end">
+                                              <Button
+                                                size="sm"
+                                                                                  onClick={async () => {
+                                                                                    if (!api || !newComments[candidature.id]?.trim()) return;
+                                                                                    
+                                                                                    setSubmittingComments(prev => ({ ...prev, [candidature.id]: true }));
+                                                                                    try {
+                                                                                      const response = await api.post(`/api/candidatures/${candidature.id}/comments`, {
+                                                                                        message: newComments[candidature.id].trim()
+                                                                                      });
+                                                                                      
+                                                                                      setCandidatureComments(prev => ({
+                                                                                        ...prev,
+                                                                                        [candidature.id]: [...(prev[candidature.id] || []), response.data]
+                                                                                      }));
+                                                                                      setNewComments(prev => ({ ...prev, [candidature.id]: "" }));
+                                                                                      toast({
+                                                                                        title: "Commentaire envoyé",
+                                                                                        description: "Votre réponse a été envoyée au responsable.",
+                                                                                      });
+                                                                                    } catch (error: unknown) {
+                                                                                      console.error("Erreur envoi commentaire:", error);
+                                                                                      toast({
+                                                                                        title: "Erreur",
+                                                                                        description: getErrorMessage(error, "Impossible d'envoyer le commentaire."),
+                                                                                        variant: "destructive"
+                                                                                      });
+                                                                                    } finally {
+                                                                                      setSubmittingComments(prev => ({ ...prev, [candidature.id]: false }));
+                                                                                    }
+                                                                                  }}
+                                                                                  disabled={!newComments[candidature.id]?.trim() || submittingComments[candidature.id]}
+                                                                                  className="h-7 text-xs"
+                                                                                >
+                                                                                  {submittingComments[candidature.id] ? (
+                                                                                    <>
+                                                                                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent mr-1"></div>
+                                                                                      Envoi...
+                                                                                    </>
+                                                                                  ) : (
+                                                                                    <>
+                                                                                      <Send className="w-3 h-3 mr-1" />
+                                                                                      Envoyer
+                                                                                    </>
+                                                                                  )}
+                                              </Button>
+                                                                              </div>
+                                                                            </div>
+                                                                          </div>
+                                                                        )}
+                                                                      </div>
+                                                  </div>
+                                                                  <div className="flex flex-col items-end gap-2">
+                                                                      {getStatutBadge(candidature.statut)}
+                                                                      {soumissionEnLigne &&
+                                                                      (candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') &&
+                                                                       candidature.appel_offre.statut !== 'closed' && (
+                                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(candidature)}>
+                                                                            Modifier
+                                              </Button>
+                                                                      )}
+                                                                      {candidature.appel_offre.statut === 'closed' && (
+                                                                        <Badge variant="outline" className="text-xs">
+                                                                          Appel d'offre clôturé
+                                                                        </Badge>
+                                                                      )}
+                                                </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      {candidatures.length > 0 && (
+                                        <div className="mt-6">
+                                          <DataTablePagination
+                                            currentPage={pagination.currentPage}
+                                            totalPages={pagination.totalPages}
+                                            totalItems={pagination.totalItems}
+                                            perPage={pagination.perPage}
+                                            onPageChange={handlePageChange}
+                                            onPerPageChange={handlePerPageChange}
+                                          />
+                                        </div>
+                                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-2">
+                      Aucune ligne : comportement normal tant que la procédure est uniquement présentielle (pas de candidature en ligne).
+                    </p>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+        )}
+
+        {/* MES DOCUMENTS */}
         {activeTab === "documents" && (
-            <div className="animate-in fade-in duration-500">
+            <div className="animate-in fade-in duration-500 space-y-6">
                 <Card className="border-none shadow-sm">
               <CardHeader>
                         <CardTitle>Documents requis</CardTitle>
-                        <CardDescription>Maintenez vos documents à jour pour pouvoir postuler.</CardDescription>
+                        <CardDescription>
+                          Ces pièces permettent aux équipes d&apos;identifier votre entreprise avant une venue au siège pour le dépôt des offres. Pour indiquer des clients ou marchés déjà réalisés (texte), utilisez l’onglet{" "}
+                          <span className="font-medium text-slate-700">Profil entreprise</span> puis « Modifier » — champ « Références professionnelles ».
+                        </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                        {["RCCM", "NINEA", "QUITUS_FISCAL"].map((typeDoc) => (
-                            <div key={typeDoc} className="space-y-3 p-4 border rounded-lg bg-white">
+                        {[...LEGAL_DOCUMENT_CATEGORIES, "AUTRE"].map((typeDoc) => {
+                          const isAutre = typeDoc === "AUTRE";
+                          const docsForCat = documents.filter((d) => d.categorie === typeDoc);
+
+                          return (
+                            <div
+                              key={typeDoc}
+                              className={`space-y-3 p-4 border rounded-lg ${isAutre ? "bg-slate-50/70 border-dashed" : "bg-white"}`}
+                            >
                                 <div className="flex justify-between items-center">
                                     <Label className="text-base font-semibold">
-                                        {typeDoc === "RCCM" && "RCCM (Registre du Commerce)"}
-                                        {typeDoc === "NINEA" && "NINEA"}
-                                        {typeDoc === "QUITUS_FISCAL" && "Quitus Fiscal"}
+                                        {legalDocumentLabel(typeDoc)}{" "}
+                                        {isAutre && <span className="text-xs text-muted-foreground font-normal">(optionnel)</span>}
                                     </Label>
-                                    {documents.some(d => d.categorie === typeDoc) ? (
+                                    {docsForCat.length > 0 ? (
                                         <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none"><CheckCircle className="w-3 h-3 mr-1"/> Uploadé</Badge>
+                                    ) : isAutre ? (
+                                        <Badge variant="outline" className="text-slate-500 border-slate-200 bg-white"><AlertCircle className="w-3 h-3 mr-1"/> Facultatif</Badge>
                                     ) : (
                                         <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200"><AlertCircle className="w-3 h-3 mr-1"/> Manquant</Badge>
                                     )}
                                 </div>
+
+                                {isAutre && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Pièces complémentaires (certificats, attestations de bonne exécution, etc.). Plusieurs fichiers possibles.
+                                  </p>
+                                )}
                                 
                                 <div className="flex items-center gap-4">
                     <Input
@@ -1149,7 +1460,7 @@ export default function FournisseurDashboard() {
                     />
                   </div>
 
-                                {documents.filter((d) => d.categorie === typeDoc).map((doc) => (
+                                {docsForCat.map((doc) => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 mt-3">
                                         <div className="flex items-center gap-3">
                                             <div className="bg-white p-2 rounded border border-slate-200">
@@ -1218,8 +1529,9 @@ export default function FournisseurDashboard() {
                       </div>
                     </div>
                   ))}
-                </div>
-                        ))}
+                            </div>
+                          );
+                        })}
               </CardContent>
             </Card>
             </div>
@@ -1317,22 +1629,26 @@ export default function FournisseurDashboard() {
 
         {/* MON PROFIL */}
         {activeTab === "profile" && (
-            <div className="animate-in fade-in duration-500">
-                <Card className="border-none shadow-sm max-w-4xl">
-                    <CardContent className="p-6">
+            <div className="animate-in fade-in duration-500 w-full">
+                <Card className="border-none shadow-sm w-full">
+                    <CardContent className="p-4 sm:p-6 md:p-8">
                         {/* On affiche toujours les infos ici, plus de condition editingProfile */}
                         <div className="space-y-8">
-                            <div className="flex justify-between items-start">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
                                 <div>
                                     <h3 className="text-lg font-bold text-slate-800">Informations de l'entreprise</h3>
-                                    <p className="text-sm text-muted-foreground">Ces informations seront utilisées pour vos documents.</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      Coordonnées utilisées pour vos échanges. Références professionnelles et pièces déposées sont détaillées ci-dessous.
+                                    </p>
                           </div>
-                                <Button onClick={() => setEditingProfile(true)}>
+                                <Button onClick={() => setEditingProfile(true)} className="shrink-0 self-start sm:self-auto">
                                     Modifier
                                 </Button>
                         </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 gap-10 xl:grid-cols-12 xl:gap-12">
+                              <div className="space-y-6 xl:col-span-5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:grid-cols-1 2xl:grid-cols-2">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Building2 className="w-5 h-5 text-blue-600" /></div>
                                     <div>
@@ -1348,6 +1664,20 @@ export default function FournisseurDashboard() {
                         </div>
                       </div>
                                 <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><FileText className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">NINEA (numéro)</p>
+                                        <p className="font-medium text-slate-800">{profile?.ninea || "-"}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><FileText className="w-5 h-5 text-blue-600" /></div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">RCCM (numéro registre du commerce)</p>
+                                        <p className="font-medium text-slate-800">{profile?.rccm || "-"}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center"><Phone className="w-5 h-5 text-blue-600" /></div>
                                     <div>
                                         <p className="text-xs text-muted-foreground">Téléphone</p>
@@ -1362,26 +1692,44 @@ export default function FournisseurDashboard() {
                                     </div>
                                 </div>
                             </div>
-                            
-                            {/* Documents légaux uploadés */}
-                            <div className="mt-8">
+
+                            <div className="rounded-lg border bg-slate-50/80 p-4 md:p-5">
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                                  <Award className="w-5 h-5 text-amber-700" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="font-semibold text-slate-800">Références professionnelles</h4>
+                                  <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                                    Clients, marchés ou projets déjà réalisés (facultatif, visible par l’équipe marchés).
+                                  </p>
+                                  {profile?.references_professionnelles?.trim() ? (
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{profile.references_professionnelles}</p>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground italic">Non renseigné — vous pouvez l’ajouter via « Modifier ».</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                              </div>
+
+                            {/* Aperçu des pièces déposées (même onglet Mes documents) */}
+                            <div className="xl:col-span-7 xl:border-l xl:border-slate-200 xl:pl-10 pt-8 border-t border-slate-200 xl:border-t-0 xl:pt-0 mt-0">
                                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                                     <FileText className="w-5 h-5 text-primary" />
-                                    Documents légaux uploadés
+                                    Mes documents déposés
                                 </h3>
                                 {documents.length === 0 ? (
                                     <div className="text-center py-8 border-2 border-dashed rounded-lg bg-slate-50">
                                         <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                                         <p className="text-muted-foreground">Aucun document légal uploadé.</p>
-                                        <p className="text-xs text-muted-foreground mt-1">Allez dans la section "Documents légaux" pour uploader vos documents.</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Allez dans l’onglet « Mes documents » pour déposer vos pièces.</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        {['RCCM', 'NINEA', 'QUITUS_FISCAL'].map((categorie) => {
+                                        {ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES.map((categorie) => {
                                             const docs = documents.filter(d => d.categorie === categorie);
-                                            const categorieLabel = categorie === 'RCCM' ? 'RCCM (Registre du Commerce)' 
-                                                : categorie === 'NINEA' ? 'NINEA' 
-                                                : 'Quitus Fiscal';
+                                            const categorieLabel = legalDocumentLabel(categorie);
                                             
                                             return (
                                                 <div key={categorie} className="border rounded-lg p-4 bg-white">
@@ -1474,6 +1822,7 @@ export default function FournisseurDashboard() {
                       )}
                     </div>
                   </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -1547,6 +1896,9 @@ export default function FournisseurDashboard() {
               adresse: profile.adresse || "",
               telephone: profile.telephone || "",
               email_contact: profile.email_contact || "",
+              ninea: profile.ninea ?? "",
+              rccm: profile.rccm ?? "",
+              references_professionnelles: profile.references_professionnelles ?? "",
             });
           }
         }}
@@ -1554,6 +1906,9 @@ export default function FournisseurDashboard() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Modifier le profil entreprise</DialogTitle>
+            <DialogDescription>
+              En bas du formulaire : champ facultatif « Références professionnelles » (clients, marchés, contacts attestables).
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleProfileUpdate} className="grid gap-4 py-4">
             
@@ -1600,6 +1955,40 @@ export default function FournisseurDashboard() {
                 </div>
             </div>
 
+            {/* NINEA / RCCM */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="ninea">NINEA (numéro)</Label>
+                <Input
+                  id="ninea"
+                  value={profileForm.ninea}
+                  onChange={(e) => setProfileForm({ ...profileForm, ninea: e.target.value })}
+                  placeholder="Ex. : 123456789"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="rccm">RCCM (registre du commerce) — numéro</Label>
+                <Input
+                  id="rccm"
+                  value={profileForm.rccm}
+                  onChange={(e) => setProfileForm({ ...profileForm, rccm: e.target.value })}
+                  placeholder="Ex. : SN-DKR-2020-A-12345"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="references_professionnelles">Références professionnelles (facultatif)</Label>
+              <Textarea
+                id="references_professionnelles"
+                value={profileForm.references_professionnelles}
+                onChange={(e) =>
+                  setProfileForm({ ...profileForm, references_professionnelles: e.target.value })
+                }
+                placeholder="Ex. : prestations pour Société X (2022), marché public n°…, contacts attestables…"
+                className="min-h-[120px] resize-y"
+              />
+            </div>
 
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => {

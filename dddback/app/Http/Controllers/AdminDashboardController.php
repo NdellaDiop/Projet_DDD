@@ -191,6 +191,7 @@ class AdminDashboardController extends Controller
             'statut' => $f->statut, // Utilisation de la nouvelle colonne
                     'date_inscription' => $f->created_at->format('Y-m-d'),
                     'nombre_candidatures' => $f->candidatures_count,
+                    'references_professionnelles' => $f->references_professionnelles,
                     'domaines_activite' => [],
                 ];
     }

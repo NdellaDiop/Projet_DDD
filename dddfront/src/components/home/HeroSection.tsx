@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Search, Shield, Clock } from "lucide-react";
+import { ArrowRight, Search, Shield } from "lucide-react";
 
 const HeroSection = () => {
   return (
@@ -11,7 +11,7 @@ const HeroSection = () => {
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent rounded-full blur-3xl" />
       </div>
 
-      <div className="container relative py-20 md:py-28 lg:py-36">
+      <div className="container max-w-5xl relative py-20 md:py-28 lg:py-36">
         <div className="mx-auto max-w-4xl text-center">
           {/* Badge */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm animate-fade-up">
@@ -21,9 +21,8 @@ const HeroSection = () => {
 
           {/* Title */}
           <h1 className="mb-6 font-display text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl animate-fade-up" style={{ animationDelay: "0.1s" }}>
-            Portail des{" "}
             <span className="relative">
-              Appels d'Offres
+              Portail des marchés Publics
               <svg className="absolute -bottom-2 left-0 w-full h-3 text-accent" viewBox="0 0 200 12" preserveAspectRatio="none">
                 <path d="M0,8 Q50,0 100,8 T200,8" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
               </svg>
@@ -32,8 +31,8 @@ const HeroSection = () => {
 
           {/* Subtitle */}
           <p className="mb-10 text-lg text-white/80 md:text-xl max-w-2xl mx-auto leading-relaxed animate-fade-up" style={{ animationDelay: "0.2s" }}>
-            Accédez aux opportunités de marchés publics de Dakar Dem Dikk. 
-            Transparence, équité et digitalisation au service des fournisseurs.
+            Consultez les avis d&apos;appel d&apos;offres publiés par Dakar Dem Dikk. 
+            Transparence et information du public ; le dépôt des offres se poursuit selon les modalités indiquées sur chaque marché.
           </p>
 
           {/* CTA Buttons */}
@@ -52,19 +51,19 @@ const HeroSection = () => {
             </Button>
           </div>
 
-          {/* Stats */}
+          {/* Points clés (pas de chiffres marketing non sourcés) */}
           <div className="mt-16 grid grid-cols-2 gap-6 md:grid-cols-4 animate-fade-up" style={{ animationDelay: "0.4s" }}>
             {[
-              { value: "150+", label: "Appels d'offres publiés" },
-              { value: "500+", label: "Fournisseurs inscrits" },
-              { value: "98%", label: "Taux de satisfaction" },
-              { value: "24/7", label: "Accès permanent" },
-            ].map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="font-display text-3xl font-bold text-white md:text-4xl">
-                  {stat.value}
+              { title: "Consultation", desc: "Avis et pièces sur le portail" },
+              { title: "Dépôt des plis", desc: "En présentiel au siège (modalités par marché)" },
+              { title: "Comptes vérifiés", desc: "Fournisseurs validés par l'administration" },
+              { title: "Notifications", desc: "Suivi dans votre espace" },
+            ].map((item, index) => (
+              <div key={index} className="text-center px-1">
+                <div className="font-display text-lg font-bold text-white md:text-xl leading-tight">
+                  {item.title}
                 </div>
-                <div className="mt-1 text-sm text-white/70">{stat.label}</div>
+                <div className="mt-2 text-xs md:text-sm text-white/70 leading-snug">{item.desc}</div>
               </div>
             ))}
           </div>

@@ -4,8 +4,9 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
-use App\Models\ResponsableMarche;
+use Illuminate\Validation\Rule;
 use App\Models\User;
+use App\Models\AppelOffre;
 
 class StoreAppelOffreRequest extends FormRequest
 {
@@ -33,11 +34,29 @@ class StoreAppelOffreRequest extends FormRequest
         
         return [
             'titre' => 'required|string|max:255',
+            'reference' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique('appels_offres', 'reference'),
+            ],
+            'source_financement' => [
+                'required',
+                'string',
+                Rule::in([
+                    AppelOffre::SOURCE_FONDS_PROPRES,
+                    AppelOffre::SOURCE_ETAT,
+                    AppelOffre::SOURCE_FINANCEMENT_EXTERIEURE,
+                ]),
+            ],
             'description' => 'required|string',
+            'modalites_soumission_physique' => 'nullable|string|max:20000',
             'date_publication' => 'nullable|date',
             'date_limite_depot' => 'required|date|after_or_equal:now',
             'responsable_marche_id' => $isAdmin ? 'nullable|exists:responsables_marche,id' : 'required|exists:responsables_marche,id',
             'statut' => 'required|in:draft,published,closed,archived',
+            'cahier_paiement_requis' => 'sometimes|boolean',
+            'cahier_prix_xof' => ['nullable', 'integer', 'min:1', 'max:50000000', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],
         ];
     }
 

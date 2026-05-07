@@ -101,8 +101,8 @@ class AppelOffreController extends Controller
     {
         $this->authorize('publish', $appelOffre);
 
-        // Exiger les documents AO minimum avant publication (workflow 2 temps)
-        $requiredAoDocs = ['CAHIER_DES_CHARGES', 'REGLEMENT_CONSULTATION'];
+        // Exiger les documents AO minimum avant publication (avis + cahier)
+        $requiredAoDocs = ['AVIS_APPEL_OFFRES', 'CAHIER_DES_CHARGES'];
         $present = Document::where('appel_offre_id', $appelOffre->id)
             ->whereIn('categorie', $requiredAoDocs)
             ->pluck('categorie')
@@ -111,13 +111,29 @@ class AppelOffreController extends Controller
         $missing = array_values(array_diff($requiredAoDocs, $present));
         if (!empty($missing)) {
             $labels = [
+                'AVIS_APPEL_OFFRES' => "Avis d'appel d'offres",
                 'CAHIER_DES_CHARGES' => 'Cahier des charges',
-                'REGLEMENT_CONSULTATION' => 'Règlement de consultation',
             ];
             $missingLabels = array_map(fn ($c) => $labels[$c] ?? $c, $missing);
             return response()->json([
                 'message' => "Documents AO manquants. Ajoutez : ".implode(', ', $missingLabels)." avant de publier.",
                 'missing_documents' => $missing,
+            ], 422);
+        }
+
+        if ($appelOffre->cahier_paiement_requis) {
+            $prix = (int) ($appelOffre->cahier_prix_xof ?? 0);
+            if ($prix <= 0) {
+                return response()->json([
+                    'message' => 'Le cahier des charges est marqué comme payant : indiquez un prix (FCFA) supérieur à 0 dans la fiche AO avant publication.',
+                ], 422);
+            }
+        }
+
+        $modalites = trim((string) ($appelOffre->modalites_soumission_physique ?? ''));
+        if ($modalites === '') {
+            return response()->json([
+                'message' => 'Indiquez les modalités de dépôt des plis en présentiel (adresse du guichet, horaires, contact du service des marchés, salle de dépôt…) dans la fiche avant publication — champ « Modalités de dépôt des plis ».',
             ], 422);
         }
 

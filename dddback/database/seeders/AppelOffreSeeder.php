@@ -28,29 +28,35 @@ class AppelOffreSeeder extends Seeder
         // Création d'appels d'offres
         AppelOffre::create([
             'responsable_marche_id' => $responsableMarche->id,
+            'reference' => 'SEED-AO-001',
+            'source_financement' => AppelOffre::SOURCE_ETAT,
             'titre' => 'Fourniture de matériel informatique',
             'description' => 'Appel d\'offres pour la fourniture de 50 ordinateurs portables et 20 imprimantes multifonctions pour les bureaux de Dakar Dem Dikk.',
             'date_publication' => Carbon::now()->subDays(10), // Publié il y a 10 jours
             'date_limite_depot' => Carbon::now()->addDays(20), // Date limite dans 20 jours
-            'statut' => 'ouvert',
+            'statut' => AppelOffre::STATUS_PUBLISHED,
         ]);
 
         AppelOffre::create([
             'responsable_marche_id' => $responsableMarche->id,
+            'reference' => 'SEED-AO-002',
+            'source_financement' => AppelOffre::SOURCE_FONDS_PROPRES,
             'titre' => 'Services de nettoyage pour les agences régionales',
             'description' => 'Contrat de prestation de services de nettoyage et d\'entretien pour les 5 agences régionales de Dakar Dem Dikk.',
             'date_publication' => Carbon::now()->subDays(5),
             'date_limite_depot' => Carbon::now()->addDays(15),
-            'statut' => 'ouvert',
+            'statut' => AppelOffre::STATUS_PUBLISHED,
         ]);
 
         AppelOffre::create([
             'responsable_marche_id' => $responsableMarche->id,
+            'reference' => 'SEED-AO-003',
+            'source_financement' => AppelOffre::SOURCE_FINANCEMENT_EXTERIEURE,
             'titre' => 'Réhabilitation de la gare routière principale',
             'description' => 'Travaux de rénovation et d\'agrandissement de la gare routière principale, incluant les infrastructures et les commerces.',
             'date_publication' => Carbon::now()->subDays(20),
             'date_limite_depot' => Carbon::now()->subDays(5), // Date limite passée
-            'statut' => 'ferme',
+            'statut' => AppelOffre::STATUS_CLOSED,
         ]);
 
         echo "Appels d'offres semés avec succès.\n";

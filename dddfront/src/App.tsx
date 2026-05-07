@@ -14,6 +14,7 @@ import { Toaster } from "@/components/ui/toaster";
 import FournisseurDashboard from "./pages/FournisseurDashboard";
 import ResponsableDashboard from "./pages/ResponsableDashboard";
 import Contact from "./pages/Contact";
+import PaiementCahierSimulation from "./pages/PaiementCahierSimulation";
 
 // Composant de chargement réutilisable
 const LoadingScreen = () => (
@@ -27,6 +28,7 @@ const LoadingScreen = () => (
 
 function App() {
   const { isAuthenticated, user, isReady, isAdmin } = useAuth();
+  const isFournisseur = user?.role?.name === "FOURNISSEUR";
 
   return (
     <>
@@ -64,6 +66,19 @@ function App() {
               <FournisseurDashboard />
             ) : (
               <Navigate to="/connexion" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/paiement/cahier/simulation"
+          element={
+            !isReady ? (
+              <LoadingScreen />
+            ) : isAuthenticated && isFournisseur ? (
+              <PaiementCahierSimulation />
+            ) : (
+              <Navigate to="/connexion" replace state={{ from: "/paiement/cahier/simulation" }} />
             )
           }
         />

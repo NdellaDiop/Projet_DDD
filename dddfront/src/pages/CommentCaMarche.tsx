@@ -10,48 +10,50 @@ const steps = [
     icon: UserPlus,
     step: "01",
     title: "Créez votre compte",
-    description: "Inscrivez-vous en tant que fournisseur avec vos documents officiels (NINEA, RCCM, attestations).",
+    description: "Inscrivez-vous en tant que fournisseur avec vos pièces officielles (NINEA, RCCM, quitus fiscal, IPRES, CSS, non-faillite, ARCOP).",
     details: [
       "Remplissez le formulaire d'inscription",
-      "Téléchargez vos documents légaux",
-      "Validez votre adresse email",
-      "Attendez la vérification de votre dossier"
+      "Téléchargez vos pièces dans l'espace fournisseur (Mes documents)",
+      "Attendez la validation de votre compte par l'administration",
+      "Vous recevrez un e-mail lorsque votre accès sera activé"
     ]
   },
   {
     icon: Search,
     step: "02",
-    title: "Consultez les offres",
-    description: "Parcourez les appels d'offres publiés et identifiez ceux correspondant à votre secteur d'activité.",
+    title: "Consultez les avis publiés",
+    description: "Parcourez les appels d'offres mis en ligne, lisez ou téléchargez l'avis (PDF) et les pièces associées.",
     details: [
-      "Filtrez par catégorie ou budget",
-      "Consultez les cahiers des charges",
-      "Téléchargez les documents techniques",
-      "Posez vos questions avant la date limite"
+      "Filtrez par critères proposés sur la liste",
+      "Ouvrez la fiche pour lire l'avis en ligne ou le télécharger",
+      "Accédez au cahier des charges (gratuit ou payant selon le marché)",
+      "Notez la date limite et les modalités de dépôt physique"
     ]
   },
   {
     icon: FileUp,
     step: "03",
-    title: "Soumettez votre dossier",
-    description: "Déposez votre offre technique et financière avec tous les documents requis avant la date limite.",
+    title: "Préparez puis déposez au siège",
+    description:
+      "Le portail sert à consulter l’avis et le cahier. La soumission des offres (dépôt des plis) se fait en présentiel selon les modalités publiées pour chaque marché.",
     details: [
-      "Préparez votre offre technique",
-      "Joignez votre proposition financière",
-      "Vérifiez la conformité des documents",
-      "Soumettez avant la date de clôture"
+      "Lisez l’avis et le cahier des charges sur la fiche marché",
+      "Tenez vos documents légaux à jour dans votre espace",
+      "Préparez les plis comme indiqué dans l’avis",
+      "Rendez-vous au lieu et aux horaires du dépôt physique avant la clôture"
     ]
   },
   {
     icon: CheckCircle2,
     step: "04",
-    title: "Suivez votre candidature",
-    description: "Recevez des notifications à chaque étape et accédez aux résultats depuis votre espace.",
+    title: "Suivez les suites dans le portail",
+    description:
+      "Le service des marchés peut vous adresser des notifications (convocation, étapes à suivre). Consultez aussi l’historique dans votre espace.",
     details: [
-      "Suivez l'avancement en temps réel",
-      "Recevez les notifications par email",
-      "Consultez les résultats d'évaluation",
-      "Accédez à l'historique de vos candidatures"
+      "Notifications dans l’application",
+      "Courriel lorsque c’est configuré",
+      "Suivi des démarches dans votre tableau de bord",
+      "Les décisions finales respectent la procédure décrite dans l’avis"
     ]
   },
 ];
@@ -64,13 +66,13 @@ const benefits = [
   },
   {
     icon: Clock,
-    title: "Gain de temps",
-    description: "Fini les déplacements physiques, tout se fait en ligne depuis votre espace fournisseur."
+    title: "Information centralisée",
+    description: "Les avis et pièces sont disponibles en ligne ; vous évitez les déplacements uniquement pour la simple consultation."
   },
   {
     icon: FileText,
     title: "Documents centralisés",
-    description: "Tous vos documents sont stockés de manière sécurisée et réutilisables pour vos prochaines candidatures."
+    description: "Vos pièces sont conservées pour préparer vos dossiers lors des venues au siège et pour les procédures suivies par le service des marchés."
   },
   {
     icon: Award,
@@ -106,8 +108,8 @@ const CommentCaMarche = () => {
           </div>
         </section>
 
-        {/* Steps Section */}
-        <section className="py-20 md:py-28">
+        {/* Steps Section — ancre pour le pied de page */}
+        <section id="guide-depot" className="py-20 md:py-28 scroll-mt-24">
           <div className="container">
             <div className="space-y-16 md:space-y-24">
               {steps.map((step, index) => (

@@ -36,10 +36,17 @@ class AppelOffrePolicy
 
     public function update(User $user, AppelOffre $appelOffre): bool
     {
-        return $user->isResponsableMarche() 
-            && $user->responsableMarche
-            && $appelOffre->responsable_marche_id === $user->responsableMarche->id
-            && $appelOffre->statut === AppelOffre::STATUS_DRAFT;
+        if (! $user->isResponsableMarche() || ! $user->responsableMarche) {
+            return false;
+        }
+        if ((int) $appelOffre->responsable_marche_id !== (int) $user->responsableMarche->id) {
+            return false;
+        }
+
+        return in_array($appelOffre->statut, [
+            AppelOffre::STATUS_DRAFT,
+            AppelOffre::STATUS_PUBLISHED,
+        ], true);
     }
 
     public function publish(User $user, AppelOffre $appelOffre): bool

@@ -2,7 +2,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { API_BASE_URL } from '@/lib/utils'; 
-import { useNavigate } from 'react-router-dom'; 
+import { useNavigate } from 'react-router-dom';
+
+/** Logs d’auth uniquement en dev (évite d’afficher des données sensibles en prod). */
+const authDebug = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
 
 interface User {
   id: number;
@@ -11,6 +18,12 @@ interface User {
   role: { id: number; name: string };
   role_id?: number;
   is_active?: boolean;
+  telephone?: string | null;
+  departement?: string | null;
+  fonction?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_login_at?: string | null;
 }
 
 interface RegisterPayload {
@@ -146,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const loadUser = async () => {
       const storedToken = localStorage.getItem('access_token');
       
-      console.log('🔄 loadUser - storedToken:', storedToken ? 'EXISTS' : 'NULL');
+      authDebug('🔄 loadUser - storedToken:', storedToken ? 'EXISTS' : 'NULL');
       
       if (storedToken) {
         setToken(storedToken);
@@ -157,14 +170,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             headers: { Authorization: `Bearer ${storedToken}` },
           });
           
-          console.log('👤 RAW response.data:', response.data);
-          console.log('👤 typeof response.data:', typeof response.data);
+          authDebug('👤 RAW response.data:', response.data);
+          authDebug('👤 typeof response.data:', typeof response.data);
           
           // ✅ SOLUTION : Parser si c'est une string
           const userData = parseUserPayload(response.data);
           
-          console.log('👤 User après parsing:', userData);
-          console.log('👤 userData.role:', userData.role);
+          authDebug('👤 User après parsing:', userData);
+          authDebug('👤 userData.role:', userData.role);
 
           setUser(userData);
           setIsAuthenticated(true); // ✅ Explicite
@@ -180,7 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false);
         }
       } else {
-        console.log('⚠️ Pas de token dans localStorage');
+        authDebug('⚠️ Pas de token dans localStorage');
         setIsAuthenticated(false);
         setIsReady(true);
         setLoading(false);
@@ -194,52 +207,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Ne pas mettre loading à true ici pour éviter le double chargement
     // Le dashboard affichera son propre chargement
     try {
-      console.log('📡 Récupération du cookie CSRF...');
+      authDebug('📡 Récupération du cookie CSRF...');
       await api.get('/sanctum/csrf-cookie');
       await new Promise(resolve => setTimeout(resolve, 200));
   
       const hasCookie = document.cookie.includes('XSRF-TOKEN');
-      console.log('🍪 Cookie XSRF-TOKEN présent:', hasCookie);
+      authDebug('🍪 Cookie XSRF-TOKEN présent:', hasCookie);
   
       if (!hasCookie) {
         throw new Error("Le cookie CSRF n'a pas été défini correctement");
       }
   
-      console.log('🔐 Tentative de connexion...');
+      authDebug('🔐 Tentative de connexion...');
       const response = await api.post('/api/login', { email, password });
       
-      console.log('✅ RÉPONSE LOGIN:', response.data);
+      authDebug('✅ RÉPONSE LOGIN:', response.data);
       
       const { access_token, user: loggedInUser } = response.data || {};
       
-      console.log('🔓 access_token:', access_token);
-      console.log('👥 loggedInUser:', loggedInUser);
+      authDebug('🔓 access_token:', access_token);
+      authDebug('👥 loggedInUser:', loggedInUser);
   
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       localStorage.setItem('access_token', access_token);
       setToken(access_token);
   
       if (loggedInUser) {
-        console.log('✅ User défini via response.data.user');
-        console.log('👤 typeof loggedInUser:', typeof loggedInUser);
+        authDebug('✅ User défini via response.data.user');
+        authDebug('👤 typeof loggedInUser:', typeof loggedInUser);
   
       // ✅ Parser si c'est une string
       const userData = parseUserPayload(loggedInUser);
 
-      console.log('👤 userData après parsing:', userData);
+      authDebug('👤 userData après parsing:', userData);
       setUser(userData);
       setIsAuthenticated(true); // ✅ Explicite
       setIsReady(true);
       return userData;
     }
   
-      console.log('⚠️ Pas de user dans response.data, appel à /api/me...');
+      authDebug('⚠️ Pas de user dans response.data, appel à /api/me...');
       const me = await api.get('/api/me', {
         headers: { Authorization: `Bearer ${access_token}` },
       });
       
-      console.log('👤 User récupéré via /api/me:', me.data);
-      console.log('👤 typeof me.data:', typeof me.data);
+      authDebug('👤 User récupéré via /api/me:', me.data);
+      authDebug('👤 typeof me.data:', typeof me.data);
 
       // ✅ Parser si c'est une string
       const userData = parseUserPayload(me.data);
@@ -294,7 +307,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await api.get('/api/me');
       const userData = response.data;
       setUser(userData);
-      console.log('✅ Utilisateur rafraîchi:', userData);
+      authDebug('✅ Utilisateur rafraîchi:', userData);
     } catch (error: unknown) {
       console.error('❌ Erreur lors du rafraîchissement de l\'utilisateur:', getApiErrorMessage(error));
     }

@@ -23,7 +23,7 @@ class AdminResponsableController extends Controller
             'telephone' => 'required|string|max:20',
         ]);
 
-        // Récupérer le rôle RESPONSABLE_MARCHE
+        // Rôle système (PRM = RESPONSABLE_MARCHE)
         $role = Role::where('name', 'RESPONSABLE_MARCHE')->first();
         if (!$role) {
             return response()->json(['message' => 'Rôle RESPONSABLE_MARCHE introuvable.'], 500);
