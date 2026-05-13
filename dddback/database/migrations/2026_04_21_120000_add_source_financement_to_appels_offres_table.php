@@ -39,17 +39,32 @@ return new class extends Migration
             ->whereNull('source_financement')
             ->update(['source_financement' => 'etat']);
 
-        DB::statement('ALTER TABLE appels_offres ALTER COLUMN reference SET NOT NULL');
-        DB::statement('ALTER TABLE appels_offres ALTER COLUMN source_financement SET NOT NULL');
+        $driver = DB::connection()->getDriverName();
 
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE appels_offres ALTER COLUMN reference SET NOT NULL');
+            DB::statement('ALTER TABLE appels_offres ALTER COLUMN source_financement SET NOT NULL');
+        } else {
+            // MariaDB / MySQL : MODIFY COLUMN nécessite de respecifier le type.
+            DB::statement('ALTER TABLE appels_offres MODIFY COLUMN reference VARCHAR(255) NOT NULL');
+            DB::statement('ALTER TABLE appels_offres MODIFY COLUMN source_financement VARCHAR(50) NOT NULL');
+        }
+
+        // MariaDB 10.5+ et PostgreSQL acceptent tous deux `IF NOT EXISTS` sur CREATE INDEX.
         DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS appels_offres_reference_unique ON appels_offres (reference)');
     }
 
     public function down(): void
     {
         try {
-            DB::statement('DROP INDEX IF EXISTS appels_offres_reference_unique');
+            $driver = DB::connection()->getDriverName();
+            if ($driver === 'pgsql') {
+                DB::statement('DROP INDEX IF EXISTS appels_offres_reference_unique');
+            } else {
+                DB::statement('DROP INDEX IF EXISTS appels_offres_reference_unique ON appels_offres');
+            }
         } catch (\Throwable $e) {
+            // L'index peut ne pas exister
         }
 
         if (Schema::hasColumn('appels_offres', 'source_financement')) {
