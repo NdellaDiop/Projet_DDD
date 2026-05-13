@@ -20,12 +20,12 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-        'http://localhost:8081',
-        'http://127.0.0.1:8081', 
-        // 'https://votre-domaine-frontend.com', // N'oubliez pas d'ajouter votre domaine de PROD en HTTPS ici quand vous déploierez
-        // 'https://www.votre-domaine-frontend.com',
-    ],
+    // Origines autorisées : configurables via CORS_ALLOWED_ORIGINS (CSV) dans .env.
+    // Par défaut, on autorise les origines de dev local Vite/CRA.
+    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', env(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:8081,http://127.0.0.1:8081,http://localhost:5173,http://127.0.0.1:5173'
+    ))))),
 
     'allowed_origins_patterns' => [],
 
