@@ -27,7 +27,7 @@ class DocumentPolicy
 
         // Un RESPONSABLE_MARCHE peut voir les documents liés à ses appels d'offres
         if ($user->role->name === 'RESPONSABLE_MARCHE') {
-            // Si le document est lié à un appel d'offre
+            // Si le document est lié à un appel d'offres
             if ($document->appelOffre) {
                 $document->load('appelOffre.responsableMarche');
                 if ($document->appelOffre->responsable_marche_id === $user->responsableMarche->id) {
@@ -42,15 +42,22 @@ class DocumentPolicy
                     return true;
                 }
             }
-            // Si le document est un document légal d'un fournisseur qui a postulé à un de ses appels d'offres
+            // Document légal d'un fournisseur : autorisé pour tout PRM
+            // dès lors que le fournisseur (propriétaire du document) est actif.
+            // Cas d'usage : contrôle des pièces au siège lors du dépôt physique des plis.
             if (in_array($document->categorie, \App\Models\Document::allLegalUploadCategories(), true)) {
-                // Vérifier si ce fournisseur a des candidatures pour les appels d'offres du responsable
+                $fournisseur = \App\Models\Fournisseur::where('user_id', $document->user_id)->first();
+                if ($fournisseur && $fournisseur->statut === 'actif') {
+                    return true;
+                }
+
+                // Compatibilité historique : si le fournisseur a déjà candidaté à un AO du PRM
                 $hasCandidature = \App\Models\Candidature::whereHas('appelOffre', function ($q) use ($user) {
                     $q->where('responsable_marche_id', $user->responsableMarche->id);
                 })->whereHas('fournisseur', function ($q) use ($document) {
                     $q->where('user_id', $document->user_id);
                 })->exists();
-                
+
                 if ($hasCandidature) {
                     return true;
                 }

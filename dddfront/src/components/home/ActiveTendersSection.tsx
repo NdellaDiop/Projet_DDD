@@ -94,7 +94,7 @@ const ActiveTendersSection = () => {
     return (
       <section className="py-20 md:py-28 bg-muted/50">
         <div className="container max-w-5xl text-center">
-          <p className="text-lg text-muted-foreground">Aucun appel d'offre actif pour le moment.</p>
+          <p className="text-lg text-muted-foreground">Aucun appel d'offres actif pour le moment.</p>
         </div>
       </section>
     );

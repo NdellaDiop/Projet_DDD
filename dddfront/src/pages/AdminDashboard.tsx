@@ -55,7 +55,7 @@ import {
   Filter,
   Download,
   FileClock,
-  Award
+  Award,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -78,6 +78,7 @@ import {
   missingLegalCategories,
 } from "@/lib/legalDocuments";
 import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
+import { TYPE_MARCHE_OPTIONS, type TypeMarche } from "@/lib/appelOffreCategorisation";
 import AuditHistory from "@/components/AuditHistory";
 import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
 import AdvancedStats from "@/components/AdvancedStats";
@@ -107,26 +108,49 @@ interface AppelOffre {
   id: number;
   titre: string;
   reference: string;
-  statut: "draft" | "published" | "closed" | "archived"; 
+  statut: "draft" | "published" | "closed" | "archived";
+  description?: string | null;
+  modalites_soumission_physique?: string | null;
+  source_financement?: string | null;
+  source_financement_label?: string | null;
+  mode_passation?: string | null;
+  type_marche?: string | null;
+  type_marche_label?: string | null;
+  cahier_paiement_requis?: boolean;
+  cahier_prix_xof?: number | null;
   date_publication: string;
-  date_cloture: string; 
+  date_cloture: string;
+  date_limite_depot?: string;
   nombre_candidatures: number;
+  attribution_statut?: string | null;
+  attributaire_nom?: string | null;
+  attribution_montant_xof?: number | null;
+  attribution_date?: string | null;
+  responsable_marche_id?: number | null;
   responsable: {
     name: string;
-  };
+    email?: string | null;
+    fonction?: string | null;
+    departement?: string | null;
+  } | null;
 }
 
 interface Fournisseur {
   id: number;
-  raison_sociale: string; 
+  raison_sociale: string;
   ninea: string;
-  email: string; 
+  rccm?: string | null;
+  email: string;
   telephone: string;
-  statut: "actif" | "en_attente" | "rejete"; 
+  statut: "actif" | "en_attente" | "rejete";
   date_inscription: string;
   nombre_candidatures: number;
   domaines_activite?: string[];
   references_professionnelles?: string | null;
+  documents_legaux_count?: number;
+  pieces_obligatoires_presentes?: string[];
+  pieces_obligatoires_manquantes?: string[];
+  dossier_complet?: boolean;
 }
 
 interface ResponsableMarche {
@@ -245,6 +269,8 @@ type DashboardFilterValue = string | number | boolean;
   // ============================================
 
 const AdminDashboard: React.FC = () => {
+  // Dépôt en présentiel : ne pas exposer le module "candidatures" sur le dashboard admin.
+  const afficherCandidatures = false;
   const [isCreateResponsableOpen, setIsCreateResponsableOpen] = useState(false);
   const [isEditResponsableOpen, setIsEditResponsableOpen] = useState(false);
   const [editingResponsable, setEditingResponsable] = useState<EditingResponsable | null>(null);
@@ -270,6 +296,8 @@ const AdminDashboard: React.FC = () => {
   const [newTender, setNewTender] = useState({
     reference: "",
     source_financement: "etat" as SourceFinancement,
+    mode_passation: "",
+    type_marche: "" as TypeMarche | "",
     titre: "",
     description: "",
     modalites_soumission_physique: "",
@@ -277,6 +305,9 @@ const AdminDashboard: React.FC = () => {
     cahier_paiement_requis: false,
     cahier_prix_xof: "" as string,
   });
+  const [avisAoFile, setAvisAoFile] = useState<File | null>(null);
+  const [cahierChargesFile, setCahierChargesFile] = useState<File | null>(null);
+  const [creatingTender, setCreatingTender] = useState(false);
   const [isEditModalitesOpen, setIsEditModalitesOpen] = useState(false);
   const [aoForModalites, setAoForModalites] = useState<AppelOffreAdmin | null>(null);
   const [draftModalites, setDraftModalites] = useState("");
@@ -288,6 +319,9 @@ const AdminDashboard: React.FC = () => {
   const [selectedCandidature, setSelectedCandidature] = useState<CandidatureAdmin | null>(null);
   const [legalDocuments, setLegalDocuments] = useState<DocumentLegal[]>([]);
   const [candidatureDocuments, setCandidatureDocuments] = useState<DocumentLegal[]>([]);
+  // Documents légaux affichés dans la modale « Détails du Fournisseur »
+  const [fournisseurLegalDocs, setFournisseurLegalDocs] = useState<DocumentLegal[]>([]);
+  const [loadingFournisseurLegalDocs, setLoadingFournisseurLegalDocs] = useState(false);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -742,9 +776,64 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleViewFournisseur = (fournisseur: Fournisseur) => {
+  const handleViewFournisseur = async (fournisseur: Fournisseur) => {
     setSelectedFournisseur(fournisseur);
     setIsViewFournisseurOpen(true);
+    setFournisseurLegalDocs([]);
+    if (!api) return;
+    setLoadingFournisseurLegalDocs(true);
+    try {
+      const res = await api.get(`/api/fournisseurs/${fournisseur.id}/documents-legaux`);
+      const payload = res.data;
+      const docs: DocumentLegal[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+      setFournisseurLegalDocs(docs);
+    } catch (error) {
+      setFournisseurLegalDocs([]);
+      toast({
+        title: "Documents indisponibles",
+        description: getErrorMessage(error, "Impossible de charger les documents légaux du fournisseur."),
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingFournisseurLegalDocs(false);
+    }
+  };
+
+  const openLegalDocument = async (doc: DocumentLegal) => {
+    if (!api) return;
+    try {
+      const response = await api.get(`/api/documents/${doc.id}/download`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data]);
+      const contentType =
+        response.headers["content-type"] || doc.type_fichier || "application/octet-stream";
+      const url = window.URL.createObjectURL(blob);
+      if (contentType.includes("pdf") || contentType.includes("image")) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.download = doc.nom_fichier || `document-${doc.id}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible d'ouvrir le document."),
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewAppelOffre = (ao: AppelOffre) => {
@@ -853,6 +942,16 @@ const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!api) return;
     try {
+      setCreatingTender(true);
+      const parsedDate = new Date(newTender.date_limite_depot);
+      if (!newTender.date_limite_depot || Number.isNaN(parsedDate.getTime())) {
+        toast({
+          title: "Date invalide",
+          description: "Renseignez une date limite de dépôt valide.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (newTender.cahier_paiement_requis) {
         const raw = parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10);
         if (!raw || raw < 1) {
@@ -863,26 +962,75 @@ const AdminDashboard: React.FC = () => {
           });
           return;
         }
+        if (raw > 50_000_000) {
+          toast({
+            title: "Montant trop élevé",
+            description: "Le montant maximum autorisé est 50 000 000 FCFA.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      if (!newTender.mode_passation.trim() || !newTender.type_marche) {
+        toast({
+          title: "Champs manquants",
+          description: "Renseignez le mode de passation et sélectionnez le type de marché.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!avisAoFile || !cahierChargesFile) {
+        toast({
+          title: "Pièces manquantes",
+          description: "Joignez l'avis d'appel d'offres et le cahier des charges (obligatoires avant publication).",
+          variant: "destructive",
+        });
+        return;
       }
       const prix = newTender.cahier_paiement_requis
         ? Math.max(1, parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10) || 0)
         : null;
-      await api.post("/api/appels-offres", {
+      const createRes = await api.post("/api/appels-offres", {
         reference: newTender.reference,
         source_financement: newTender.source_financement,
+        mode_passation: newTender.mode_passation.trim(),
+        type_marche: newTender.type_marche,
         titre: newTender.titre,
         description: newTender.description,
         modalites_soumission_physique: newTender.modalites_soumission_physique.trim() || null,
-        date_limite_depot: newTender.date_limite_depot,
+        // HTML datetime-local n'inclut pas de timezone ; on envoie un ISO pour éviter les décalages côté serveur.
+        date_limite_depot: parsedDate.toISOString(),
         statut: "draft",
         cahier_paiement_requis: newTender.cahier_paiement_requis,
         cahier_prix_xof: newTender.cahier_paiement_requis ? prix : null,
       });
-      toast({ title: "Succès", description: "Appel d'offre créé en brouillon." });
+
+      const created = createRes.data?.data || createRes.data;
+      const createdId: number | undefined = created?.id;
+      if (!createdId) {
+        throw new Error("Création OK mais l'identifiant de l'appel d'offres est introuvable.");
+      }
+
+      const uploadDoc = async (file: File, categorie: string) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("categorie", categorie);
+        formData.append("appel_offre_id", String(createdId));
+        await api.post("/api/documents", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      };
+
+      await uploadDoc(avisAoFile, "AVIS_APPEL_OFFRES");
+      await uploadDoc(cahierChargesFile, "CAHIER_DES_CHARGES");
+
+      toast({ title: "Succès", description: "Appel d'offres créé en brouillon." });
       setIsCreateAOOpen(false);
       setNewTender({
         reference: "",
         source_financement: "etat",
+        mode_passation: "",
+        type_marche: "",
         titre: "",
         description: "",
         modalites_soumission_physique: "",
@@ -890,6 +1038,8 @@ const AdminDashboard: React.FC = () => {
         cahier_paiement_requis: false,
         cahier_prix_xof: "",
       });
+      setAvisAoFile(null);
+      setCahierChargesFile(null);
       loadMesAppelsOffres();
     } catch (error: unknown) {
       console.error("Erreur création:", error);
@@ -907,6 +1057,8 @@ const AdminDashboard: React.FC = () => {
       } else {
          toast({ title: "Erreur", description: message, variant: "destructive" });
       }
+    } finally {
+      setCreatingTender(false);
     }
   };
 
@@ -914,7 +1066,7 @@ const AdminDashboard: React.FC = () => {
     if (!api) return;
     try {
       await api.post(`/api/appels-offres/${id}/publish`);
-      toast({ title: "Publié", description: "L'appel d'offre est maintenant visible." });
+      toast({ title: "Publié", description: "L'appel d'offres est maintenant visible." });
       loadMesAppelsOffres();
     } catch (error) {
       toast({ title: "Erreur", description: getErrorMessage(error, "Impossible de publier."), variant: "destructive" });
@@ -962,7 +1114,7 @@ const AdminDashboard: React.FC = () => {
     if (!api) return;
     try {
       await api.post(`/api/appels-offres/${id}/close`);
-      toast({ title: "Clôturé", description: "L'appel d'offre est fermé aux candidatures." });
+      toast({ title: "Clôturé", description: "L'appel d'offres est clôturé ; le dépôt des plis n'est plus ouvert." });
       loadMesAppelsOffres();
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de clôturer.", variant: "destructive" });
@@ -1140,7 +1292,7 @@ const AdminDashboard: React.FC = () => {
       });
       toast({ 
         title: "Succès", 
-        description: "L'appel d'offre a été assigné au responsable." 
+        description: "L'appel d'offres a été assigné au responsable." 
       });
       setIsAssignAOOpen(false);
       setSelectedAOForAssign(null);
@@ -1148,7 +1300,7 @@ const AdminDashboard: React.FC = () => {
       loadMesAppelsOffres();
     } catch (error: unknown) {
       console.error("Erreur assignation:", error);
-      const message = getErrorMessage(error, "Impossible d'assigner l'appel d'offre.");
+      const message = getErrorMessage(error, "Impossible d'assigner cet appel d'offres.");
       toast({ 
         title: "Erreur", 
         description: message, 
@@ -1184,7 +1336,7 @@ const AdminDashboard: React.FC = () => {
             { header: 'Statut', key: 'statut' },
             { header: 'Date Publication', key: 'date_publication', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
             { header: 'Date Clôture', key: 'date_cloture', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
-            { header: 'Candidatures', key: 'nombre_candidatures' },
+            // Dépôt en présentiel : pas d'export "candidatures"
             { header: 'Personne responsable du marché (PRM)', key: 'responsable.name' },
           ];
           break;
@@ -1200,7 +1352,7 @@ const AdminDashboard: React.FC = () => {
             { header: 'Téléphone', key: 'telephone' },
             { header: 'Statut', key: 'statut' },
             { header: 'Date Inscription', key: 'date_inscription', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
-            { header: 'Candidatures', key: 'nombre_candidatures' },
+            // Dépôt en présentiel : pas d'export "candidatures"
           ];
           break;
         case 'responsables':
@@ -1364,14 +1516,18 @@ const AdminDashboard: React.FC = () => {
       color: "text-green-600",
       bgColor: "bg-green-50",
     },
-    {
-      title: "Candidatures",
-      value: stats.totalCandidatures,
-      subtitle: `${stats.candidaturesRetenues} retenues • ${stats.candidaturesRejetees} rejetées`,
-      icon: CheckCircle,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
+    ...(afficherCandidatures
+      ? [
+          {
+            title: "Candidatures",
+            value: stats.totalCandidatures,
+            subtitle: `${stats.candidaturesRetenues} retenues • ${stats.candidaturesRejetees} rejetées`,
+            icon: CheckCircle,
+            color: "text-purple-600",
+            bgColor: "bg-purple-50",
+          },
+        ]
+      : []),
     {
       title: "Personnes responsables du marché (PRM)",
       value: stats.totalResponsables,
@@ -1510,7 +1666,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
                 {activeTab === 'responsables' && "Administrez les comptes des PRM"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
-                {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres et candidatures"}
+                {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres"}
                 {activeTab === 'audit' && "Trace des actions effectuées sur la plateforme"}
               </p>
            </div>
@@ -1544,7 +1700,7 @@ const AdminDashboard: React.FC = () => {
         {activeTab === "vue-ensemble" && (
           <div className="space-y-6 animate-in fade-in duration-500">
              {/* Cartes Stats */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {statsCards.map((stat, index) => (
                   <motion.div
                     key={stat.title}
@@ -1729,7 +1885,7 @@ const AdminDashboard: React.FC = () => {
                         <TableHead className="font-semibold">Statut</TableHead>
                         <TableHead className="font-semibold">Clôture</TableHead>
                         <TableHead className="font-semibold">Personne responsable du marché (PRM)</TableHead>
-                        <TableHead className="text-right font-semibold">Candidatures</TableHead>
+                        {/* Dépôt en présentiel : pas de colonne candidatures */}
                         <TableHead className="text-right font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1753,9 +1909,7 @@ const AdminDashboard: React.FC = () => {
                                 <Badge variant="outline" className="text-orange-600 border-orange-200">Non assigné</Badge>
                              )}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="secondary" className="font-mono">{ao.nombre_candidatures}</Badge>
-                          </TableCell>
+                          {/* Dépôt en présentiel : pas de colonne candidatures */}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewAppelOffre(ao)}>
@@ -1767,8 +1921,8 @@ const AdminDashboard: React.FC = () => {
                       ))}
                       {appelsOffres.length === 0 && (
                           <TableRow>
-                              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                  Aucun appel d'offre trouvé.
+                              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                  Aucun appel d'offres trouvé.
                               </TableCell>
                           </TableRow>
                       )}
@@ -1819,7 +1973,7 @@ const AdminDashboard: React.FC = () => {
                         <TableHead>NINEA</TableHead>
                         <TableHead>Contact</TableHead>
                         <TableHead>Statut</TableHead>
-                        <TableHead className="text-right">Candidatures</TableHead>
+                        {/* Dépôt en présentiel : pas de colonne candidatures */}
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1835,9 +1989,7 @@ const AdminDashboard: React.FC = () => {
                             </div>
                           </TableCell>
                           <TableCell>{getStatutBadge(f.statut)}</TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="secondary">{f.nombre_candidatures}</Badge>
-                          </TableCell>
+                          {/* Dépôt en présentiel : pas de colonne candidatures */}
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => handleViewFournisseur(f)}>
                                 <Eye className="w-4 h-4 mr-2" />
@@ -2000,19 +2152,19 @@ const AdminDashboard: React.FC = () => {
                         <TableHead className="font-semibold">Date Limite</TableHead>
                         <TableHead className="font-semibold">Statut</TableHead>
                         <TableHead className="font-semibold">Personne responsable du marché (PRM)</TableHead>
-                        <TableHead className="font-semibold">Candidatures</TableHead>
+                        {/* Dépôt en présentiel : pas de colonne candidatures */}
                         <TableHead className="text-right font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {!Array.isArray(mesAppelsOffres) || mesAppelsOffres.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                             <div className="flex flex-col items-center gap-2">
                               <Briefcase className="w-8 h-8 text-slate-300" />
-                              <p>Aucun appel d'offre créé pour le moment.</p>
+                              <p>Aucun appel d'offres créé pour le moment.</p>
                               <Button variant="link" onClick={() => setIsCreateAOOpen(true)} className="text-primary">
-                                Créer votre premier appel d'offre
+                                Créer votre premier appel d'offres
                               </Button>
                             </div>
                           </TableCell>
@@ -2030,12 +2182,7 @@ const AdminDashboard: React.FC = () => {
                               <Badge variant="outline" className="text-orange-600 border-orange-200">Non assigné</Badge>
                             )}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Users className="w-3 h-3 text-slate-400" />
-                              <span className="text-sm font-medium">{ao.candidatures_count || 0}</span>
-                            </div>
-                          </TableCell>
+                          {/* Dépôt en présentiel : pas de colonne candidatures */}
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
                               {!ao.responsable_marche_id && (
@@ -2064,9 +2211,7 @@ const AdminDashboard: React.FC = () => {
                                   <Archive className="w-3 h-3 mr-1" /> Clôturer
                                 </Button>
                               )}
-                              <Button size="sm" variant="outline" className="h-8" onClick={() => handleViewCandidatures(ao)} title="Voir les candidatures">
-                                <Eye className="w-3 h-3 mr-1" /> Candidatures
-                              </Button>
+                              {/* Dépôt en présentiel : pas de candidatures en ligne */}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -2254,24 +2399,27 @@ const AdminDashboard: React.FC = () => {
 
       {/* Modale Détails Fournisseur */}
       <Dialog open={isViewFournisseurOpen} onOpenChange={setIsViewFournisseurOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Détails du Fournisseur</DialogTitle>
+            <DialogDescription className="text-sm">
+              Dossier complet : informations administratives et pièces légales déposées en ligne.
+            </DialogDescription>
           </DialogHeader>
           {selectedFournisseur && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-5 py-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">Raison Sociale</h4>
                   <p className="text-lg font-medium">{selectedFournisseur.raison_sociale}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">NINEA</h4>
-                  <p>{selectedFournisseur.ninea}</p>
+                  <p className="font-mono">{selectedFournisseur.ninea}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">Email Contact</h4>
-                  <p>{selectedFournisseur.email}</p>
+                  <p className="break-all">{selectedFournisseur.email}</p>
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">Téléphone</h4>
@@ -2295,10 +2443,78 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-muted-foreground italic">Non renseigné</p>
                 )}
               </div>
-              
-              <div className="border-t pt-4 mt-2">
-                 <h4 className="font-semibold mb-2">Actions Rapides</h4>
-                 <div className="flex gap-2">
+
+              {/* Documents légaux */}
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-sm text-slate-800">
+                    Documents légaux du fournisseur
+                  </h4>
+                  {loadingFournisseurLegalDocs && (
+                    <span className="text-xs text-muted-foreground">Chargement…</span>
+                  )}
+                </div>
+
+                {missingLegalCategories(fournisseurLegalDocs).length > 0 && !loadingFournisseurLegalDocs && (
+                  <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span className="font-semibold">Pièces obligatoires manquantes : </span>
+                    {missingLegalCategories(fournisseurLegalDocs)
+                      .map((c) => legalDocumentLabel(c))
+                      .join(", ")}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES.map((categorie) => {
+                    const docs = fournisseurLegalDocs.filter((d) => d.categorie === categorie);
+                    return (
+                      <div
+                        key={categorie}
+                        className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800 truncate">
+                            {legalDocumentLabel(categorie)}
+                          </p>
+                          {docs.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Non fourni</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {docs[0].nom_fichier}
+                              {docs[0].created_at && (
+                                <>
+                                  {" "}
+                                  · ajouté le{" "}
+                                  {new Date(docs[0].created_at).toLocaleDateString("fr-FR")}
+                                </>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        {docs.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openLegalDocument(docs[0])}
+                            title="Ouvrir / télécharger"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1.5" /> Ouvrir
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!loadingFournisseurLegalDocs && fournisseurLegalDocs.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic text-center py-2">
+                      Aucun document légal déposé pour le moment.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                 <h4 className="font-semibold mb-2 text-sm">Actions rapides</h4>
+                 <div className="flex flex-wrap gap-2">
                     {selectedFournisseur.statut === 'en_attente' && (
                         <>
                             <Button size="sm" onClick={() => { handleValidateFournisseur(selectedFournisseur.id); setIsViewFournisseurOpen(false); }}>
@@ -2319,40 +2535,215 @@ const AdminDashboard: React.FC = () => {
 
       {/* Modale Détails Appel d'Offre */}
       <Dialog open={isViewAppelOffreOpen} onOpenChange={setIsViewAppelOffreOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[760px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Détails de l'Appel d'Offre</DialogTitle>
+            <DialogTitle>Détails de l'Appel d'Offres</DialogTitle>
+            <DialogDescription className="text-sm">
+              Fiche récapitulative complète de l&apos;appel d&apos;offres.
+            </DialogDescription>
           </DialogHeader>
           {selectedAppelOffre && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Titre</h4>
-                  <p className="text-lg font-medium">{selectedAppelOffre.titre}</p>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm text-muted-foreground">Référence</h4>
-                  <p className="font-mono">{selectedAppelOffre.reference}</p>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm text-muted-foreground">Statut</h4>
-                  <div className="mt-1">{getStatutBadge(selectedAppelOffre.statut)}</div>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm text-muted-foreground">Date de publication</h4>
-                  <p>{formatDate(selectedAppelOffre.date_publication)}</p>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm text-muted-foreground">Date de clôture</h4>
-                  <p>{formatDate(selectedAppelOffre.date_cloture)}</p>
-                </div>
-                <div className="col-span-2">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Personne responsable du marché (PRM)</h4>
-                  <p>{selectedAppelOffre.responsable?.name}</p>
+            <div className="space-y-5 py-2">
+              {/* En-tête : titre + statut + référence */}
+              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4 space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex-1 min-w-[200px]">
+                    <h3 className="text-lg font-bold text-slate-800 leading-snug">
+                      {selectedAppelOffre.titre}
+                    </h3>
+                    <p className="font-mono text-xs text-slate-500 mt-1">
+                      {selectedAppelOffre.reference}
+                    </p>
+                  </div>
+                  <div className="shrink-0">{getStatutBadge(selectedAppelOffre.statut)}</div>
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsViewAppelOffreOpen(false)}>Fermer</Button>
+
+              {/* Section : caractéristiques du marché */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                  Caractéristiques du marché
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Source de financement</p>
+                    <p className="font-medium text-slate-800">
+                      {selectedAppelOffre.source_financement_label || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Type de marché</p>
+                    <p className="font-medium text-slate-800">
+                      {selectedAppelOffre.type_marche_label || "—"}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-medium text-muted-foreground">Mode de passation</p>
+                    <p className="font-medium text-slate-800">
+                      {selectedAppelOffre.mode_passation?.trim() || "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section : calendrier */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                  Calendrier
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Date de publication</p>
+                    <p className="font-medium text-slate-800">
+                      {formatDate(selectedAppelOffre.date_publication)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Date et heure limite de dépôt</p>
+                    <p className="font-medium text-slate-800">
+                      {selectedAppelOffre.date_cloture
+                        ? new Date(selectedAppelOffre.date_cloture).toLocaleString("fr-FR", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section : description */}
+              {selectedAppelOffre.description && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Description
+                  </h4>
+                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                    {selectedAppelOffre.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Section : modalités de dépôt */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Modalités de dépôt des plis (présentiel)
+                </h4>
+                {selectedAppelOffre.modalites_soumission_physique ? (
+                  <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                    {selectedAppelOffre.modalites_soumission_physique}
+                  </p>
+                ) : (
+                  <p className="text-sm italic text-muted-foreground">Non renseignées.</p>
+                )}
+              </div>
+
+              {/* Section : cahier des charges (payant / gratuit) */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Cahier des charges
+                </h4>
+                {selectedAppelOffre.cahier_paiement_requis &&
+                (selectedAppelOffre.cahier_prix_xof ?? 0) > 0 ? (
+                  <p className="text-sm font-medium text-slate-800">
+                    Payant —{" "}
+                    {Number(selectedAppelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA
+                  </p>
+                ) : (
+                  <p className="text-sm font-medium text-emerald-700">Gratuit (téléchargement direct)</p>
+                )}
+              </div>
+
+              {/* Section : PRM */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Personne responsable du marché (PRM)
+                </h4>
+                {selectedAppelOffre.responsable ? (
+                  <div className="rounded-md border border-slate-100 bg-white p-3 text-sm">
+                    <p className="font-semibold text-slate-800">
+                      {selectedAppelOffre.responsable.name}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 mt-1 text-slate-600">
+                      {selectedAppelOffre.responsable.email && (
+                        <p>
+                          <span className="text-xs text-muted-foreground">Email : </span>
+                          {selectedAppelOffre.responsable.email}
+                        </p>
+                      )}
+                      {selectedAppelOffre.responsable.fonction && (
+                        <p>
+                          <span className="text-xs text-muted-foreground">Fonction : </span>
+                          {selectedAppelOffre.responsable.fonction}
+                        </p>
+                      )}
+                      {selectedAppelOffre.responsable.departement && (
+                        <p className="sm:col-span-2">
+                          <span className="text-xs text-muted-foreground">Direction : </span>
+                          {selectedAppelOffre.responsable.departement}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Badge variant="outline" className="text-orange-600 border-orange-200">
+                    Non assigné
+                  </Badge>
+                )}
+              </div>
+
+              {/* Section : attribution (si AO clôturé/attribué) */}
+              {selectedAppelOffre.attribution_statut &&
+                selectedAppelOffre.attribution_statut !== "non_attribue" && (
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Attribution
+                    </h4>
+                    <div className="rounded-md border border-emerald-100 bg-emerald-50/60 p-3 text-sm space-y-1">
+                      {selectedAppelOffre.attributaire_nom && (
+                        <p>
+                          <span className="text-xs text-muted-foreground">Attributaire : </span>
+                          <span className="font-medium text-slate-800">
+                            {selectedAppelOffre.attributaire_nom}
+                          </span>
+                        </p>
+                      )}
+                      {(selectedAppelOffre.attribution_montant_xof ?? 0) > 0 && (
+                        <p>
+                          <span className="text-xs text-muted-foreground">Montant : </span>
+                          <span className="font-medium text-slate-800">
+                            {Number(selectedAppelOffre.attribution_montant_xof).toLocaleString("fr-FR")} FCFA
+                          </span>
+                        </p>
+                      )}
+                      {selectedAppelOffre.attribution_date && (
+                        <p>
+                          <span className="text-xs text-muted-foreground">Date : </span>
+                          <span className="font-medium text-slate-800">
+                            {formatDate(selectedAppelOffre.attribution_date)}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              <DialogFooter className="pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsViewAppelOffreOpen(false);
+                    navigate(`/appels-offres/${selectedAppelOffre.id}`);
+                  }}
+                >
+                  Ouvrir la fiche publique
+                </Button>
+                <Button variant="default" onClick={() => setIsViewAppelOffreOpen(false)}>
+                  Fermer
+                </Button>
               </DialogFooter>
             </div>
           )}
@@ -2361,13 +2752,16 @@ const AdminDashboard: React.FC = () => {
 
       {/* Modale Création Appel d'Offre */}
       <Dialog open={isCreateAOOpen} onOpenChange={setIsCreateAOOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Créer un Appel d'Offre</DialogTitle>
+            <DialogDescription className="text-sm">
+              Créez le brouillon et joignez tout de suite l&apos;avis d&apos;appel d&apos;offres et le cahier des charges (requis avant publication).
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateTender} className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Référence de l'appel d'offre</Label>
+              <Label>Référence de l'appel d'offres</Label>
               <Input
                 value={newTender.reference}
                 onChange={(e) => setNewTender({ ...newTender, reference: e.target.value })}
@@ -2379,29 +2773,60 @@ const AdminDashboard: React.FC = () => {
                 Référence unique saisie manuellement (responsable ou administrateur).
               </p>
             </div>
-            <div className="space-y-2">
-              <Label>Source de financement</Label>
-              <Select
-                value={newTender.source_financement}
-                onValueChange={(v) =>
-                  setNewTender({ ...newTender, source_financement: v as SourceFinancement })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Titre de l'appel d'offre</Label>
+                <Label>Source de financement</Label>
+                <Select
+                  value={newTender.source_financement}
+                  onValueChange={(v) =>
+                    setNewTender({ ...newTender, source_financement: v as SourceFinancement })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Type de marché</Label>
+                <Select
+                  value={newTender.type_marche || undefined}
+                  onValueChange={(v) =>
+                    setNewTender({ ...newTender, type_marche: v as TypeMarche })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TYPE_MARCHE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Mode de passation</Label>
+              <Input
+                value={newTender.mode_passation}
+                onChange={(e) => setNewTender({ ...newTender, mode_passation: e.target.value })}
+                required
+                placeholder="Ex: Appel d'offres ouvert, Demande de renseignements et de prix..."
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Titre de l'appel d'offres</Label>
                 <Input 
                   value={newTender.titre} 
                   onChange={e => setNewTender({...newTender, titre: e.target.value})} 
@@ -2410,7 +2835,7 @@ const AdminDashboard: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Date limite de dépôt</Label>
+                <Label>Date et heure limite de dépôt</Label>
                 <Input 
                   type="datetime-local" 
                   value={newTender.date_limite_depot} 
@@ -2467,18 +2892,52 @@ const AdminDashboard: React.FC = () => {
                     id="cahier_prix_xof"
                     type="number"
                     min={1}
+                    max={50000000}
                     step={1}
                     value={newTender.cahier_prix_xof}
                     onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
                     placeholder="Ex: 25000"
                     required
                   />
+                  <p className="text-xs text-muted-foreground">Maximum : 50 000 000 FCFA.</p>
                 </div>
               )}
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateAOOpen(false)}>Annuler</Button>
-              <Button type="submit">Créer le brouillon</Button>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+              <div className="space-y-2">
+                <Label>Avis d&apos;appel d&apos;offres (PDF)</Label>
+                <Input
+                  type="file"
+                  accept=".pdf"
+                  required
+                  onChange={(e) => setAvisAoFile(e.target.files?.[0] || null)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Cahier des charges</Label>
+                <Input
+                  type="file"
+                  accept=".pdf,.zip,.doc,.docx,.xls,.xlsx"
+                  required
+                  onChange={(e) => setCahierChargesFile(e.target.files?.[0] || null)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Le cahier peut être un PDF ou un dossier compressé (selon les pièces fournies).
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateAOOpen(false)}
+                disabled={creatingTender}
+              >
+                Annuler
+              </Button>
+              <Button type="submit" disabled={creatingTender}>
+                {creatingTender ? "Création..." : "Créer le brouillon"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2513,7 +2972,7 @@ const AdminDashboard: React.FC = () => {
             />
             {aoForModalites?.statut === "published" && (
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md px-2 py-1.5">
-                Cet appel d’offre est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
+                Cet appel d’offres est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
               </p>
             )}
           </div>
@@ -2540,6 +2999,9 @@ const AdminDashboard: React.FC = () => {
                 </Badge>
               )}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Liste des candidatures associées à l’appel d'offres sélectionné.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             {candidaturesAO.length === 0 ? (
@@ -2615,6 +3077,9 @@ const AdminDashboard: React.FC = () => {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dossier de candidature</DialogTitle>
+            <DialogDescription className="sr-only">
+              Détails du dossier fournisseur et des pièces associées.
+            </DialogDescription>
           </DialogHeader>
           
           {loadingDocuments ? (
@@ -2680,7 +3145,7 @@ const AdminDashboard: React.FC = () => {
               {selectedCandidature.montant_propose && (
                 <Card className="border-none shadow-sm">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant de l'offre</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant des offres</h3>
                     <p className="text-2xl font-bold text-primary">
                       {selectedCandidature.montant_propose.toLocaleString()} FCFA
                     </p>
@@ -3028,7 +3493,7 @@ const AdminDashboard: React.FC = () => {
           {selectedAOForAssign && (
             <div className="space-y-4 py-4">
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <p className="text-sm font-semibold text-slate-700 mb-1">Appel d'offre</p>
+                <p className="text-sm font-semibold text-slate-700 mb-1">Appel d'offres</p>
                 <p className="text-lg font-bold text-slate-800">{selectedAOForAssign.titre}</p>
                 <p className="text-xs text-slate-500 font-mono mt-1">{selectedAOForAssign.reference}</p>
               </div>

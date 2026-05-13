@@ -202,24 +202,24 @@ dddback/
 - **Publication** : Mise en ligne publique
 - **Clôture** : Fermeture aux candidatures
 - **Consultation** : Liste de ses appels d'offres
-- **Candidatures reçues** : Consultation des candidatures par appel d'offre
+- **Candidatures reçues** : Consultation des candidatures par appel d'offres
 
 #### Public
 - **Consultation** : Liste des appels d'offres publiés
-- **Détails** : Affichage détaillé d'un appel d'offre
+- **Détails** : Affichage détaillé d'un appel d'offres
 
 ### 📝 Gestion des Candidatures
 
 #### Fournisseur
-- **Soumission** : Postuler à un appel d'offre
+- **Soumission** : Postuler à un appel d'offres
 - **Modification** : Modifier une candidature (si statut = submitted)
 - **Consultation** : Liste de ses candidatures
-- Contrainte : Un seul candidature par appel d'offre
+- Contrainte : Un seul candidature par appel d'offres
 
 #### Responsable Marché / Admin
 - **Acceptation** : Accepter une candidature
 - **Rejet** : Rejeter une candidature
-- **Consultation** : Liste des candidatures par appel d'offre
+- **Consultation** : Liste des candidatures par appel d'offres
 
 ### 🏪 Gestion des Fournisseurs (Admin)
 - **Validation** : Valider un compte fournisseur
@@ -264,7 +264,7 @@ dddback/
 | POST | `/api/forgot-password` | Demande de réinitialisation |
 | POST | `/api/reset-password` | Réinitialisation avec token |
 | GET | `/api/appels-offres` | Liste des appels d'offres (public) |
-| GET | `/api/appels-offres/{id}` | Détails d'un appel d'offre (public) |
+| GET | `/api/appels-offres/{id}` | Détails d'un appel d'offres (public) |
 
 ### Routes authentifiées
 
@@ -278,10 +278,10 @@ dddback/
 #### Appels d'Offres (Responsable/Admin)
 | Méthode | Route | Description |
 |---------|-------|-------------|
-| POST | `/api/appels-offres` | Créer un appel d'offre |
-| PUT | `/api/appels-offres/{id}` | Modifier un appel d'offre |
-| POST | `/api/appels-offres/{id}/publish` | Publier un appel d'offre |
-| POST | `/api/appels-offres/{id}/close` | Clôturer un appel d'offre |
+| POST | `/api/appels-offres` | Créer un appel d'offres |
+| PUT | `/api/appels-offres/{id}` | Modifier un appel d'offres |
+| POST | `/api/appels-offres/{id}/publish` | Publier un appel d'offres |
+| POST | `/api/appels-offres/{id}/close` | Clôturer un appel d'offres |
 | GET | `/api/responsable/mes-appels-offres` | Liste des AO du responsable |
 | GET | `/api/responsable/appels-offres/{id}/candidatures-recues` | Candidatures d'un AO |
 
@@ -366,7 +366,7 @@ dddback/
 
 - Les fournisseurs sont créés avec `is_active = false` et doivent être validés par l'admin
 - Les appels d'offres sont créés en statut `draft` et doivent être publiés
-- Un fournisseur ne peut soumettre qu'une seule candidature par appel d'offre
+- Un fournisseur ne peut soumettre qu'une seule candidature par appel d'offres
 - Les candidatures peuvent être modifiées uniquement si le statut est `submitted`
 - Les références des appels d'offres sont générées automatiquement au format `AO-YYYY-XXXXX`
 

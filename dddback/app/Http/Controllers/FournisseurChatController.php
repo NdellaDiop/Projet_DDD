@@ -35,7 +35,7 @@ class FournisseurChatController extends Controller
 
         if (AiChatService::isOutOfScope($message)) {
             return response()->json([
-                'answer' => "Je ne peux pas aider sur les mots de passe, tokens, clés API ou informations sensibles. Je peux par contre vous aider sur vos candidatures, documents, statuts et étapes.",
+                'answer' => "Je ne peux pas aider sur les mots de passe, tokens, clés API ou informations sensibles. Je peux par contre vous aider sur vos démarches, documents légaux, statuts et étapes (avis, cahier des charges, dépôt des plis).",
                 'safety_flags' => ['out_of_scope' => true],
             ]);
         }

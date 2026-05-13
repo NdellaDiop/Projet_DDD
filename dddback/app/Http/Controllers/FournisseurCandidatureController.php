@@ -51,7 +51,7 @@ class FournisseurCandidatureController extends Controller
         
         $candidature->load(['appelOffre.responsableMarche.user', 'fournisseur.user']);
 
-        // Notification au responsable de l'appel d'offre
+        // Notification au responsable de l'appel d'offres
         $responsable = $candidature->appelOffre->responsableMarche?->user;
         
         if ($responsable) {
@@ -59,7 +59,7 @@ class FournisseurCandidatureController extends Controller
                 $this->notificationService->sendCandidatureReceivedEmail($responsable, $candidature);
                 $this->notificationService->notifyUser(
                     $responsable->id,
-                    "Nouvelle candidature reçue pour l'appel d'offre '{$candidature->appelOffre->titre}'."
+                    "Nouveau dossier / soumission enregistré pour l'appel d'offres « {$candidature->appelOffre->titre} »."
                 );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email candidature reçue: " . $e->getMessage());

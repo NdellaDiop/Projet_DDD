@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sourceFinancementLabel } from "@/lib/appelOffreFinancement";
+import { typeMarcheLabel } from "@/lib/appelOffreCategorisation";
 
 interface AppelOffreDocument {
   id: number;
@@ -51,6 +52,9 @@ interface AppelOffre {
   reference: string;
   source_financement?: string;
   source_financement_label?: string;
+  mode_passation?: string | null;
+  type_marche?: string | null;
+  type_marche_label?: string | null;
   description: string;
   /** Modalités de dépôt des plis au siège (soumission physique), saisies par le PRM / admin */
   modalites_soumission_physique?: string | null;
@@ -116,8 +120,14 @@ const AppelOffreDetails = () => {
   const [uploadingAoDoc, setUploadingAoDoc] = useState(false);
   const [deletingAoDocId, setDeletingAoDocId] = useState<number | null>(null);
   const [initPaiementEnCours, setInitPaiementEnCours] = useState(false);
+  const [savingAttribution, setSavingAttribution] = useState(false);
+  const [attributaireNom, setAttributaireNom] = useState("");
+  const [attributaireNinea, setAttributaireNinea] = useState("");
+  const [attributionMontant, setAttributionMontant] = useState("");
+  const [attributionCommentaire, setAttributionCommentaire] = useState("");
 
   const canManageAoDocs = isAuthenticated && (isAdmin || isResponsableMarche);
+  const canAttribuer = isAuthenticated && (isAdmin || isResponsableMarche);
 
   const aoDocCategoryLabel: Record<string, string> = {
     AVIS_APPEL_OFFRES: "Avis d'appel d'offres (PDF, gratuit)",
@@ -145,7 +155,7 @@ const AppelOffreDetails = () => {
         setAppelOffre(response.data.data || response.data);
       } catch (err: unknown) {
         console.error("Erreur chargement détails:", err);
-        setError("Impossible de charger les détails de cet appel d'offre.");
+        setError("Impossible de charger les détails de cet appel d'offres.");
       } finally {
         setLoading(false);
       }
@@ -196,6 +206,60 @@ const AppelOffreDetails = () => {
     setAppelOffre(response.data.data || response.data);
   };
 
+  const enregistrerAttribution = async () => {
+    if (!api || !appelOffre) return;
+    const nom = attributaireNom.trim();
+    if (!nom) {
+      toast({
+        title: "Champ requis",
+        description: "Renseignez le nom de l'attributaire.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      setSavingAttribution(true);
+      await api.post(`/api/appels-offres/${appelOffre.id}/attribution`, {
+        attributaire_nom: nom,
+        attributaire_ninea: attributaireNinea.trim() || null,
+        attribution_montant_xof: attributionMontant.trim() ? Number(attributionMontant) : null,
+        attribution_commentaire: attributionCommentaire.trim() || null,
+      });
+      toast({
+        title: "Attribution enregistrée",
+        description: "La décision a été enregistrée (flux présentiel).",
+      });
+      await refreshDetails();
+    } catch (err: unknown) {
+      const msg =
+        typeof err === "object" && err !== null && "response" in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast({
+        title: "Erreur",
+        description: typeof msg === "string" ? msg : "Impossible d'enregistrer l'attribution.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingAttribution(false);
+    }
+  };
+
+  const annulerAttribution = async () => {
+    if (!api || !appelOffre) return;
+    if (!window.confirm("Annuler l'attribution enregistrée pour cet appel d'offres ?")) return;
+    try {
+      setSavingAttribution(true);
+      await api.post(`/api/appels-offres/${appelOffre.id}/attribution/annuler`);
+      toast({ title: "Attribution annulée", description: "L'appel d'offres repasse à « non attribué »." });
+      await refreshDetails();
+    } catch {
+      toast({ title: "Erreur", description: "Impossible d'annuler l'attribution.", variant: "destructive" });
+    } finally {
+      setSavingAttribution(false);
+    }
+  };
+
   const downloadAoDocument = async (doc: { id: number; nom_fichier: string; download_url: string | null }) => {
     if (!api || !doc.download_url) {
       toast({
@@ -225,7 +289,10 @@ const AppelOffreDetails = () => {
     }
   };
 
-  const initierPaiementCahier = async (provider: "wave" | "orange_money" | "simulation") => {
+  const initierPaiementCahier = async (
+    provider: "wave" | "orange_money" | "simulation",
+    opts?: { demo_ui?: "wave" | "orange_money" }
+  ) => {
     if (!api || !appelOffre) return;
     if (!isAuthenticated || !isFournisseur) {
       navigate("/connexion", { state: { from: `/appels-offres/${appelOffre.id}` } });
@@ -233,7 +300,10 @@ const AppelOffreDetails = () => {
     }
     try {
       setInitPaiementEnCours(true);
-      const res = await api.post(`/api/appels-offres/${appelOffre.id}/cahier/paiement/initier`, { provider });
+      const res = await api.post(`/api/appels-offres/${appelOffre.id}/cahier/paiement/initier`, {
+        provider,
+        ...(opts?.demo_ui ? { demo_ui: opts.demo_ui } : {}),
+      });
       if (res.data?.deja_acquis) {
         toast({
           title: "Accès déjà acquis",
@@ -245,6 +315,7 @@ const AppelOffreDetails = () => {
       }
       const paymentUrl = res.data?.payment_url;
       if (typeof paymentUrl === "string" && /^https?:\/\//i.test(paymentUrl)) {
+        // Pour la simulation, l’URL pointe vers une page interne (flux QR).
         window.location.assign(paymentUrl);
         return;
       }
@@ -412,8 +483,8 @@ const AppelOffreDetails = () => {
         <main className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-4">
                 <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
-                <h2 className="text-2xl font-bold text-slate-800">Appel d'offre non trouvé</h2>
-                <p className="text-muted-foreground">{error || "Cet appel d'offre n'existe pas ou a été supprimé."}</p>
+                <h2 className="text-2xl font-bold text-slate-800">Appel d'offres non trouvé</h2>
+                <p className="text-muted-foreground">{error || "Cet appel d'offres n'existe pas ou a été supprimé."}</p>
                 <Button variant="outline" onClick={() => navigate("/appels-offres")}>
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Retour à la liste
@@ -632,7 +703,11 @@ const AppelOffreDetails = () => {
                                                                   size="sm"
                                                                   variant="default"
                                                                   disabled={initPaiementEnCours}
-                                                                  onClick={() => initierPaiementCahier("wave")}
+                                                                  onClick={() =>
+                                                                    appelOffre.cahier_simulation_active
+                                                                      ? initierPaiementCahier("simulation", { demo_ui: "wave" })
+                                                                      : initierPaiementCahier("wave")
+                                                                  }
                                                                 >
                                                                   <Wallet className="h-4 w-4 mr-2" />
                                                                   Wave —{" "}
@@ -646,7 +721,11 @@ const AppelOffreDetails = () => {
                                                                   size="sm"
                                                                   variant="outline"
                                                                   disabled={initPaiementEnCours}
-                                                                  onClick={() => initierPaiementCahier("orange_money")}
+                                                                  onClick={() =>
+                                                                    appelOffre.cahier_simulation_active
+                                                                      ? initierPaiementCahier("simulation", { demo_ui: "orange_money" })
+                                                                      : initierPaiementCahier("orange_money")
+                                                                  }
                                                                 >
                                                                   Orange Money —{" "}
                                                                   {(appelOffre.cahier_prix_xof ?? 0) > 0
@@ -700,7 +779,7 @@ const AppelOffreDetails = () => {
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-muted-foreground italic">Aucun document joint à cet appel d'offre pour le moment.</p>
+                                    <p className="text-sm text-muted-foreground italic">Aucun document joint à cet appel d'offres pour le moment.</p>
                                 )}
                             </div>
                         </CardContent>
@@ -722,7 +801,7 @@ const AppelOffreDetails = () => {
                                 <div className="flex items-start gap-3">
                                     <Calendar className="h-5 w-5 text-slate-400 mt-0.5" />
                                     <div>
-                                        <p className="text-sm font-medium text-slate-500">Date limite de dépôt</p>
+                                        <p className="text-sm font-medium text-slate-500">Date et heure limite de dépôt</p>
                                         <p className="font-semibold text-slate-800">
                                             {new Date(appelOffre.date_limite_depot).toLocaleDateString("fr-FR", {
                                                 day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -749,6 +828,29 @@ const AppelOffreDetails = () => {
                                             {sourceFinancementLabel(
                                                 appelOffre.source_financement,
                                                 appelOffre.source_financement_label ?? null
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-3">
+                                    <FileText className="h-5 w-5 text-slate-400 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Mode de passation</p>
+                                        <p className="font-semibold text-slate-800">
+                                            {appelOffre.mode_passation?.trim() || "—"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-start gap-3">
+                                    <BookOpen className="h-5 w-5 text-slate-400 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-500">Type de marché</p>
+                                        <p className="font-semibold text-slate-800">
+                                            {typeMarcheLabel(
+                                                appelOffre.type_marche,
+                                                appelOffre.type_marche_label ?? null
                                             )}
                                         </p>
                                     </div>
@@ -809,6 +911,60 @@ const AppelOffreDetails = () => {
                         </CardContent>
                     </Card>
 
+                    {canAttribuer && (
+                      <Card className="border border-slate-200 shadow-sm">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg font-semibold text-slate-800">Attribution (présentiel)</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            Enregistrez la décision après réception/évaluation des plis au siège. Cette action ne dépend pas d’une candidature en ligne.
+                          </p>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {appelOffre.statut !== "closed" ? (
+                            <p className="text-sm text-muted-foreground">
+                              Disponible une fois l’appel d'offres <strong>clôturé</strong>.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="space-y-2">
+                                <Label>Attributaire (nom entreprise)</Label>
+                                <Input value={attributaireNom} onChange={(e) => setAttributaireNom(e.target.value)} placeholder="Ex: Entreprise XYZ SARL" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>NINEA (optionnel)</Label>
+                                <Input value={attributaireNinea} onChange={(e) => setAttributaireNinea(e.target.value)} placeholder="Identifiant légal (si connu)" />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Montant attribué (FCFA, optionnel)</Label>
+                                <Input
+                                  inputMode="numeric"
+                                  value={attributionMontant}
+                                  onChange={(e) => setAttributionMontant(e.target.value)}
+                                  placeholder="Ex: 12500000"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Commentaire (optionnel)</Label>
+                                <Input
+                                  value={attributionCommentaire}
+                                  onChange={(e) => setAttributionCommentaire(e.target.value)}
+                                  placeholder="PV, observations, références internes..."
+                                />
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" onClick={() => void enregistrerAttribution()} disabled={savingAttribution}>
+                                  {savingAttribution ? "Enregistrement..." : "Enregistrer l’attribution"}
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => void annulerAttribution()} disabled={savingAttribution}>
+                                  Annuler l’attribution
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
                 </div>
             </div>
 
@@ -821,7 +977,7 @@ const AppelOffreDetails = () => {
           <DialogHeader>
             <DialogTitle>Ajouter un document à l'appel d'offres</DialogTitle>
             <DialogDescription>
-              Joignez l’avis d’appel d’offres (PDF) et le cahier des charges avant publication.
+              Joignez l’avis d’appel d'offres (PDF) et le cahier des charges avant publication.
             </DialogDescription>
           </DialogHeader>
 

@@ -4,7 +4,7 @@
     <h2>Bienvenue sur le portail</h2>
     <p>Bonjour <strong>{{ $user->name }}</strong>,</p>
     <p>Nous avons le plaisir de vous informer que votre compte fournisseur pour l'entreprise <strong>{{ $user->fournisseur->nom_entreprise ?? '' }}</strong> a été validé par l'administration.</p>
-    <p>Vous pouvez désormais vous connecter à votre espace, consulter les appels d'offres en cours et soumettre vos candidatures.</p>
+    <p>Vous pouvez désormais vous connecter à votre espace, consulter les avis d'appel d'offres, télécharger les cahiers des charges le cas échéant, et tenir à jour vos documents légaux avant tout dépôt de plis en présentiel au siège.</p>
     <div class="btn-wrap">
         <a class="btn" href="{{ config('app.frontend_url') }}/connexion" target="_blank" rel="noopener">Accéder à mon compte</a>
     </div>

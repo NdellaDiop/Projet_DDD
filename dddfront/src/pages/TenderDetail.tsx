@@ -40,7 +40,7 @@ interface AppelOffre {
 // Nous allons conserver ces fonctions d'aide pour la coloration des badges
 const getCategoryColor = (category: string) => {
   // Cette fonction dépendra de la façon dont les catégories sont gérées dans votre backend
-  // Pour l'instant, nous pouvons la simplifier ou la lier à d'autres propriétés de l'appel d'offre
+  // Pour l'instant, nous pouvons la simplifier ou la lier à d'autres propriétés de l'appel d'offres
   // ou la retirer si la catégorie n'est pas directement retournée
   switch (category) {
     case "Fournitures":
@@ -107,7 +107,7 @@ const TenderDetail = () => {
     if (id) {
       fetchTenderDetail();
     }
-  }, [id, api]); // Re-déclenche si l'ID de l'appel d'offre ou l'instance API change
+  }, [id, api]); // Re-déclenche si l'ID de l'appel d'offres ou l'instance API change
 
   if (loading) {
     return (
@@ -143,7 +143,7 @@ const TenderDetail = () => {
         <Header />
         <main className="flex-1 py-20 md:py-28 bg-muted/50">
           <div className="container text-center">
-            <p className="text-lg text-muted-foreground">Appel d'offre non trouvé.</p>
+            <p className="text-lg text-muted-foreground">Appel d'offres non trouvé.</p>
           </div>
         </main>
         <Footer />
@@ -265,14 +265,14 @@ const TenderDetail = () => {
                       </div>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      Connectez-vous pour soumettre votre offre
+                      Connectez-vous pour soumettre vos offres
                     </p>
                   </div>
                   <div className="space-y-3">
                     <Button className="w-full" size="lg" asChild disabled={tender.statut !== 'ouvert'}>
                       <Link to="/connexion">
                         <Send className="mr-2 h-5 w-5" />
-                        Soumettre une offre
+                        Soumettre vos offres
                       </Link>
                     </Button>
                     <Button variant="outline" className="w-full" size="lg">
@@ -284,7 +284,7 @@ const TenderDetail = () => {
                     <div className="flex items-start gap-3 text-sm">
                       <AlertCircle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
                       <p className="text-muted-foreground">
-                        Vous devez avoir un compte fournisseur validé pour soumettre une offre.
+                        Vous devez avoir un compte fournisseur validé pour soumettre vos offres.
                       </p>
                     </div>
                   </div>

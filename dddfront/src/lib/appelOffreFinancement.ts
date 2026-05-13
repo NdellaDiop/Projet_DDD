@@ -6,7 +6,8 @@ export type SourceFinancement = (typeof SOURCE_FINANCEMENT_VALUES)[number];
 export const SOURCE_FINANCEMENT_OPTIONS: { value: SourceFinancement; label: string }[] = [
   { value: "fonds_propres", label: "Fonds propres" },
   { value: "etat", label: "État" },
-  { value: "financement_exterieure", label: "Financement extérieure" },
+  // Libellé corrigé : « extérieur » (sans « e ») ; la valeur backend reste 'financement_exterieure'.
+  { value: "financement_exterieure", label: "Financement extérieur" },
 ];
 
 export function sourceFinancementLabel(

@@ -49,6 +49,12 @@ class StoreAppelOffreRequest extends FormRequest
                     AppelOffre::SOURCE_FINANCEMENT_EXTERIEURE,
                 ]),
             ],
+            'mode_passation' => 'required|string|max:255',
+            'type_marche' => [
+                'required',
+                'string',
+                Rule::in(array_keys(AppelOffre::typesMarcheLabels())),
+            ],
             'description' => 'required|string',
             'modalites_soumission_physique' => 'nullable|string|max:20000',
             'date_publication' => 'nullable|date',
@@ -70,7 +76,7 @@ class StoreAppelOffreRequest extends FormRequest
             $mergeData['responsable_marche_id'] = $user->responsableMarche->id;
         }
         // Si c'est un admin et qu'il n'a pas fourni de responsable_marche_id, on le laisse null
-        // (l'admin peut créer un appel d'offre sans responsable assigné)
+        // (l'admin peut créer un appel d'offres sans responsable assigné)
 
         // Si date_publication n'est pas fournie, on met la date actuelle
         if (!$this->has('date_publication')) {

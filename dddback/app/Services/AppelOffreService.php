@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\AppelOffre;
-use App\Models\User;
+use App\Models\CahierAccesAchat;
 use App\Models\Candidature;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -22,7 +22,7 @@ class AppelOffreService
     }
 
     /**
-     * Crée un nouvel appel d'offre.
+     * Crée un nouvel appel d'offres.
      *
      * @param array $data Les données validées pour la création.
      * @return \App\Models\AppelOffre
@@ -33,9 +33,9 @@ class AppelOffreService
     }
 
     /**
-     * Récupère un appel d'offre spécifique par son ID.
+     * Récupère un appel d'offres spécifique par son ID.
      *
-     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offre (via Route Model Binding).
+     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offres (via Route Model Binding).
      * @return \App\Models\AppelOffre
      */
     public function getAppelOffre(AppelOffre $appelOffre): AppelOffre
@@ -44,9 +44,9 @@ class AppelOffreService
     }
 
     /**
-     * Met à jour un appel d'offre existant.
+     * Met à jour un appel d'offres existant.
      *
-     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offre à mettre à jour.
+     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offres à mettre à jour.
      * @param array $data Les données validées pour la mise à jour.
      * @return \App\Models\AppelOffre
      */
@@ -57,9 +57,9 @@ class AppelOffreService
     }
 
     /**
-     * Supprime un appel d'offre.
+     * Supprime un appel d'offres.
      *
-     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offre à supprimer.
+     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offres à supprimer.
      * @return bool|null
      */
     public function deleteAppelOffre(AppelOffre $appelOffre): ?bool
@@ -68,9 +68,9 @@ class AppelOffreService
     }
 
      /**
-     * Publie un appel d'offre (change son statut à 'ouvert').
+     * Publie un appel d'offres (change son statut à 'ouvert').
      *
-     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offre à publier.
+     * @param \App\Models\AppelOffre $appelOffre L'instance de l'appel d'offres à publier.
      * @return \App\Models\AppelOffre
      */
     public function publishAppelOffre(AppelOffre $appelOffre): AppelOffre
@@ -82,23 +82,40 @@ class AppelOffreService
     public function closeAppelOffre(AppelOffre $appelOffre): AppelOffre
     {
         $appelOffre->update(['statut' => AppelOffre::STATUS_CLOSED]);
-        
-        // Notifier tous les fournisseurs qui ont postulé à cet appel d'offre
+
+        $message = "L'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}) est clôturé. Le dépôt des plis n'est plus ouvert ; les suites se font selon l'avis et les instructions du service des marchés.";
+
+        $userIds = collect();
+
         $candidatures = Candidature::where('appel_offre_id', $appelOffre->id)
             ->with('fournisseur.user')
             ->get();
-        
-        $notificationService = app(\App\Services\NotificationService::class);
-        
+
         foreach ($candidatures as $candidature) {
-            if ($candidature->fournisseur && $candidature->fournisseur->user) {
-                $notificationService->notifyUser(
-                    $candidature->fournisseur->user->id,
-                    "L'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference}) a été clôturé. Les candidatures ne sont plus acceptées."
-                );
+            if ($candidature->fournisseur?->user) {
+                $userIds->push((int) $candidature->fournisseur->user->id);
             }
         }
-        
+
+        // Fournisseurs ayant acquis l'accès au cahier (paiement complété), même sans dossier en ligne
+        $userIds = $userIds->merge(
+            CahierAccesAchat::query()
+                ->where('appel_offre_id', $appelOffre->id)
+                ->where('statut', CahierAccesAchat::STATUT_COMPLETED)
+                ->whereHas('user', function ($q): void {
+                    $q->whereHas('role', function ($r): void {
+                        $r->where('name', 'FOURNISSEUR');
+                    });
+                })
+                ->pluck('user_id')
+        )->unique()->filter()->values();
+
+        $notificationService = app(\App\Services\NotificationService::class);
+
+        foreach ($userIds as $userId) {
+            $notificationService->notifyUser((int) $userId, $message);
+        }
+
         return $appelOffre;
     }
 }

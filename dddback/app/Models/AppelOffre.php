@@ -18,6 +18,11 @@ class AppelOffre extends Model
     public const SOURCE_ETAT = 'etat';
     public const SOURCE_FINANCEMENT_EXTERIEURE = 'financement_exterieure';
 
+    public const TYPE_TRAVAUX = 'travaux';
+    public const TYPE_FOURNITURES = 'fournitures';
+    public const TYPE_SERVICES_COURANTS = 'services_courants';
+    public const TYPE_PRESTATIONS_INTELLECTUELLES = 'prestations_intellectuelles';
+
     /**
      * @return array<string, string>
      */
@@ -26,7 +31,21 @@ class AppelOffre extends Model
         return [
             self::SOURCE_FONDS_PROPRES => 'Fonds propres',
             self::SOURCE_ETAT => 'État',
-            self::SOURCE_FINANCEMENT_EXTERIEURE => 'Financement extérieure',
+            // Libellé corrigé : « extérieur » (sans « e ») ; la valeur stockée reste 'financement_exterieure' pour compat.
+            self::SOURCE_FINANCEMENT_EXTERIEURE => 'Financement extérieur',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function typesMarcheLabels(): array
+    {
+        return [
+            self::TYPE_TRAVAUX => 'Travaux',
+            self::TYPE_FOURNITURES => 'Fournitures',
+            self::TYPE_SERVICES_COURANTS => 'Services courants',
+            self::TYPE_PRESTATIONS_INTELLECTUELLES => 'Prestations intellectuelles',
         ];
     }
     
@@ -39,6 +58,8 @@ class AppelOffre extends Model
         'titre',
         'reference',
         'source_financement',
+        'mode_passation',
+        'type_marche',
         'description',
         'modalites_soumission_physique',
         'date_publication',
@@ -46,6 +67,13 @@ class AppelOffre extends Model
         'statut',
         'cahier_paiement_requis',
         'cahier_prix_xof',
+        'attribution_statut',
+        'attributaire_nom',
+        'attributaire_ninea',
+        'attribution_montant_xof',
+        'attribution_date',
+        'attribution_commentaire',
+        'attribution_par_user_id',
     ];
 
     protected $casts = [
@@ -53,6 +81,8 @@ class AppelOffre extends Model
         'date_limite_depot' => 'datetime',
         'cahier_paiement_requis' => 'boolean',
         'cahier_prix_xof' => 'integer',
+        'attribution_montant_xof' => 'integer',
+        'attribution_date' => 'datetime',
     ];
 
     /**

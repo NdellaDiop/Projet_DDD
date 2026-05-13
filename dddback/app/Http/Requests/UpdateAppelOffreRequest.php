@@ -57,6 +57,13 @@ class UpdateAppelOffreRequest extends FormRequest
                     AppelOffre::SOURCE_FINANCEMENT_EXTERIEURE,
                 ]),
             ],
+            'mode_passation' => 'sometimes|required|string|max:255',
+            'type_marche' => [
+                'sometimes',
+                'required',
+                'string',
+                Rule::in(array_keys(AppelOffre::typesMarcheLabels())),
+            ],
             'description' => 'sometimes|required|string',
             'modalites_soumission_physique' => 'nullable|string|max:20000',
             'date_publication' => 'sometimes|required|date',

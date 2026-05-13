@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\Candidature;
+use App\Models\Fournisseur;
 use App\Models\LogActivite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -81,6 +82,15 @@ class DocumentController extends Controller
         // L'admin ne peut pas uploader de documents légaux pour un fournisseur
         if ($user->isAdmin()) {
             return response()->json(['message' => 'Vous n\'êtes pas autorisé à uploader des documents légaux.'], 403);
+        }
+
+        // Le fournisseur ne peut renseigner ses pièces légales qu'après validation
+        // de son compte par l'administrateur (statut « actif »).
+        $fournisseur = $user->fournisseur;
+        if (!$fournisseur || $fournisseur->statut !== 'actif') {
+            return response()->json([
+                'message' => "Votre compte fournisseur doit être validé par l'administrateur avant de pouvoir déposer vos documents légaux.",
+            ], 403);
         }
 
         $request->validate([
@@ -189,6 +199,38 @@ class DocumentController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Liste les documents légaux d'un fournisseur donné, sans dépendance à une candidature.
+     * Accessible aux ADMIN et RESPONSABLE_MARCHE pour pouvoir contrôler le dossier
+     * lorsque le fournisseur se présente au siège pour le dépôt des plis.
+     */
+    public function getDocumentsLegauxFournisseur(Fournisseur $fournisseur)
+    {
+        $user = auth()->user();
+
+        if (!$user || (!$user->isAdmin() && !$user->isResponsableMarche())) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        // Pour un PRM, on n'autorise que les fournisseurs actifs (dossier validé).
+        if ($user->isResponsableMarche() && $fournisseur->statut !== 'actif') {
+            return response()->json([
+                'message' => "Le dossier de ce fournisseur n'est pas (encore) accessible : son compte doit être validé par l'administrateur.",
+            ], 403);
+        }
+
+        if (!$fournisseur->user_id) {
+            return DocumentResource::collection(collect());
+        }
+
+        $documents = Document::where('user_id', $fournisseur->user_id)
+            ->whereIn('categorie', Document::allLegalUploadCategories())
+            ->latest()
+            ->get();
+
+        return DocumentResource::collection($documents);
+    }
+
     public function getFournisseurLegalDocuments(Candidature $candidature)
     {
         // Vérifier que l'utilisateur peut voir cette candidature
@@ -199,7 +241,7 @@ class DocumentController extends Controller
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
         
-        // Vérifier que le responsable a accès à cette candidature (via l'appel d'offre)
+        // Vérifier que le responsable a accès à cette candidature (via l'appel d'offres)
         if ($user->isResponsableMarche()) {
             $candidature->load('appelOffre.responsableMarche');
             if ($candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {

@@ -46,7 +46,7 @@ Les **visiteurs non connectés** peuvent consulter la liste des AO publiés et u
 
 ## 4. Concepts métier principaux (pour modélisation)
 
-### 4.1 Appel d’offres (`AppelOffre`)
+### 4.1 Appel d'offres (`AppelOffre`)
 
 **Cycle de vie** (`statut`) : `draft` → `published` → `closed` ; éventuellement `archived`.
 
@@ -62,7 +62,7 @@ Les **visiteurs non connectés** peuvent consulter la liste des AO publiés et u
 
 ### 4.2 Document (`Document`)
 
-Fichiers liés soit à un **appel d’offres** (avis, cahier, règlement, annexe), soit à un **utilisateur** (documents légaux fournisseur), soit à une **candidature**. Catégories typées (ex. `AVIS_APPEL_OFFRES`, `CAHIER_DES_CHARGES`, etc.).
+Fichiers liés soit à un **appel d'offres** (avis, cahier, règlement, annexe), soit à un **utilisateur** (documents légaux fournisseur), soit à une **candidature**. Catégories typées (ex. `AVIS_APPEL_OFFRES`, `CAHIER_DES_CHARGES`, etc.).
 
 **Téléchargement côté fournisseur** : règles dans le modèle `Document` (ex. cahier payant seulement après enregistrement d’un **achat** complété — voir `CahierAccesAchat`).
 
@@ -74,7 +74,7 @@ Fichiers liés soit à un **appel d’offres** (avis, cahier, règlement, annexe
 
 ### 4.4 Candidature (`Candidature`)
 
-Lien **fournisseur** ↔ **appel d’offre**, avec statut, date de soumission, montant proposé optionnel, documents rattachés, **commentaires** (`CandidatureComment`).
+Lien **fournisseur** ↔ **appel d’offres**, avec statut, date de soumission, montant proposé optionnel, documents rattachés, **commentaires** (`CandidatureComment`).
 
 **Paramètre portail** : `CANDIDATURE_EN_LIGNE` (`config/portail.php`) — si `false`, la **création** de candidature par le fournisseur via l’API est refusée (dépôt **physique** prioritaire) ; l’interface fournisseur l’explicite. Des écrans back-office peuvent toutefois lister d’éventuelles entrées (historique, saisie manuelle, tests).
 
@@ -225,7 +225,7 @@ cd dddfront && npm run build   # sortie dans dist/
 
 | Terme | Sens dans ce projet |
 |-------|---------------------|
-| Appel d’offres | Marché consultatif publié avec pièces jointes et dates limites. |
+| Appel d'offres | Marché consultatif publié avec pièces jointes et dates limites. |
 | Cahier des charges | Document téléchargeable ; peut être payant et débloqué après paiement. |
 | Dépôt des plis | Action **physique** au siège ; modalités décrites dans `modalites_soumission_physique`. |
 | PRM | Responsable désigné pour un AO. |

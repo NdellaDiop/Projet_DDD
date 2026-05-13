@@ -48,9 +48,9 @@ class AppelOffreController extends Controller
         // Recherche
         if ($search) {
             $query->where(function($q) use ($search) {
-                $q->where('titre', 'ilike', "%{$search}%")
-                  ->orWhere('description', 'ilike', "%{$search}%")
-                  ->orWhere('reference', 'ilike', "%{$search}%");
+                $q->where('titre', 'LIKE', "%{$search}%")
+                  ->orWhere('description', 'LIKE', "%{$search}%")
+                  ->orWhere('reference', 'LIKE', "%{$search}%");
             });
         }
         
@@ -194,9 +194,9 @@ class AppelOffreController extends Controller
         // Recherche
         if ($search) {
             $query->where(function($q) use ($search) {
-                $q->where('titre', 'ilike', "%{$search}%")
-                  ->orWhere('description', 'ilike', "%{$search}%")
-                  ->orWhere('reference', 'ilike', "%{$search}%");
+                $q->where('titre', 'LIKE', "%{$search}%")
+                  ->orWhere('description', 'LIKE', "%{$search}%")
+                  ->orWhere('reference', 'LIKE', "%{$search}%");
             });
         }
         
@@ -224,7 +224,7 @@ class AppelOffreController extends Controller
     }
 
     /**
-     * Récupère les candidatures pour un appel d'offre donné (pour le responsable).
+     * Récupère les candidatures pour un appel d'offres donné (pour le responsable).
      */
     public function getCandidatures(Request $request, AppelOffre $appelOffre)
     {
@@ -232,7 +232,7 @@ class AppelOffreController extends Controller
         $perPage = $request->get('per_page', 15);
         $statut = $request->get('statut', '');
         
-        // Vérification que c'est bien son appel d'offre (ou admin)
+        // Vérification que c'est bien son appel d'offres (ou admin)
         if ($user->role->name !== 'ADMIN') {
             $responsable = $user->responsableMarche;
             if (!$responsable || $appelOffre->responsable_marche_id !== $responsable->id) {
@@ -255,7 +255,7 @@ class AppelOffreController extends Controller
     }
 
     /**
-     * Assigner un appel d'offre à un responsable de marché.
+     * Assigner un appel d'offres à un responsable de marché.
      * Seul l'admin peut assigner un AO à un responsable.
      */
     public function assign(Request $request, AppelOffre $appelOffre)
@@ -283,7 +283,7 @@ class AppelOffreController extends Controller
                 );
                 $this->notificationService->notifyUser(
                     $appelOffre->responsableMarche->user->id,
-                    "L'appel d'offre '{$appelOffre->titre}' vous a été assigné."
+                    "L'avis d'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}) vous a été assigné."
                 );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email assignation AO: " . $e->getMessage());
@@ -293,6 +293,82 @@ class AppelOffreController extends Controller
         $this->log('assign_appel_offre', "Assignation AO #{$appelOffre->id} au responsable #{$request->responsable_marche_id}");
 
         return new AppelOffreResource($appelOffre);
+    }
+
+    /**
+     * Attribution du marché (alignée dépôt physique).
+     * L’admin ou le PRM responsable enregistre la décision après réception/évaluation en présentiel.
+     */
+    public function attribuer(Request $request, AppelOffre $appelOffre)
+    {
+        $user = $request->user();
+        if (! $user || (! $user->isAdmin() && ! $user->isResponsableMarche())) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        if (! $user->isAdmin()) {
+            if (! $user->responsableMarche || (int) $appelOffre->responsable_marche_id !== (int) $user->responsableMarche->id) {
+                return response()->json(['message' => 'Accès refusé'], 403);
+            }
+        }
+
+        if ($appelOffre->statut !== AppelOffre::STATUS_CLOSED) {
+            return response()->json([
+                'message' => "L'attribution est disponible une fois l'appel d'offres clôturé.",
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'attributaire_nom' => 'required|string|max:255',
+            'attributaire_ninea' => 'nullable|string|max:255',
+            'attribution_montant_xof' => 'nullable|integer|min:0',
+            'attribution_date' => 'nullable|date',
+            'attribution_commentaire' => 'nullable|string|max:5000',
+        ]);
+
+        $appelOffre->fill([
+            'attribution_statut' => 'attribue',
+            'attributaire_nom' => $data['attributaire_nom'],
+            'attributaire_ninea' => $data['attributaire_ninea'] ?? null,
+            'attribution_montant_xof' => $data['attribution_montant_xof'] ?? null,
+            'attribution_date' => isset($data['attribution_date']) ? $data['attribution_date'] : now(),
+            'attribution_commentaire' => $data['attribution_commentaire'] ?? null,
+            'attribution_par_user_id' => $user->id,
+        ]);
+        $appelOffre->save();
+
+        $this->log('attribuer_appel_offre', "Attribution AO #{$appelOffre->id} à {$appelOffre->attributaire_nom}");
+
+        return new AppelOffreResource($appelOffre->fresh());
+    }
+
+    public function annulerAttribution(Request $request, AppelOffre $appelOffre)
+    {
+        $user = $request->user();
+        if (! $user || (! $user->isAdmin() && ! $user->isResponsableMarche())) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        if (! $user->isAdmin()) {
+            if (! $user->responsableMarche || (int) $appelOffre->responsable_marche_id !== (int) $user->responsableMarche->id) {
+                return response()->json(['message' => 'Accès refusé'], 403);
+            }
+        }
+
+        $appelOffre->fill([
+            'attribution_statut' => 'non_attribue',
+            'attributaire_nom' => null,
+            'attributaire_ninea' => null,
+            'attribution_montant_xof' => null,
+            'attribution_date' => null,
+            'attribution_commentaire' => null,
+            'attribution_par_user_id' => null,
+        ]);
+        $appelOffre->save();
+
+        $this->log('annuler_attribution_appel_offre', "Annulation attribution AO #{$appelOffre->id}");
+
+        return new AppelOffreResource($appelOffre->fresh());
     }
     
     private function log(string $action, string $details): void

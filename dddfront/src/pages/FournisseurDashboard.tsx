@@ -92,6 +92,8 @@ interface FournisseurProfile {
   ninea?: string;
   rccm?: string;
   quitus_fiscal?: string;
+  /** Statut administratif du compte : « actif » (validé), « en_attente », « rejete ». */
+  statut?: "actif" | "en_attente" | "rejete" | string;
   /** Références clients / marchés passés (texte libre). */
   references_professionnelles?: string | null;
   /** Préférences portail (alignées sur `config/portail.php`). */
@@ -508,7 +510,7 @@ export default function FournisseurDashboard() {
       
       toast({
         title: "Candidature mise à jour",
-        description: "Le montant de votre offre a été modifié.",
+        description: "Le montant proposé pour vos offres a été modifié.",
       });
     } catch (error: unknown) {
       console.error(error);
@@ -544,6 +546,18 @@ export default function FournisseurDashboard() {
     if (!api) return;
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (profile?.statut && profile.statut !== "actif") {
+      // Réinitialise le champ pour permettre une nouvelle sélection après validation
+      e.target.value = "";
+      toast({
+        title: "Compte non validé",
+        description:
+          "Votre compte doit être validé par l'administrateur avant de déposer vos documents légaux.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -662,7 +676,7 @@ export default function FournisseurDashboard() {
       
       // Définir les colonnes pour l'export
       const columns = [
-        { header: "Appel d'offre", key: "appel_offre.titre" },
+        { header: "Appel d'offres", key: "appel_offre.titre" },
         { header: "Référence", key: "appel_offre.numero_reference" },
         { 
           header: "Date limite", 
@@ -889,7 +903,7 @@ export default function FournisseurDashboard() {
                         <li>
                           Si vous êtes intéressé, constituez votre dossier complet et déplacez-vous pour le{" "}
                           <strong>dépôt physique des plis</strong> au lieu et aux horaires indiqués (section « Dépôt des plis » sur l&apos;avis). Il n&apos;y a{" "}
-                          <strong>pas de candidature ni de dépôt d&apos;offre en ligne</strong> sur ce portail.
+                          <strong>pas de candidature ni de dépôt d&apos;offres en ligne</strong> sur ce portail.
                         </li>
                       </ol>
                     </AlertDescription>
@@ -1125,7 +1139,7 @@ export default function FournisseurDashboard() {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-4 pt-2">
                   <p className="text-sm text-muted-foreground">
-                    Vous ne déposez pas d&apos;offre via ce portail : vous consultez l&apos;avis, téléchargez le cahier puis vous rendez sur place. Les lignes ci-dessous ne correspondent qu&apos;à un éventuel historique ou à une saisie effectuée par le service des marchés.
+                    Vous ne déposez pas vos offres via ce portail : vous consultez l&apos;avis, téléchargez le cahier puis vous rendez sur place. Les lignes ci-dessous ne correspondent qu&apos;à un éventuel historique ou à une saisie effectuée par le service des marchés.
                   </p>
                   {candidatures.length > 0 ? (
                     <>
@@ -1377,7 +1391,7 @@ export default function FournisseurDashboard() {
                                                                       )}
                                                                       {candidature.appel_offre.statut === 'closed' && (
                                                                         <Badge variant="outline" className="text-xs">
-                                                                          Appel d'offre clôturé
+                                                                          Appel d'offres clôturé
                                                                         </Badge>
                                                                       )}
                                                 </div>
@@ -1421,6 +1435,31 @@ export default function FournisseurDashboard() {
                         </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                        {profile?.statut && profile.statut !== "actif" && (
+                          <div
+                            className={`rounded-lg border px-4 py-3 text-sm ${
+                              profile.statut === "rejete"
+                                ? "border-red-200 bg-red-50 text-red-800"
+                                : "border-amber-200 bg-amber-50 text-amber-900"
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                              <div>
+                                <p className="font-semibold">
+                                  {profile.statut === "rejete"
+                                    ? "Compte rejeté"
+                                    : "Validation administrateur en attente"}
+                                </p>
+                                <p className="mt-0.5 text-xs leading-relaxed">
+                                  {profile.statut === "rejete"
+                                    ? "Votre compte fournisseur a été rejeté par l'administrateur. Vous ne pouvez pas déposer de documents légaux. Contactez le service des marchés pour plus d'informations."
+                                    : "Le dépôt de vos documents légaux sera ouvert dès que l'administrateur aura validé votre compte. Vous serez prévenu par email."}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {[...LEGAL_DOCUMENT_CATEGORIES, "AUTRE"].map((typeDoc) => {
                           const isAutre = typeDoc === "AUTRE";
                           const docsForCat = documents.filter((d) => d.categorie === typeDoc);
@@ -1456,7 +1495,7 @@ export default function FournisseurDashboard() {
                       accept=".pdf,.jpg,.jpeg,.png"
                                         className="max-w-md bg-slate-50"
                                         onChange={(e) => handleDocumentUpload(e, typeDoc)}
-                      disabled={uploadingDoc}
+                      disabled={uploadingDoc || (profile?.statut !== undefined && profile.statut !== "actif")}
                     />
                   </div>
 
@@ -2008,14 +2047,14 @@ export default function FournisseurDashboard() {
           </DialogHeader>
           <form onSubmit={handleUpdateCandidature} className="space-y-4 py-4">
                       <div className="space-y-2">
-              <Label>Appel d'offre</Label>
+              <Label>Appel d'offres</Label>
               <div className="p-3 bg-slate-50 border rounded-md text-sm font-medium">
                 {editingCandidature?.appel_offre.titre}
               </div>
                       </div>
 
                       <div className="space-y-2">
-              <Label htmlFor="edit-montant">Montant de votre offre (FCFA)</Label>
+              <Label htmlFor="edit-montant">Montant de vos offres (FCFA)</Label>
                         <Input
                 id="edit-montant"
                 type="number"

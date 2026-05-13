@@ -21,12 +21,25 @@ class AppelOffreResource extends JsonResource
             'source_financement_label' => $this->source_financement
                 ? (\App\Models\AppelOffre::sourceFinancementLabels()[$this->source_financement] ?? $this->source_financement)
                 : null,
+            'mode_passation' => $this->mode_passation,
+            'type_marche' => $this->type_marche,
+            'type_marche_label' => $this->type_marche
+                ? (\App\Models\AppelOffre::typesMarcheLabels()[$this->type_marche] ?? $this->type_marche)
+                : null,
             'titre' => $this->titre,
             'description' => $this->description,
             'modalites_soumission_physique' => $this->modalites_soumission_physique,
             'date_publication' => $this->date_publication,
             'date_limite_depot' => $this->date_limite_depot,
             'statut' => $this->statut,
+            'attribution' => [
+                'statut' => $this->attribution_statut ?? 'non_attribue',
+                'attributaire_nom' => $this->attributaire_nom,
+                'attributaire_ninea' => $this->attributaire_ninea,
+                'montant_xof' => isset($this->attribution_montant_xof) ? (int) $this->attribution_montant_xof : null,
+                'date' => $this->attribution_date,
+                'commentaire' => $this->attribution_commentaire,
+            ],
             'cahier_paiement_requis' => (bool) ($this->cahier_paiement_requis ?? false),
             'cahier_prix_xof' => $this->when(isset($this->cahier_prix_xof), (int) ($this->cahier_prix_xof ?? 0)),
             'paiement_wave_active' => (bool) config('paiement.wave.enabled'),

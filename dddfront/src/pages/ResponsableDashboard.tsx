@@ -61,6 +61,7 @@ import {
   missingLegalCategories,
 } from "@/lib/legalDocuments";
 import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
+import { TYPE_MARCHE_OPTIONS, type TypeMarche } from "@/lib/appelOffreCategorisation";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -140,8 +141,12 @@ function roleDisplayLabel(roleName?: string): string {
 
 export default function ResponsableDashboard() {
   const { api, user, logout } = useAuth();
+  // Dépôt en présentiel : on ne doit pas exposer le module "candidatures" au PRM.
+  const afficherCandidatures = false;
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"overview" | "appels-offres" | "statistiques">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "appels-offres" | "fournisseurs" | "statistiques"
+  >("overview");
   const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
   const [selectedAppelOffre, setSelectedAppelOffre] = useState<AppelOffre | null>(null);
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
@@ -174,6 +179,8 @@ export default function ResponsableDashboard() {
   const [newTender, setNewTender] = useState({
     reference: "",
     source_financement: "etat" as SourceFinancement,
+    mode_passation: "",
+    type_marche: "" as TypeMarche | "",
     titre: "",
     description: "",
     modalites_soumission_physique: "",
@@ -181,6 +188,9 @@ export default function ResponsableDashboard() {
     cahier_paiement_requis: false,
     cahier_prix_xof: "" as string,
   });
+  const [avisAoFile, setAvisAoFile] = useState<File | null>(null);
+  const [cahierChargesFile, setCahierChargesFile] = useState<File | null>(null);
+  const [creatingTender, setCreatingTender] = useState(false);
 
   const [isEditModalitesOpen, setIsEditModalitesOpen] = useState(false);
   const [aoForModalites, setAoForModalites] = useState<AppelOffre | null>(null);
@@ -215,6 +225,39 @@ export default function ResponsableDashboard() {
     telephone: "",
   });
 
+  // Annuaire fournisseurs (lecture seule pour contrôle des dossiers au siège)
+  type DirectoryFournisseur = {
+    id: number;
+    raison_sociale: string;
+    ninea?: string | null;
+    email?: string | null;
+    telephone?: string | null;
+    adresse?: string | null;
+    statut: string;
+    references_professionnelles?: string | null;
+    user?: { id: number; name: string; email: string } | null;
+  };
+  const [directoryFournisseurs, setDirectoryFournisseurs] = useState<DirectoryFournisseur[]>([]);
+  const [loadingDirectory, setLoadingDirectory] = useState(false);
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [debouncedDirectorySearch, setDebouncedDirectorySearch] = useState("");
+  const [directoryPagination, setDirectoryPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    perPage: 15,
+  });
+  const [isViewDirectoryFournisseurOpen, setIsViewDirectoryFournisseurOpen] = useState(false);
+  const [selectedDirectoryFournisseur, setSelectedDirectoryFournisseur] =
+    useState<DirectoryFournisseur | null>(null);
+  const [directoryLegalDocs, setDirectoryLegalDocs] = useState<DocumentLegal[]>([]);
+  const [loadingDirectoryLegalDocs, setLoadingDirectoryLegalDocs] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDirectorySearch(directorySearch), 400);
+    return () => clearTimeout(t);
+  }, [directorySearch]);
+
 
   const getErrorMessage = (error: unknown, fallback: string): string => {
     if (
@@ -227,6 +270,120 @@ export default function ResponsableDashboard() {
     }
     if (error instanceof Error) return error.message;
     return fallback;
+  };
+
+  const loadDirectoryFournisseurs = useCallback(
+    async (page = 1) => {
+      if (!api) return;
+      setLoadingDirectory(true);
+      try {
+        const res = await api.get("/api/fournisseurs-directory", {
+          params: {
+            page,
+            per_page: directoryPagination.perPage,
+            search: debouncedDirectorySearch,
+          },
+        });
+        const payload = res.data;
+        const list: DirectoryFournisseur[] = Array.isArray(payload?.data) ? payload.data : [];
+        setDirectoryFournisseurs(list);
+        if (payload?.meta) {
+          setDirectoryPagination((prev) => ({
+            ...prev,
+            currentPage: payload.meta.current_page,
+            totalPages: payload.meta.last_page,
+            totalItems: payload.meta.total,
+            perPage: payload.meta.per_page,
+          }));
+        } else {
+          setDirectoryPagination((prev) => ({
+            ...prev,
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: list.length,
+            perPage: list.length || prev.perPage,
+          }));
+        }
+      } catch (error) {
+        console.error("Erreur chargement annuaire fournisseurs:", error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger l'annuaire des fournisseurs.",
+          variant: "destructive",
+        });
+        setDirectoryFournisseurs([]);
+      } finally {
+        setLoadingDirectory(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [api, debouncedDirectorySearch, directoryPagination.perPage]
+  );
+
+  useEffect(() => {
+    if (activeTab === "fournisseurs") {
+      void loadDirectoryFournisseurs(1);
+    }
+  }, [activeTab, loadDirectoryFournisseurs]);
+
+  const openDirectoryFournisseur = async (f: DirectoryFournisseur) => {
+    setSelectedDirectoryFournisseur(f);
+    setIsViewDirectoryFournisseurOpen(true);
+    setDirectoryLegalDocs([]);
+    if (!api) return;
+    setLoadingDirectoryLegalDocs(true);
+    try {
+      const res = await api.get(`/api/fournisseurs/${f.id}/documents-legaux`);
+      const payload = res.data;
+      const docs: DocumentLegal[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+      setDirectoryLegalDocs(docs);
+    } catch (error) {
+      setDirectoryLegalDocs([]);
+      toast({
+        title: "Documents indisponibles",
+        description: getErrorMessage(error, "Impossible de charger les documents légaux."),
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingDirectoryLegalDocs(false);
+    }
+  };
+
+  const openLegalDocument = async (doc: DocumentLegal) => {
+    if (!api) return;
+    try {
+      const response = await api.get(`/api/documents/${doc.id}/download`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data]);
+      const contentType =
+        response.headers["content-type"] || doc.type_fichier || "application/octet-stream";
+      const url = window.URL.createObjectURL(blob);
+      if (contentType.includes("pdf") || contentType.includes("image")) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.download = doc.nom_fichier || `document-${doc.id}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible d'ouvrir le document."),
+        variant: "destructive",
+      });
+    }
   };
 
   const loadProfile = useCallback(async () => {
@@ -247,65 +404,81 @@ export default function ResponsableDashboard() {
     }
   }, [api]);
 
-  const loadAppelsOffres = useCallback(async () => {
-    if (!api) return;
-    try {
-      if (!appelsOffres.length) setLoadingAppelsOffres(true);
-      else setIsRefreshing(true);
-      
-      const params: Record<string, DashboardFilterValue> = {
-        page: pagination.currentPage,
-        per_page: pagination.perPage,
-        search: debouncedSearchTerm,
-        ...advancedFilters
-      };
+  const loadAppelsOffres = useCallback(
+    async (options?: { fetchAll?: boolean }) => {
+      if (!api) return;
+      const fetchAll = options?.fetchAll === true;
+      try {
+        setLoadingAppelsOffres(true);
+        if (!fetchAll) setIsRefreshing(true);
 
-      if (filterStatut && filterStatut !== 'tous') {
-        params.statut = filterStatut;
-      }
+        const params: Record<string, DashboardFilterValue> = {};
 
-      const response = await api.get("/api/responsable/mes-appels-offres", { params });
-      
-      if (response.data.data && response.data.meta) {
-        setAppelsOffres(response.data.data);
-        setPagination(prev => ({
+        if (fetchAll) {
+          // Vue d'ensemble : tous les AO du PRM pour compteurs + aperçu (pas de pagination)
+          params.all = true;
+        } else {
+          params.page = pagination.currentPage;
+          params.per_page = pagination.perPage;
+          params.search = debouncedSearchTerm;
+          Object.assign(params, advancedFilters);
+          if (filterStatut && filterStatut !== "tous") {
+            params.statut = filterStatut;
+          }
+        }
+
+        const response = await api.get("/api/responsable/mes-appels-offres", { params });
+
+        if (response.data.data && response.data.meta) {
+          setAppelsOffres(response.data.data);
+          setPagination((prev) => ({
             ...prev,
             currentPage: response.data.meta.current_page,
             totalPages: response.data.meta.last_page,
             totalItems: response.data.meta.total,
             perPage: response.data.meta.per_page,
-        }));
-      } else {
-        const data = Array.isArray(response.data) ? response.data : (response.data.data || []);
-        setAppelsOffres(data);
-        setPagination(prev => ({
+          }));
+        } else {
+          const data = Array.isArray(response.data) ? response.data : response.data.data || [];
+          setAppelsOffres(data);
+          setPagination((prev) => ({
             ...prev,
             currentPage: 1,
             totalPages: 1,
             totalItems: data.length,
-            perPage: data.length || 15
-        }));
+            perPage: data.length || 15,
+          }));
+        }
+      } catch (error) {
+        console.error("Erreur chargement AO:", error);
+      } finally {
+        setLoadingAppelsOffres(false);
+        setIsRefreshing(false);
       }
-    } catch (error) {
-      console.error("Erreur chargement AO:", error);
-    } finally {
-      setLoadingAppelsOffres(false);
-      setIsRefreshing(false);
-    }
-  }, [api, appelsOffres.length, pagination.currentPage, pagination.perPage, debouncedSearchTerm, advancedFilters, filterStatut]);
+    },
+    [
+      api,
+      pagination.currentPage,
+      pagination.perPage,
+      debouncedSearchTerm,
+      advancedFilters,
+      filterStatut,
+    ]
+  );
 
   const overviewStats = (() => {
     const total = appelsOffres.length;
     const draft = appelsOffres.filter((a) => a.statut === "draft").length;
     const published = appelsOffres.filter((a) => a.statut === "published").length;
     const closed = appelsOffres.filter((a) => a.statut === "closed").length;
-    const candidatures = appelsOffres.reduce((sum, a) => sum + (a.candidatures_count ?? 0), 0);
-    return { total, draft, published, closed, candidatures };
+    return { total, draft, published, closed, candidatures: 0 };
   })();
 
   useEffect(() => {
-    if (activeTab === 'appels-offres') {
-      loadAppelsOffres();
+    if (activeTab === "appels-offres") {
+      void loadAppelsOffres({ fetchAll: false });
+    } else if (activeTab === "overview") {
+      void loadAppelsOffres({ fetchAll: true });
     }
   }, [activeTab, loadAppelsOffres]);
 
@@ -315,8 +488,10 @@ export default function ResponsableDashboard() {
   }, [loadProfile]);
 
   const loadData = async () => {
-     // Legacy function kept for compatibility if needed, but logic moved to separate functions
-     await Promise.all([loadAppelsOffres(), loadProfile()]);
+    await Promise.all([
+      loadAppelsOffres({ fetchAll: activeTab === "overview" }),
+      loadProfile(),
+    ]);
   };
 
   const handlePageChange = (page: number) => {
@@ -362,7 +537,7 @@ export default function ResponsableDashboard() {
                 { header: 'Titre', key: 'titre' },
                 { header: 'Date Clôture', key: 'date_limite_depot', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
                 { header: 'Statut', key: 'statut' },
-                { header: 'Candidatures', key: 'candidatures_count' },
+                // Dépôt en présentiel : pas d'export "candidatures"
             ],
             data: data
         });
@@ -379,6 +554,16 @@ export default function ResponsableDashboard() {
     e.preventDefault();
     if (!api) return;
     try {
+      setCreatingTender(true);
+      const parsedDate = new Date(newTender.date_limite_depot);
+      if (!newTender.date_limite_depot || Number.isNaN(parsedDate.getTime())) {
+        toast({
+          title: "Date invalide",
+          description: "Renseignez une date limite de dépôt valide.",
+          variant: "destructive",
+        });
+        return;
+      }
       if (newTender.cahier_paiement_requis) {
         const raw = parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10);
         if (!raw || raw < 1) {
@@ -389,26 +574,75 @@ export default function ResponsableDashboard() {
           });
           return;
         }
+        if (raw > 50_000_000) {
+          toast({
+            title: "Montant trop élevé",
+            description: "Le montant maximum autorisé est 50 000 000 FCFA.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      if (!newTender.mode_passation.trim() || !newTender.type_marche) {
+        toast({
+          title: "Champs manquants",
+          description: "Renseignez le mode de passation et sélectionnez le type de marché.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!avisAoFile || !cahierChargesFile) {
+        toast({
+          title: "Pièces manquantes",
+          description: "Joignez l'avis d'appel d'offres et le cahier des charges (obligatoires avant publication).",
+          variant: "destructive",
+        });
+        return;
       }
       const prix = newTender.cahier_paiement_requis
         ? Math.max(1, parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10) || 0)
         : null;
-      await api.post("/api/appels-offres", {
+      const createRes = await api.post("/api/appels-offres", {
         reference: newTender.reference,
         source_financement: newTender.source_financement,
+        mode_passation: newTender.mode_passation.trim(),
+        type_marche: newTender.type_marche,
         titre: newTender.titre,
         description: newTender.description,
         modalites_soumission_physique: newTender.modalites_soumission_physique.trim() || null,
-        date_limite_depot: newTender.date_limite_depot,
+        // HTML datetime-local n'inclut pas de timezone ; on envoie un ISO pour éviter les décalages côté serveur.
+        date_limite_depot: parsedDate.toISOString(),
         statut: "draft",
         cahier_paiement_requis: newTender.cahier_paiement_requis,
         cahier_prix_xof: newTender.cahier_paiement_requis ? prix : null,
       });
-      toast({ title: "Succès", description: "Appel d'offre créé en brouillon." });
+
+      const created = createRes.data?.data || createRes.data;
+      const createdId: number | undefined = created?.id;
+      if (!createdId) {
+        throw new Error("Création OK mais l'identifiant de l'appel d'offres est introuvable.");
+      }
+
+      const uploadDoc = async (file: File, categorie: string) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("categorie", categorie);
+        formData.append("appel_offre_id", String(createdId));
+        await api.post("/api/documents", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      };
+
+      await uploadDoc(avisAoFile, "AVIS_APPEL_OFFRES");
+      await uploadDoc(cahierChargesFile, "CAHIER_DES_CHARGES");
+
+      toast({ title: "Succès", description: "Appel d'offres créé en brouillon." });
       setIsCreateOpen(false);
       setNewTender({
         reference: "",
         source_financement: "etat",
+        mode_passation: "",
+        type_marche: "",
         titre: "",
         description: "",
         modalites_soumission_physique: "",
@@ -416,6 +650,8 @@ export default function ResponsableDashboard() {
         cahier_paiement_requis: false,
         cahier_prix_xof: "",
       });
+      setAvisAoFile(null);
+      setCahierChargesFile(null);
       loadData();
     } catch (error: unknown) {
       console.error("Erreur création:", error);
@@ -432,6 +668,8 @@ export default function ResponsableDashboard() {
       } else {
          toast({ title: "Erreur", description: message, variant: "destructive" });
       }
+    } finally {
+      setCreatingTender(false);
     }
   };
 
@@ -439,7 +677,7 @@ export default function ResponsableDashboard() {
     if (!api) return;
     try {
       await api.post(`/api/appels-offres/${id}/publish`);
-      toast({ title: "Publié", description: "L'appel d'offre est maintenant visible." });
+      toast({ title: "Publié", description: "L'appel d'offres est maintenant visible." });
       loadData();
     } catch (error) {
       const message = getErrorMessage(error, "Impossible de publier.");
@@ -488,7 +726,7 @@ export default function ResponsableDashboard() {
     if (!api) return;
     try {
       await api.post(`/api/appels-offres/${id}/close`);
-      toast({ title: "Clôturé", description: "L'appel d'offre est fermé aux candidatures." });
+      toast({ title: "Clôturé", description: "L'appel d'offres est clôturé." });
       loadData();
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de clôturer.", variant: "destructive" });
@@ -841,6 +1079,15 @@ export default function ResponsableDashboard() {
           </Button>
 
           <Button
+            variant={activeTab === "fournisseurs" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "fournisseurs" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+            onClick={() => setActiveTab("fournisseurs")}
+          >
+            <Users className="w-4 h-4 mr-3" />
+            Fournisseurs
+          </Button>
+
+          <Button
             variant={activeTab === "statistiques" ? "default" : "ghost"}
             className={`w-full justify-start ${activeTab === "statistiques" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("statistiques")}
@@ -868,11 +1115,13 @@ export default function ResponsableDashboard() {
               <h1 className="text-2xl font-bold text-slate-800">
                 {activeTab === 'overview' && "Vue d'ensemble"}
                 {activeTab === 'appels-offres' && "Gestion des Appels d'Offres"}
+                {activeTab === 'fournisseurs' && "Annuaire des Fournisseurs"}
                 {activeTab === 'statistiques' && "Tableau de Bord Statistiques"}
               </h1>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'overview' && "Un aperçu rapide de vos activités et actions prioritaires."}
-                {activeTab === 'appels-offres' && "Créez, publiez et gérez vos appels d'offres et candidatures."}
+                {activeTab === 'appels-offres' && "Créez, publiez et gérez vos appels d'offres."}
+                {activeTab === 'fournisseurs' && "Consultez les dossiers légaux des fournisseurs lors du dépôt des plis au siège."}
                 {activeTab === 'statistiques' && "Analysez les performances de vos marchés."}
               </p>
            </div>
@@ -891,7 +1140,7 @@ export default function ResponsableDashboard() {
         {/* TAB: VUE D'ENSEMBLE */}
         {activeTab === "overview" && (
           <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card
                 className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
                 role="button"
@@ -1044,39 +1293,6 @@ export default function ResponsableDashboard() {
                 </CardContent>
               </Card>
 
-              <Card
-                className="group relative overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow bg-white cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => setActiveTab("statistiques")}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setActiveTab("statistiques");
-                  }
-                }}
-                title="Aller aux statistiques"
-              >
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                >
-                  <div className="absolute -top-20 -left-24 h-40 w-80 rotate-[25deg] bg-gradient-to-r from-transparent via-white/45 to-transparent" />
-                  <div className="absolute -bottom-24 -right-32 h-44 w-96 rotate-[25deg] bg-gradient-to-r from-transparent via-blue-50/90 to-transparent" />
-                </div>
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-slate-500">Candidatures</p>
-                      <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.candidatures}</p>
-                      <p className="text-xs text-slate-400 mt-1">Reçues au total</p>
-                    </div>
-                    <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700">
-                      <Users className="h-4 w-4" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1163,7 +1379,7 @@ export default function ResponsableDashboard() {
                         </div>
                         <p className="mt-3 text-sm font-medium text-slate-800">Aucun appel d'offres pour le moment</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Créez votre premier appel d&apos;offres pour commencer à recevoir des candidatures.
+                          Créez votre premier appel d&apos;offres pour commencer.
                         </p>
                         <div className="mt-4 flex justify-center">
                           <Button onClick={() => setIsCreateOpen(true)}>
@@ -1234,7 +1450,7 @@ export default function ResponsableDashboard() {
                                   <TableHead className="font-semibold">Titre</TableHead>
                                   <TableHead className="font-semibold">Date Limite</TableHead>
                                   <TableHead className="font-semibold">Statut</TableHead>
-                                  <TableHead className="font-semibold">Candidatures</TableHead>
+                                  {/* Dépôt en présentiel : pas de colonne candidatures */}
                                   <TableHead className="text-right font-semibold">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -1244,9 +1460,9 @@ export default function ResponsableDashboard() {
                                         <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                                             <div className="flex flex-col items-center gap-2">
                                                 <Briefcase className="w-8 h-8 text-slate-300" />
-                                                <p>Aucun appel d'offre créé pour le moment.</p>
+                                                <p>Aucun appel d'offres créé pour le moment.</p>
                                                 <Button variant="link" onClick={() => setIsCreateOpen(true)} className="text-primary">
-                                                    Créer votre premier appel d'offre
+                                                    Créer votre premier appel d'offres
                                                 </Button>
                                             </div>
                                         </TableCell>
@@ -1257,12 +1473,7 @@ export default function ResponsableDashboard() {
                                     <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
                                     <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
                                     <TableCell>{getStatutBadge(ao.statut)}</TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            <Users className="w-3 h-3 text-slate-400" />
-                                            <span className="text-sm font-medium">{ao.candidatures_count || 0}</span>
-                                        </div>
-                                    </TableCell>
+                                    {/* Dépôt en présentiel : pas de colonne candidatures */}
                                     <TableCell className="text-right">
                                       <div className="flex justify-end gap-2">
                                         <Button
@@ -1295,9 +1506,7 @@ export default function ResponsableDashboard() {
                                                 <Archive className="w-3 h-3 mr-1" /> Clôturer
                                             </Button>
                                         )}
-                                        <Button size="sm" variant="outline" className="h-8" onClick={() => handleViewCandidatures(ao)} title="Voir les candidatures">
-                                            <Eye className="w-3 h-3 mr-1" /> Candidatures
-                                        </Button>
+                                        {/* Dépôt en présentiel : pas de candidatures en ligne */}
                                       </div>
                                     </TableCell>
                                   </TableRow>
@@ -1320,6 +1529,103 @@ export default function ResponsableDashboard() {
             </div>
         )}
 
+        {/* TAB: FOURNISSEURS (annuaire light pour contrôle des dossiers au siège) */}
+        {activeTab === "fournisseurs" && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-6 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-800">
+                      Fournisseurs validés
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Consultez le dossier d&apos;un fournisseur (pièces légales) lorsqu&apos;il se présente au siège pour le dépôt des plis.
+                    </p>
+                  </div>
+                  <div className="relative w-full md:w-80">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Rechercher par raison sociale, NINEA, email…"
+                      className="pl-10 bg-slate-50 border-slate-200"
+                      value={directorySearch}
+                      onChange={(e) => setDirectorySearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-100 overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-semibold">Raison sociale</TableHead>
+                        <TableHead className="font-semibold">NINEA</TableHead>
+                        <TableHead className="font-semibold">Contact</TableHead>
+                        <TableHead className="text-right font-semibold">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingDirectory ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                            Chargement…
+                          </TableCell>
+                        </TableRow>
+                      ) : directoryFournisseurs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                            Aucun fournisseur trouvé.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        directoryFournisseurs.map((f) => (
+                          <TableRow key={f.id} className="hover:bg-slate-50/50">
+                            <TableCell className="font-medium text-slate-800">
+                              {f.raison_sociale}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-slate-500">
+                              {f.ninea || "—"}
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <div className="font-medium break-all">{f.email || "—"}</div>
+                                <div className="text-muted-foreground text-xs">
+                                  {f.telephone || ""}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDirectoryFournisseur(f)}
+                              >
+                                <FileText className="w-3.5 h-3.5 mr-1.5" /> Voir le dossier
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <DataTablePagination
+                  currentPage={directoryPagination.currentPage}
+                  totalPages={directoryPagination.totalPages}
+                  totalItems={directoryPagination.totalItems}
+                  perPage={directoryPagination.perPage}
+                  onPageChange={(page) => loadDirectoryFournisseurs(page)}
+                  onPerPageChange={(perPage) => {
+                    setDirectoryPagination((prev) => ({ ...prev, perPage }));
+                    void loadDirectoryFournisseurs(1);
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* TAB: STATISTIQUES */}
         {activeTab === "statistiques" && (
             <div className="space-y-6 animate-in fade-in duration-500">
@@ -1338,7 +1644,7 @@ export default function ResponsableDashboard() {
                                          <p className="text-xs text-muted-foreground">{ao.reference}</p>
                                      </div>
                                      <div className="flex gap-4 text-sm text-muted-foreground">
-                                         <span className="flex items-center gap-1"><Users className="w-4 h-4"/> {ao.candidatures_count || 0}</span>
+                                         {/* Dépôt en présentiel : pas de candidatures */}
                                          <span className="flex items-center gap-1">{getStatutBadge(ao.statut)}</span>
                                      </div>
                                  </div>
@@ -1356,13 +1662,16 @@ export default function ResponsableDashboard() {
 
       {/* Modale Création */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
                 <DialogTitle>Créer un Appel d'Offre</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Créez le brouillon et joignez tout de suite l&apos;avis d&apos;appel d&apos;offres et le cahier des charges (requis avant publication).
+                </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateTender} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Référence de l'appel d'offre</Label>
+                  <Label>Référence de l'appel d'offres</Label>
                   <Input
                     value={newTender.reference}
                     onChange={(e) => setNewTender({ ...newTender, reference: e.target.value })}
@@ -1374,29 +1683,60 @@ export default function ResponsableDashboard() {
                     Référence unique saisie manuellement (vous ou l&apos;administrateur).
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Source de financement</Label>
-                  <Select
-                    value={newTender.source_financement}
-                    onValueChange={(v) =>
-                      setNewTender({ ...newTender, source_financement: v as SourceFinancement })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choisir..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Source de financement</Label>
+                    <Select
+                      value={newTender.source_financement}
+                      onValueChange={(v) =>
+                        setNewTender({ ...newTender, source_financement: v as SourceFinancement })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SOURCE_FINANCEMENT_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type de marché</Label>
+                    <Select
+                      value={newTender.type_marche || undefined}
+                      onValueChange={(v) =>
+                        setNewTender({ ...newTender, type_marche: v as TypeMarche })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TYPE_MARCHE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Mode de passation</Label>
+                  <Input
+                    value={newTender.mode_passation}
+                    onChange={(e) => setNewTender({ ...newTender, mode_passation: e.target.value })}
+                    required
+                    placeholder="Ex: Appel d'offres ouvert, Demande de renseignements et de prix..."
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                        <Label>Titre de l'appel d'offre</Label>
+                        <Label>Titre de l'appel d'offres</Label>
                         <Input 
                             value={newTender.titre} 
                             onChange={e => setNewTender({...newTender, titre: e.target.value})} 
@@ -1405,7 +1745,7 @@ export default function ResponsableDashboard() {
                         />
                     </div>
                     <div className="space-y-2">
-                        <Label>Date limite de dépôt</Label>
+                        <Label>Date et heure limite de dépôt</Label>
                         <Input 
                             type="datetime-local" 
                             value={newTender.date_limite_depot} 
@@ -1462,20 +1802,193 @@ export default function ResponsableDashboard() {
                         id="prm_cahier_prix_xof"
                         type="number"
                         min={1}
+                        max={50000000}
                         step={1}
                         value={newTender.cahier_prix_xof}
                         onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
                         placeholder="Ex: 25000"
                         required
                       />
+                      <p className="text-xs text-muted-foreground">Maximum : 50 000 000 FCFA.</p>
                     </div>
                   )}
                 </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                  <div className="space-y-2">
+                    <Label>Avis d&apos;appel d&apos;offres (PDF)</Label>
+                    <Input
+                      type="file"
+                      accept=".pdf"
+                      required
+                      onChange={(e) => setAvisAoFile(e.target.files?.[0] || null)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cahier des charges</Label>
+                    <Input
+                      type="file"
+                      accept=".pdf,.zip,.doc,.docx,.xls,.xlsx"
+                      required
+                      onChange={(e) => setCahierChargesFile(e.target.files?.[0] || null)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Le cahier peut être un PDF ou un dossier compressé (selon les pièces fournies).
+                    </p>
+                  </div>
+                </div>
                 <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Annuler</Button>
-                    <Button type="submit">Créer le brouillon</Button>
+                    <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)} disabled={creatingTender}>
+                      Annuler
+                    </Button>
+                    <Button type="submit" disabled={creatingTender}>
+                      {creatingTender ? "Création..." : "Créer le brouillon"}
+                    </Button>
                 </DialogFooter>
             </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Dossier Fournisseur (annuaire) */}
+      <Dialog
+        open={isViewDirectoryFournisseurOpen}
+        onOpenChange={(open) => {
+          setIsViewDirectoryFournisseurOpen(open);
+          if (!open) {
+            setSelectedDirectoryFournisseur(null);
+            setDirectoryLegalDocs([]);
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Dossier du fournisseur</DialogTitle>
+            <DialogDescription className="text-sm">
+              Informations administratives et pièces légales déposées en ligne par le fournisseur.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDirectoryFournisseur && (
+            <div className="space-y-5 py-2">
+              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {selectedDirectoryFournisseur.raison_sociale}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 mt-2 text-sm text-slate-600">
+                  {selectedDirectoryFournisseur.ninea && (
+                    <p>
+                      <span className="text-xs text-muted-foreground">NINEA : </span>
+                      <span className="font-mono">{selectedDirectoryFournisseur.ninea}</span>
+                    </p>
+                  )}
+                  {selectedDirectoryFournisseur.email && (
+                    <p className="break-all">
+                      <span className="text-xs text-muted-foreground">Email : </span>
+                      {selectedDirectoryFournisseur.email}
+                    </p>
+                  )}
+                  {selectedDirectoryFournisseur.telephone && (
+                    <p>
+                      <span className="text-xs text-muted-foreground">Téléphone : </span>
+                      {selectedDirectoryFournisseur.telephone}
+                    </p>
+                  )}
+                  {selectedDirectoryFournisseur.adresse && (
+                    <p className="sm:col-span-2">
+                      <span className="text-xs text-muted-foreground">Adresse : </span>
+                      {selectedDirectoryFournisseur.adresse}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {selectedDirectoryFournisseur.references_professionnelles?.trim() && (
+                <div className="rounded-lg border border-slate-100 bg-white p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Références professionnelles
+                  </h4>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                    {selectedDirectoryFournisseur.references_professionnelles}
+                  </p>
+                </div>
+              )}
+
+              {/* Documents légaux */}
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-sm text-slate-800">
+                    Documents légaux
+                  </h4>
+                  {loadingDirectoryLegalDocs && (
+                    <span className="text-xs text-muted-foreground">Chargement…</span>
+                  )}
+                </div>
+
+                {!loadingDirectoryLegalDocs && missingLegalCategories(directoryLegalDocs).length > 0 && (
+                  <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span className="font-semibold">Pièces obligatoires manquantes : </span>
+                    {missingLegalCategories(directoryLegalDocs)
+                      .map((c) => legalDocumentLabel(c))
+                      .join(", ")}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES.map((categorie) => {
+                    const docs = directoryLegalDocs.filter((d) => d.categorie === categorie);
+                    return (
+                      <div
+                        key={categorie}
+                        className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800 truncate">
+                            {legalDocumentLabel(categorie)}
+                          </p>
+                          {docs.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Non fourni</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {docs[0].nom_fichier}
+                              {docs[0].created_at && (
+                                <>
+                                  {" "}
+                                  · ajouté le{" "}
+                                  {new Date(docs[0].created_at).toLocaleDateString("fr-FR")}
+                                </>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        {docs.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openLegalDocument(docs[0])}
+                            title="Ouvrir / télécharger"
+                          >
+                            <Download className="w-3.5 h-3.5 mr-1.5" /> Ouvrir
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!loadingDirectoryLegalDocs && directoryLegalDocs.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic text-center py-2">
+                      Aucun document légal déposé pour le moment.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsViewDirectoryFournisseurOpen(false)}
+                >
+                  Fermer
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1508,7 +2021,7 @@ export default function ResponsableDashboard() {
             />
             {aoForModalites?.statut === "published" && (
               <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md px-2 py-1.5">
-                Cet appel d’offre est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
+                Cet appel d’offres est publié : le texte ne peut pas être vide (il reste affiché aux fournisseurs).
               </p>
             )}
           </div>
@@ -1523,7 +2036,8 @@ export default function ResponsableDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Modale Candidatures */}
+      {/* Modale Candidatures (désactivée en mode dépôt présentiel) */}
+      {afficherCandidatures && (
       <Dialog open={isViewCandidatesOpen} onOpenChange={setIsViewCandidatesOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -1595,6 +2109,7 @@ export default function ResponsableDashboard() {
             </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Modale Voir Dossier */}
       <Dialog open={isViewDossierOpen} onOpenChange={(open) => {
@@ -1608,6 +2123,9 @@ export default function ResponsableDashboard() {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dossier de candidature</DialogTitle>
+            <DialogDescription className="sr-only">
+              Détails du dossier fournisseur et des pièces associées.
+            </DialogDescription>
           </DialogHeader>
           
           {loadingDocuments ? (
@@ -1673,7 +2191,7 @@ export default function ResponsableDashboard() {
               {selectedCandidature.montant_propose && (
                 <Card className="border-none shadow-sm">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant de l'offre</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">Montant des offres</h3>
                     <p className="text-2xl font-bold text-primary">
                       {selectedCandidature.montant_propose.toLocaleString()} FCFA
                     </p>

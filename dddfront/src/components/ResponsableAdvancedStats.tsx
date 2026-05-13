@@ -28,6 +28,8 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ className }) => {
   const { api } = useAuth();
+  // Dépôt en présentiel : ne pas afficher les stats "candidatures" côté PRM.
+  const afficherCandidatures = false;
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     totalAO: number;
@@ -70,19 +72,26 @@ const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ cla
     AppelsOffres: item.count
   }));
 
-  const formattedCandidatureStats: FormattedPieItem[] = data.candidatureStats.map((item: CandidatureStatItem) => ({
-    name: item.statut.charAt(0).toUpperCase() + item.statut.slice(1).replace('_', ' '),
-    value: item.count,
-    // Couleurs basées sur le statut (à adapter selon vos constantes)
-    color: item.statut === 'accepted' ? '#16a34a' : 
-           item.statut === 'rejected' ? '#dc2626' : 
-           item.statut === 'submitted' ? '#2563eb' : '#94a3b8'
-  }));
+  const formattedCandidatureStats: FormattedPieItem[] = afficherCandidatures
+    ? data.candidatureStats.map((item: CandidatureStatItem) => ({
+        name: item.statut.charAt(0).toUpperCase() + item.statut.slice(1).replace('_', ' '),
+        value: item.count,
+        // Couleurs basées sur le statut (à adapter selon vos constantes)
+        color:
+          item.statut === 'accepted'
+            ? '#16a34a'
+            : item.statut === 'rejected'
+              ? '#dc2626'
+              : item.statut === 'submitted'
+                ? '#2563eb'
+                : '#94a3b8',
+      }))
+    : [];
 
   return (
     <div className={`space-y-6 ${className}`}>
       {/* 1. CARTES GLOBALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardContent className="p-6 flex flex-col items-center text-center">
                   <div className="p-3 bg-blue-50 rounded-full mb-4">
@@ -103,15 +112,17 @@ const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ cla
               </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm hover:shadow-md transition-all">
+          {afficherCandidatures ? (
+            <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="p-3 bg-purple-50 rounded-full mb-4">
-                      <Users className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Candidatures reçues</p>
-                  <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.totalCandidatures}</h3>
+                <div className="p-3 bg-purple-50 rounded-full mb-4">
+                  <Users className="w-6 h-6 text-purple-600" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground">Candidatures reçues</p>
+                <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.totalCandidatures}</h3>
               </CardContent>
-          </Card>
+            </Card>
+          ) : null}
 
           <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardContent className="p-6 flex flex-col items-center text-center">
@@ -125,7 +136,7 @@ const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ cla
       </div>
 
       {/* 2. GRAPHIQUES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${afficherCandidatures ? "md:grid-cols-2" : ""}`}>
       {/* 1. Évolution de MES Appels d'Offres */}
       <Card className="shadow-sm border-slate-100">
         <CardHeader>
@@ -159,39 +170,41 @@ const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ cla
         </CardContent>
       </Card>
 
-      {/* 2. Statut des Candidatures Reçues */}
-      <Card className="shadow-sm border-slate-100">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="w-5 h-5 text-green-600" />
-            Candidatures reçues
-          </CardTitle>
-          <CardDescription>Répartition par statut</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[250px] w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={formattedCandidatureStats}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {formattedCandidatureStats.map((entry, index: number) => (
-                    <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend verticalAlign="bottom" height={36}/>
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Dépôt en présentiel : pas de stats candidatures */}
+      {afficherCandidatures ? (
+        <Card className="shadow-sm border-slate-100">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="w-5 h-5 text-green-600" />
+              Candidatures reçues
+            </CardTitle>
+            <CardDescription>Répartition par statut</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={formattedCandidatureStats}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {formattedCandidatureStats.map((entry, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
     </div>
   );

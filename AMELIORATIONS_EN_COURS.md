@@ -16,7 +16,7 @@
 - `per_page` : Nombre d'éléments par page (défaut: 15)
 - `search` : Recherche textuelle
 - `statut` : Filtre par statut
-- `appel_offre_id` : Filtre par appel d'offre (pour candidatures)
+- `appel_offre_id` : Filtre par appel d'offres (pour candidatures)
 
 ### Frontend ✅ TERMINÉ
 - ✅ Composant `DataTablePagination.tsx` créé

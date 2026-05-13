@@ -23,6 +23,7 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\CandidatureCommentController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\FournisseurChatController;
+use App\Http\Controllers\FournisseurDirectoryController;
 use App\Http\Controllers\CahierPaiementController;
 use App\Http\Controllers\CahierPaiementSimulationController;
 use App\Http\Controllers\Webhooks\OrangeMoneyCahierWebhookController;
@@ -38,6 +39,9 @@ use App\Http\Controllers\Webhooks\WaveCahierWebhookController;
 
 // Authentification
 Route::post('register', [AuthController::class, 'register']);
+// Inscription fournisseur en guichet unique (infos entreprise + compte + pièces légales).
+// Création conditionnée à la complétude du dossier ; validation administrateur ensuite.
+Route::post('register-fournisseur', [\App\Http\Controllers\FournisseurRegistrationController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 Route::post('forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail']);
 Route::post('reset-password', [ForgotPasswordController::class, 'resetPassword']);
@@ -66,9 +70,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('appels-offres/{appel_offre}', [AppelOffreController::class, 'update']);
         Route::post('appels-offres/{appel_offre}/publish', [AppelOffreController::class, 'publish']);
         Route::post('appels-offres/{appel_offre}/close', [AppelOffreController::class, 'close']);
+        Route::post('appels-offres/{appel_offre}/attribution', [AppelOffreController::class, 'attribuer']);
+        Route::post('appels-offres/{appel_offre}/attribution/annuler', [AppelOffreController::class, 'annulerAttribution']);
         Route::get('responsable/mes-appels-offres', [AppelOffreController::class, 'indexForResponsable']);
-        Route::get('responsable/appels-offres/{appel_offre}/candidatures-recues', [AppelOffreController::class, 'getCandidatures']);
-        Route::get('responsable/candidatures/{candidature}/documents-legaux', [DocumentController::class, 'getFournisseurLegalDocuments']);
+        Route::get('responsable/appels-offres/{appel_offre}/candidatures-recues', [AppelOffreController::class, 'getCandidatures'])->middleware('candidature.enabled');
+        Route::get('responsable/candidatures/{candidature}/documents-legaux', [DocumentController::class, 'getFournisseurLegalDocuments'])->middleware('candidature.enabled');
+
+        // Annuaire fournisseurs (lecture) + documents légaux par fournisseur — accessible aux PRM et admin.
+        // Permet, lors du dépôt physique au siège, de consulter les pièces légales du fournisseur.
+        Route::get('fournisseurs-directory', [FournisseurDirectoryController::class, 'index']);
+        Route::get('fournisseurs/{fournisseur}/documents-legaux', [DocumentController::class, 'getDocumentsLegauxFournisseur']);
         
         // Profil responsable
         Route::get('responsable/profile', [ResponsableCandidatureController::class, 'showProfile']);
@@ -79,7 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('appels-offres/{appel_offre}/assign', [AppelOffreController::class, 'assign'])->middleware('role:ADMIN');
 
     // CANDIDATURES
-    Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware('role:FOURNISSEUR');
+    Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);
     Route::post('appels-offres/{appel_offre}/cahier/paiement/initier', [CahierPaiementController::class, 'initier'])
         ->middleware('role:FOURNISSEUR');
     Route::get('paiements/cahier/simulation/preview', [CahierPaiementSimulationController::class, 'preview'])
@@ -88,18 +99,18 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:FOURNISSEUR');
     Route::post('appels-offres/{appel_offre}/cahier/paiement/verifier-wave', [CahierPaiementController::class, 'verifierSessionWave'])
         ->middleware('role:FOURNISSEUR');
-    Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware('role:FOURNISSEUR');
-    Route::get('candidatures', [CandidatureController::class, 'index']);
-    Route::get('candidatures/{candidature}', [CandidatureController::class, 'show']);
-    Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
-    Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware('role:RESPONSABLE_MARCHE,ADMIN');
+    Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);
+    Route::get('candidatures', [CandidatureController::class, 'index'])->middleware('candidature.enabled');
+    Route::get('candidatures/{candidature}', [CandidatureController::class, 'show'])->middleware('candidature.enabled');
+    Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware(['role:RESPONSABLE_MARCHE,ADMIN', 'candidature.enabled']);
+    Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware(['role:RESPONSABLE_MARCHE,ADMIN', 'candidature.enabled']);
     
     // COMMENTAIRES SUR CANDIDATURES
-    Route::get('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'index']);
-    Route::post('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'store']);
-    Route::get('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'show']);
-    Route::put('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'update']);
-    Route::delete('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'destroy']);
+    Route::get('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'index'])->middleware('candidature.enabled');
+    Route::post('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'store'])->middleware('candidature.enabled');
+    Route::get('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'show'])->middleware('candidature.enabled');
+    Route::put('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'update'])->middleware('candidature.enabled');
+    Route::delete('candidatures/{candidature}/comments/{comment}', [CandidatureCommentController::class, 'destroy'])->middleware('candidature.enabled');
 
     // DOCUMENTS
     Route::post('documents', [DocumentController::class, 'store']);

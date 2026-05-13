@@ -142,7 +142,7 @@ dddfront/
 - Lien vers les détails de chaque AO
 
 #### AppelOffreDetails.tsx
-- Affichage détaillé d'un appel d'offre
+- Affichage détaillé d'un appel d'offres
 - Informations complètes (titre, description, dates, responsable)
 - Section documents
 - Bouton "Postuler" pour les fournisseurs (avec modal de soumission)
@@ -193,7 +193,7 @@ dddfront/
 - Modale de création de responsable (formulaire 2 colonnes)
 - Modale de modification de responsable
 - Modale de détails fournisseur avec actions rapides
-- Modale de détails appel d'offre
+- Modale de détails appel d'offres
 - Modale de paramètres (changement de mot de passe)
 - Sidebar avec profil utilisateur
 - Logout
@@ -214,7 +214,7 @@ dddfront/
    - Aperçu rapide des 3 derniers AO
 
 **Fonctionnalités :**
-- Modale de création d'appel d'offre (formulaire 2 colonnes)
+- Modale de création d'appel d'offres (formulaire 2 colonnes)
 - Modale de consultation des candidatures
   - Liste des candidatures avec informations fournisseur
   - Actions : Retenir/Rejeter (si statut = submitted)

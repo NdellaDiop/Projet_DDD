@@ -56,7 +56,7 @@ class CandidatureController extends Controller
             $query->where('statut', $statut);
         }
         
-        // Filtre par appel d'offre
+        // Filtre par appel d'offres
         if ($appelOffreId) {
             $query->where('appel_offre_id', $appelOffreId);
         }
@@ -82,7 +82,7 @@ class CandidatureController extends Controller
         }
 
         if ($appelOffre->statut !== \App\Models\AppelOffre::STATUS_PUBLISHED) {
-            return response()->json(['message' => 'Appel d\'offre non ouvert à la candidature.'], 403);
+            return response()->json(['message' => 'Cet appel d\'offres n\'est pas ouvert aux soumissions via le portail.'], 403);
         }
         
         $user = Auth::user();
@@ -94,13 +94,13 @@ class CandidatureController extends Controller
         
         $fournisseurId = $user->fournisseur->id;
         
-        // Vérifier si une candidature existe déjà pour ce fournisseur et cet appel d'offre
+        // Vérifier si une candidature existe déjà pour ce fournisseur et cet appel d'offres
         $existingCandidature = Candidature::where('appel_offre_id', $appelOffre->id)
             ->where('fournisseur_id', $fournisseurId)
             ->first();
 
         if ($existingCandidature) {
-            return response()->json(['message' => 'Vous avez déjà postulé à cet appel d\'offre.'], 409);
+            return response()->json(['message' => 'Vous avez déjà postulé à cet appel d\'offres.'], 409);
         }
 
         // Vérifier que le fournisseur a bien uploadé tous ses documents légaux
@@ -148,13 +148,13 @@ class CandidatureController extends Controller
 
         // On ne peut modifier que si le statut est soumis
         if ($candidature->statut !== \App\Models\Candidature::STATUS_SUBMITTED) {
-            return response()->json(['message' => 'Impossible de modifier une candidature déjà traitée.'], 403);
+            return response()->json(['message' => 'Impossible de modifier un dossier déjà traité.'], 403);
         }
 
-        // Vérifier que l'appel d'offre n'est pas clôturé
+        // Vérifier que l'appel d'offres n'est pas clôturé
         $candidature->load('appelOffre');
         if ($candidature->appelOffre->statut === \App\Models\AppelOffre::STATUS_CLOSED) {
-            return response()->json(['message' => 'Impossible de modifier une candidature pour un appel d\'offre clôturé.'], 403);
+            return response()->json(['message' => 'Impossible de modifier un dossier pour un appel d\'offres clôturé.'], 403);
         }
 
         $candidature->update([
@@ -226,9 +226,9 @@ class CandidatureController extends Controller
                     $candidature
                 );
                 $this->notificationService->notifyUser(
-            $candidature->fournisseur->user->id,
-            'Votre candidature a été rejetée.'
-        );
+                    $candidature->fournisseur->user->id,
+                    'Votre dossier n\'a pas été retenu pour ce marché.'
+                );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email rejet candidature: " . $e->getMessage());
             }

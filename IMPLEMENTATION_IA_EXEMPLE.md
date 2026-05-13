@@ -65,7 +65,7 @@ use App\Models\AppelOffre;
 class AIAssistantService
 {
     /**
-     * Génère une description d'appel d'offre à partir d'un titre
+     * Génère une description d'appel d'offres à partir d'un titre
      */
     public function generateDescription(string $titre, ?string $contexte = null): string
     {
@@ -98,7 +98,7 @@ class AIAssistantService
     }
 
     /**
-     * Suggère des clauses importantes pour un type d'appel d'offre
+     * Suggère des clauses importantes pour un type d'appel d'offres
      */
     public function suggestClauses(string $type, ?string $description = null): array
     {
@@ -130,7 +130,7 @@ class AIAssistantService
     }
 
     /**
-     * Vérifie la complétude d'un appel d'offre
+     * Vérifie la complétude d'un appel d'offres
      */
     public function checkCompleteness(AppelOffre $appelOffre): array
     {

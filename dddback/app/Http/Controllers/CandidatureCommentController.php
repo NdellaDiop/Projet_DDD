@@ -37,7 +37,7 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
             $appelOffre = $candidature->appelOffre;
-            // Vérifier que c'est bien son propre appel d'offre
+            // Vérifier que c'est bien son propre appel d'offres
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
@@ -74,7 +74,7 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
             $appelOffre = $candidature->appelOffre;
-            // Vérifier que c'est bien son propre appel d'offre
+            // Vérifier que c'est bien son propre appel d'offres
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
@@ -102,19 +102,19 @@ class CandidatureCommentController extends Controller
             // Le responsable ou l'admin commente, notifier le fournisseur
             if ($candidature->fournisseur && $candidature->fournisseur->user && $candidature->appelOffre) {
                 $appelOffre = $candidature->appelOffre;
-                $message = "Nouveau commentaire sur votre candidature pour l'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference})";
+                $message = "Nouveau commentaire sur votre dossier pour l'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}).";
                 app(NotificationService::class)->notifyUser(
                     $candidature->fournisseur->user->id,
                     $message
                 );
             }
         } elseif ($user->isFournisseur()) {
-            // Le fournisseur commente, notifier le responsable (si l'appel d'offre a un responsable)
-            // Si l'appel d'offre a été créé par l'admin (responsable_marche_id = null), on ne notifie personne
+            // Le fournisseur commente, notifier le responsable (si l'appel d'offres a un responsable)
+            // Si l'appel d'offres a été créé par l'admin (responsable_marche_id = null), on ne notifie personne
             // car l'admin verra le commentaire de toute façon
             if ($candidature->appelOffre && $candidature->appelOffre->responsableMarche && $candidature->appelOffre->responsableMarche->user) {
                 $appelOffre = $candidature->appelOffre;
-                $message = "Nouveau commentaire du fournisseur sur la candidature pour l'appel d'offre \"{$appelOffre->titre}\" (Réf: {$appelOffre->reference})";
+                $message = "Nouveau commentaire du fournisseur sur le dossier pour l'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}).";
                 app(NotificationService::class)->notifyUser(
                     $candidature->appelOffre->responsableMarche->user->id,
                     $message
@@ -136,7 +136,7 @@ class CandidatureCommentController extends Controller
 
         // Vérifier que le commentaire appartient à la candidature
         if ($comment->candidature_id !== $candidature->id) {
-            return response()->json(['message' => 'Commentaire non trouvé pour cette candidature.'], 404);
+            return response()->json(['message' => 'Commentaire non trouvé pour ce dossier.'], 404);
         }
 
         // Charger les relations nécessaires
@@ -153,7 +153,7 @@ class CandidatureCommentController extends Controller
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
             $appelOffre = $candidature->appelOffre;
-            // Vérifier que c'est bien son propre appel d'offre
+            // Vérifier que c'est bien son propre appel d'offres
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
@@ -175,7 +175,7 @@ class CandidatureCommentController extends Controller
 
         // Vérifier que le commentaire appartient à la candidature
         if ($comment->candidature_id !== $candidature->id) {
-            return response()->json(['message' => 'Commentaire non trouvé pour cette candidature.'], 404);
+            return response()->json(['message' => 'Commentaire non trouvé pour ce dossier.'], 404);
         }
 
         // Seul l'auteur peut modifier son commentaire
@@ -207,7 +207,7 @@ class CandidatureCommentController extends Controller
 
         // Vérifier que le commentaire appartient à la candidature
         if ($comment->candidature_id !== $candidature->id) {
-            return response()->json(['message' => 'Commentaire non trouvé pour cette candidature.'], 404);
+            return response()->json(['message' => 'Commentaire non trouvé pour ce dossier.'], 404);
         }
 
         // Seul l'auteur ou un admin peut supprimer

@@ -109,7 +109,7 @@ export const generatePVReport = (data: PVReportData) => {
     const winner = retenus[0];
     doc.text(`Après analyse des offres techniques et financières, la commission décide d'attribuer le marché à l'entreprise ${winner.fournisseur} pour un montant de ${winner.montant}.`, 14, finalY + 25, { maxWidth: pageWidth - 28 });
   } else {
-    doc.text("À ce stade, aucune offre n'a été formellement retenue par la commission.", 14, finalY + 25);
+    doc.text("À ce stade, aucune des offres n'a été formellement retenue par la commission.", 14, finalY + 25);
   }
 
   // 6. Signatures
