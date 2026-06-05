@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\AppelOffre;
+use App\Models\CahierAccesAchat;
 use App\Models\Candidature;
+use App\Models\Document;
 use App\Models\Fournisseur;
 use App\Models\ResponsableMarche;
 use App\Models\User;
@@ -33,6 +35,8 @@ class EventServiceProvider extends ServiceProvider
     {
         AppelOffre::observe(AuditObserver::class);
         Candidature::observe(AuditObserver::class);
+        Document::observe(AuditObserver::class);
+        CahierAccesAchat::observe(AuditObserver::class);
         Fournisseur::observe(AuditObserver::class);
         ResponsableMarche::observe(AuditObserver::class);
         User::observe(AuditObserver::class);

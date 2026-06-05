@@ -1721,7 +1721,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'responsables' && "Administrez les comptes des PRM"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres"}
-                {activeTab === 'audit' && "Trace des actions effectuées sur la plateforme"}
+                {activeTab === 'audit' && "Trace des AO, fournisseurs, candidatures, PRM, comptes, documents et paiements cahier"}
               </p>
            </div>
            

@@ -37,6 +37,75 @@ interface AuditHistoryProps {
   title?: string;
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Nom',
+  email: 'Email',
+  is_active: 'Compte actif',
+  role_id: 'Rôle',
+  titre: 'Titre',
+  reference: 'Référence',
+  statut: 'Statut',
+  description: 'Description',
+  modalites_soumission_physique: 'Modalités de dépôt',
+  source_financement: 'Source de financement',
+  mode_passation: 'Mode de passation',
+  type_marche: 'Type de marché',
+  cahier_paiement_requis: 'Cahier payant',
+  cahier_prix_xof: 'Prix cahier (FCFA)',
+  date_publication: 'Date publication',
+  date_limite_depot: 'Date limite dépôt',
+  responsable_marche_id: 'PRM assigné',
+  nom_entreprise: 'Raison sociale',
+  ninea: 'NINEA',
+  rccm: 'RCCM',
+  telephone: 'Téléphone',
+  email_contact: 'Email contact',
+  departement: 'Direction',
+  fonction: 'Fonction',
+  nom_fichier: 'Nom du fichier',
+  type_fichier: 'Type de fichier',
+  categorie: 'Catégorie',
+  chemin_fichier: 'Emplacement',
+  appel_offre_id: 'Appel d\'offres',
+  candidature_id: 'Candidature',
+  user_id: 'Utilisateur',
+  montant_xof: 'Montant (FCFA)',
+  provider: 'Moyen de paiement',
+  reference_externe: 'Réf. paiement externe',
+  paye_le: 'Date de paiement',
+};
+
+const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
+  AVIS_APPEL_OFFRES: "Avis d'appel d'offres",
+  CAHIER_DES_CHARGES: 'Cahier des charges',
+  REGLEMENT_CONSULTATION: 'Règlement de consultation',
+  ANNEXE_AO: 'Annexe AO',
+  OFFRE_TECHNIQUE: 'Offre technique',
+  OFFRE_FINANCIERE: 'Offre financière',
+  PIECE_ADMINISTRATIVE: 'Pièce administrative',
+  RCCM: 'RCCM',
+  NINEA: 'NINEA',
+  QUITUS_FISCAL: 'Quitus fiscal',
+  ATTESTATION_IPRES: 'Attestation IPRES',
+  ATTESTATION_CSS: 'Attestation CSS',
+  ATTESTATION_NON_FAILLITE: 'Attestation non-faillite',
+  ATTESTATION_ARCOP: 'Attestation ARCOP',
+  AUTRE: 'Autre document',
+};
+
+const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
+  wave: 'Wave',
+  orange_money: 'Orange Money',
+  simulation: 'Simulation',
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'En attente',
+  completed: 'Payé',
+  failed: 'Échoué',
+  cancelled: 'Annulé',
+};
+
 const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId, title = "Historique des modifications" }) => {
   const { api } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -124,8 +193,27 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
       case 'User': return "Utilisateur";
       case 'Candidature': return "Candidature";
       case 'ResponsableMarche': return "Personne responsable du marché (PRM)";
+      case 'Document': return 'Document';
+      case 'CahierAccesAchat': return 'Paiement cahier des charges';
       default: return model;
     }
+  };
+
+  const formatFieldLabel = (key: string) => FIELD_LABELS[key] ?? key;
+
+  const formatFieldValue = (key: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (key === 'categorie' && typeof value === 'string') {
+      return DOCUMENT_CATEGORY_LABELS[value] ?? value;
+    }
+    if (key === 'provider' && typeof value === 'string') {
+      return PAYMENT_PROVIDER_LABELS[value] ?? value;
+    }
+    if (key === 'statut' && typeof value === 'string') {
+      return PAYMENT_STATUS_LABELS[value] ?? value;
+    }
+    if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
+    return String(value);
   };
 
   const parseValues = (json: string | null) => {
@@ -146,7 +234,10 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
        return (
          <div className="text-xs space-y-1">
            {Object.entries(newObj).map(([key, val]) => (
-             <div key={key}><span className="font-semibold">{key}:</span> {String(val)}</div>
+             <div key={key}>
+               <span className="font-semibold">{formatFieldLabel(key)} :</span>{' '}
+               {formatFieldValue(key, val)}
+             </div>
            ))}
          </div>
        );
@@ -161,11 +252,11 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
           const newVal = newObj[key];
           if (oldVal !== newVal) {
             return (
-              <div key={key} className="flex items-center gap-2">
-                <span className="font-semibold text-slate-700 min-w-[100px]">{key}:</span>
-                <span className="text-red-500 line-through bg-red-50 px-1 rounded">{String(oldVal)}</span>
-                <ArrowRight className="w-3 h-3 text-slate-400" />
-                <span className="text-green-600 bg-green-50 px-1 rounded">{String(newVal)}</span>
+              <div key={key} className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-slate-700 min-w-[100px]">{formatFieldLabel(key)} :</span>
+                <span className="text-red-500 line-through bg-red-50 px-1 rounded">{formatFieldValue(key, oldVal)}</span>
+                <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="text-green-600 bg-green-50 px-1 rounded">{formatFieldValue(key, newVal)}</span>
               </div>
             );
           }
@@ -188,7 +279,8 @@ const AuditHistory: React.FC<AuditHistoryProps> = ({ auditableType, auditableId,
             </div>
           </div>
           <CardDescription>
-            Trace complète des actions effectuées {auditableId ? "sur cet élément" : "sur la plateforme"}
+            Trace des créations, modifications et suppressions (appels d&apos;offres, fournisseurs, candidatures, PRM, comptes, documents et paiements cahier)
+            {auditableId ? ' sur cet élément' : ' sur la plateforme'}.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
