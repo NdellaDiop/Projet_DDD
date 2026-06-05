@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\SenegalPhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 
 class RegisterRequest extends FormRequest
@@ -30,7 +31,7 @@ class RegisterRequest extends FormRequest
             'role_name' => 'required|string|in:FOURNISSEUR,RESPONSABLE_MARCHE',
             'nom_entreprise' => 'required_if:role_name,FOURNISSEUR|string|max:255', 
             'adresse' => 'required_if:role_name,FOURNISSEUR|string|max:255',   
-            'telephone' => 'required_if:role_name,FOURNISSEUR|string|max:255', 
+            'telephone' => ['required_if:role_name,FOURNISSEUR', 'string', 'max:30', new SenegalPhoneNumber()],
         ];
     }
 

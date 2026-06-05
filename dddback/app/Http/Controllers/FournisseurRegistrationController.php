@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Fournisseur;
 use App\Models\Role;
 use App\Models\User;
+use App\Rules\SenegalPhoneNumber;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,7 +98,7 @@ class FournisseurRegistrationController extends Controller
                     'user_id' => $user->id,
                     'nom_entreprise' => $data['nom_entreprise'],
                     'adresse' => $data['adresse'],
-                    'telephone' => $data['telephone'],
+                    'telephone' => SenegalPhoneNumber::normalize($data['telephone']),
                     'email_contact' => $data['email'],
                     'ninea' => $data['ninea'] ?? null,
                     'rccm' => $data['rccm'] ?? null,

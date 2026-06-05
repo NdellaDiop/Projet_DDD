@@ -166,7 +166,7 @@ class FournisseurCandidatureController extends Controller
         $validated = $request->validate([
             'nom_entreprise' => 'required|string|max:255',
             'adresse' => 'required|string|max:255',
-            'telephone' => 'required|string|max:50',
+            'telephone' => ['required', 'string', 'max:30', new \App\Rules\SenegalPhoneNumber()],
             'email_contact' => 'required|email',
             'ninea' => 'nullable|string|max:50',
             'rccm' => 'nullable|string|max:50',
@@ -178,7 +178,7 @@ class FournisseurCandidatureController extends Controller
         $data = [
             'nom_entreprise' => trim($validated['nom_entreprise']),
             'adresse' => trim($validated['adresse']),
-            'telephone' => trim($validated['telephone']),
+            'telephone' => \App\Rules\SenegalPhoneNumber::normalize(trim($validated['telephone'])),
             'email_contact' => trim($validated['email_contact']),
         ];
         

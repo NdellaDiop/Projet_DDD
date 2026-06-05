@@ -25,6 +25,10 @@ import {
 
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import {
+  getSenegalPhoneValidationError,
+  sanitizePhoneInput,
+} from "@/lib/phoneValidation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,7 +74,6 @@ const EMPTY_IDENTIFICATION: IdentificationForm = {
   references_professionnelles: "",
 };
 
-const DRAFT_STORAGE_KEY = "ddd_fournisseur_register_draft_v1";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_MIME = ".pdf,.jpg,.jpeg,.png";
 
@@ -110,19 +113,7 @@ export default function Register() {
   const { api } = useAuth();
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-  const [form, setForm] = useState<IdentificationForm>(() => {
-    if (typeof window === "undefined") return EMPTY_IDENTIFICATION;
-    try {
-      const saved = window.localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<IdentificationForm>;
-        return { ...EMPTY_IDENTIFICATION, ...parsed };
-      }
-    } catch {
-      // ignore
-    }
-    return EMPTY_IDENTIFICATION;
-  });
+  const [form, setForm] = useState<IdentificationForm>(EMPTY_IDENTIFICATION);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
@@ -133,17 +124,14 @@ export default function Register() {
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-
-  // Sauvegarde brouillon (texte uniquement — les fichiers ne sont pas sérialisables)
+  // Nettoyage d'anciens brouillons (sauvegarde locale supprimée)
   useEffect(() => {
-    if (submitted) return;
     try {
-      window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
+      window.localStorage.removeItem("ddd_fournisseur_register_draft_v1");
     } catch {
-      // ignore (quota plein, mode privé, etc.)
+      // ignore
     }
-  }, [form, submitted]);
+  }, []);
 
   const missingMandatory = useMemo<LegalDocumentCategory[]>(
     () => LEGAL_DOCUMENT_CATEGORIES.filter((c) => !filesByCategory[c]),
@@ -153,7 +141,8 @@ export default function Register() {
   const handleField =
     (field: keyof IdentificationForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const value = e.target.value;
+      const raw = e.target.value;
+      const value = field === "telephone" ? sanitizePhoneInput(raw) : raw;
       setForm((prev) => ({ ...prev, [field]: value }));
       setStepErrors((prev) => ({ ...prev, [field]: "" }));
       setApiError(null);
@@ -163,7 +152,8 @@ export default function Register() {
     const errors: Record<string, string> = {};
     if (!form.nom_entreprise.trim()) errors.nom_entreprise = "La raison sociale est obligatoire.";
     if (!form.adresse.trim()) errors.adresse = "L'adresse est obligatoire.";
-    if (!form.telephone.trim()) errors.telephone = "Le téléphone est obligatoire.";
+    const phoneError = getSenegalPhoneValidationError(form.telephone);
+    if (phoneError) errors.telephone = phoneError;
     if (!form.name.trim()) errors.name = "Le nom du contact est obligatoire.";
     if (!form.email.trim()) {
       errors.email = "L'adresse email est obligatoire.";
@@ -296,12 +286,6 @@ export default function Register() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      setSubmitted(true);
-      try {
-        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-      } catch {
-        // ignore
-      }
       toast({
         title: "Dossier soumis avec succès",
         description:
@@ -418,7 +402,7 @@ export default function Register() {
                 )}
 
                 {currentStep < 3 ? (
-                  <Button onClick={handleNext} className="gap-2">
+                  <Button onClick={handleNext} disabled={submitting} className="gap-2">
                     Suivant <ArrowRight className="w-4 h-4" />
                   </Button>
                 ) : (
@@ -555,7 +539,7 @@ function Step1Identification(props: {
           value={form.telephone}
           onChange={onChange("telephone")}
           error={errors.telephone}
-          placeholder="+221 77 000 00 00"
+          placeholder="Ex. 78 123 45 67 ou +221 76 123 45 67"
         />
         <FieldText
           id="email"

@@ -51,6 +51,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { exportData } from "@/lib/exportUtils";
 import {
+  isValidSenegalPhone,
+  sanitizePhoneInput,
+  SENEGAL_PHONE_ERROR,
+} from "@/lib/phoneValidation";
+import {
   LEGAL_DOCUMENT_CATEGORIES,
   ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES,
   legalDocumentLabel,
@@ -335,6 +340,15 @@ export default function FournisseurDashboard() {
       return;
     }
     
+    if (!isValidSenegalPhone(telephone)) {
+      toast({
+        title: "Erreur",
+        description: SENEGAL_PHONE_ERROR,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Validation de l'email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailContact)) {
@@ -1979,8 +1993,15 @@ export default function FournisseurDashboard() {
                 <div className="grid gap-2">
                     <Label>Téléphone</Label>
                     <Input
+                      type="tel"
                       value={profileForm.telephone}
-                      onChange={(e) => setProfileForm({ ...profileForm, telephone: e.target.value })} 
+                      onChange={(e) =>
+                        setProfileForm({
+                          ...profileForm,
+                          telephone: sanitizePhoneInput(e.target.value),
+                        })
+                      }
+                      placeholder="Ex. 70, 76, 77 ou 78…"
                       required
                     />
                 </div>
