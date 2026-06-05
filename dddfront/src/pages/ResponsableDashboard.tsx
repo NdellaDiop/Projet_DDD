@@ -67,6 +67,11 @@ import {
   buildAppelOffreCreateFormData,
 } from "@/lib/appelOffreCreateFormData";
 import { validateAoPieceSize } from "@/lib/uploadLimits";
+import {
+  getSenegalPhoneValidationError,
+  normalizeSenegalPhone,
+  sanitizePhoneInput,
+} from "@/lib/phoneValidation";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -913,12 +918,27 @@ export default function ResponsableDashboard() {
       });
       return;
     }
+
+    const phoneError = getSenegalPhoneValidationError(profileForm.telephone);
+    if (phoneError) {
+      toast({ title: "Téléphone invalide", description: phoneError, variant: "destructive" });
+      return;
+    }
+    const normalizedPhone = normalizeSenegalPhone(profileForm.telephone);
+    if (!normalizedPhone) {
+      toast({
+        title: "Téléphone invalide",
+        description: "Numéro sénégalais requis (9 chiffres).",
+        variant: "destructive",
+      });
+      return;
+    }
     
     try {
       const payload = {
         departement: profileForm.departement.trim(),
         fonction: profileForm.fonction.trim(),
-        telephone: profileForm.telephone.trim(),
+        telephone: normalizedPhone,
       };
 
       const response = await api.put("/api/responsable/profile", payload);
@@ -2645,17 +2665,19 @@ export default function ResponsableDashboard() {
                   <div className="grid gap-2">
                     <Label>Téléphone</Label>
                     <Input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="77 123 45 67"
                       value={profileForm.telephone}
                       onChange={(e) =>
                         setProfileForm({
                           ...profileForm,
-                          telephone: e.target.value.replace(/\s+/g, "").slice(0, 20),
+                          telephone: sanitizePhoneInput(e.target.value),
                         })
                       }
-                      maxLength={20}
                       required
                     />
-                    <p className="text-xs text-muted-foreground">Max 20 caractères, sans espaces.</p>
                   </div>
                   <div className="flex justify-end">
                     <Button type="submit">Sauvegarder</Button>

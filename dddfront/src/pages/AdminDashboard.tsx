@@ -84,6 +84,11 @@ import {
   buildAppelOffreCreateFormData,
 } from "@/lib/appelOffreCreateFormData";
 import { validateAoPieceSize } from "@/lib/uploadLimits";
+import {
+  getSenegalPhoneValidationError,
+  normalizeSenegalPhone,
+  sanitizePhoneInput,
+} from "@/lib/phoneValidation";
 import AuditHistory from "@/components/AuditHistory";
 import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
 import AdvancedStats from "@/components/AdvancedStats";
@@ -694,6 +699,20 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateResponsable = async (e: React.FormEvent) => {
     e.preventDefault();
+    const phoneError = getSenegalPhoneValidationError(newResponsable.telephone);
+    if (phoneError) {
+      toast({ title: "Téléphone invalide", description: phoneError, variant: "destructive" });
+      return;
+    }
+    const normalizedPhone = normalizeSenegalPhone(newResponsable.telephone);
+    if (!normalizedPhone) {
+      toast({
+        title: "Téléphone invalide",
+        description: "Numéro sénégalais requis (9 chiffres).",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       if (!api) throw new Error("API non disponible");
       
@@ -703,7 +722,7 @@ const AdminDashboard: React.FC = () => {
         password: newResponsable.password,
         departement: newResponsable.departement,
         fonction: newResponsable.fonction,
-        telephone: newResponsable.telephone,
+        telephone: normalizedPhone,
       });
 
       toast({ title: "Succès", description: "Personne responsable du marché (PRM) créée avec succès." });
@@ -713,7 +732,11 @@ const AdminDashboard: React.FC = () => {
       fetchDashboardData();
     } catch (error: unknown) {
       console.error("Erreur création PRM:", error);
-      toast({ title: "Erreur", description: "Erreur lors de la création.", variant: "destructive" });
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Erreur lors de la création."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -744,6 +767,21 @@ const AdminDashboard: React.FC = () => {
 
   const handleUpdateResponsable = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingResponsable) return;
+    const phoneError = getSenegalPhoneValidationError(editingResponsable.telephone);
+    if (phoneError) {
+      toast({ title: "Téléphone invalide", description: phoneError, variant: "destructive" });
+      return;
+    }
+    const normalizedPhone = normalizeSenegalPhone(editingResponsable.telephone);
+    if (!normalizedPhone) {
+      toast({
+        title: "Téléphone invalide",
+        description: "Numéro sénégalais requis (9 chiffres).",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       if (!api) throw new Error("API non disponible");
       
@@ -752,14 +790,18 @@ const AdminDashboard: React.FC = () => {
         email: editingResponsable.email,
         departement: editingResponsable.departement,
         fonction: editingResponsable.fonction,
-        telephone: editingResponsable.telephone,
+        telephone: normalizedPhone,
       });
 
       toast({ title: "Succès", description: "Personne responsable du marché (PRM) mise à jour." });
       setIsEditResponsableOpen(false);
       fetchDashboardData();
     } catch (error: unknown) {
-      toast({ title: "Erreur", description: "Impossible de mettre à jour.", variant: "destructive" });
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de mettre à jour."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -2326,8 +2368,17 @@ const AdminDashboard: React.FC = () => {
                   <Label htmlFor="telephone">Téléphone</Label>
                   <Input
                     id="telephone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="77 123 45 67"
                     value={newResponsable.telephone}
-                    onChange={(e) => setNewResponsable({ ...newResponsable, telephone: e.target.value })}
+                    onChange={(e) =>
+                      setNewResponsable({
+                        ...newResponsable,
+                        telephone: sanitizePhoneInput(e.target.value),
+                      })
+                    }
                     required
                   />
                 </div>
@@ -2407,8 +2458,17 @@ const AdminDashboard: React.FC = () => {
                   <div className="grid gap-2">
                     <Label>Téléphone</Label>
                     <Input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="77 123 45 67"
                       value={editingResponsable.telephone}
-                      onChange={(e) => setEditingResponsable({ ...editingResponsable, telephone: e.target.value })}
+                      onChange={(e) =>
+                        setEditingResponsable({
+                          ...editingResponsable,
+                          telephone: sanitizePhoneInput(e.target.value),
+                        })
+                      }
                       required
                     />
                   </div>

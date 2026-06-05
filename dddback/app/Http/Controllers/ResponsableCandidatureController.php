@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ResponsableMarche;
 use App\Models\LogActivite;
+use App\Rules\SenegalPhoneNumber;
 use Illuminate\Http\Request;
 
 class ResponsableCandidatureController extends Controller
@@ -75,15 +76,17 @@ class ResponsableCandidatureController extends Controller
             return response()->json(['message' => 'Profil responsable introuvable.'], 404);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'departement' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
-            'telephone' => 'required|string|max:20',
+            'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
         ]);
 
-        $data = $request->all();
-
-        $responsable->update($data);
+        $responsable->update([
+            'departement' => $validated['departement'],
+            'fonction' => $validated['fonction'],
+            'telephone' => SenegalPhoneNumber::normalize($validated['telephone']),
+        ]);
         
         LogActivite::create([
             'user_id' => auth()->id(),

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Role;
 use App\Models\ResponsableMarche;
 use App\Models\LogActivite;
+use App\Rules\SenegalPhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
@@ -20,10 +21,10 @@ class AdminResponsableController extends Controller
             'password' => ['required', Rules\Password::defaults()],
             'departement' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
-            'telephone' => 'required|string|max:20',
+            'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
         ]);
 
-        // Rôle système (PRM = RESPONSABLE_MARCHE)
+        $telephone = SenegalPhoneNumber::normalize($request->telephone);
         $role = Role::where('name', 'RESPONSABLE_MARCHE')->first();
         if (!$role) {
             return response()->json(['message' => 'Rôle RESPONSABLE_MARCHE introuvable.'], 500);
@@ -43,7 +44,7 @@ class AdminResponsableController extends Controller
             'user_id' => $user->id,
             'departement' => $request->departement,
             'fonction' => $request->fonction,
-            'telephone' => $request->telephone,
+            'telephone' => $telephone,
         ]);
 
         // 3. Logger l'activité
@@ -88,8 +89,10 @@ class AdminResponsableController extends Controller
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id, // On ignore l'email actuel du user
             'departement' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
-            'telephone' => 'required|string|max:20',
+            'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
         ]);
+
+        $telephone = SenegalPhoneNumber::normalize($request->telephone);
 
         // Mise à jour User
         $user->update([
@@ -101,7 +104,7 @@ class AdminResponsableController extends Controller
         $responsable->update([
             'departement' => $request->departement,
             'fonction' => $request->fonction,
-            'telephone' => $request->telephone,
+            'telephone' => $telephone,
         ]);
 
         LogActivite::create([
