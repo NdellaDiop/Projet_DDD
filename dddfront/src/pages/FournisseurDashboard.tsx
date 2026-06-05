@@ -264,6 +264,7 @@ export default function FournisseurDashboard() {
         api.get("/api/appels-offres", {
           params: { per_page: 8, statut: "published" },
         }),
+        api.get("/api/fournisseur/mes-achats"),
       ]);
 
       if (seq !== loadSeq.current) return;
@@ -283,6 +284,9 @@ export default function FournisseurDashboard() {
       setAvisPublishedTotal(
         typeof avisPayload?.meta?.total === "number" ? avisPayload.meta.total : avisRows.length
       );
+
+      const achatsPayload = pick<{ data?: MesAchat[] }>(6);
+      setMesAchats(Array.isArray(achatsPayload?.data) ? achatsPayload.data : []);
 
       const docsPayload = pick<Document[] | { data?: Document[] }>(1);
       setDocuments(unwrapList<Document>(docsPayload));
@@ -377,7 +381,7 @@ export default function FournisseurDashboard() {
 
       results.forEach((r, i) => {
         if (r.status === "rejected") {
-          const labels = ["candidatures", "documents", "profil", "suggestions", "notifications", "avis"];
+          const labels = ["candidatures", "documents", "profil", "suggestions", "notifications", "avis", "achats"];
           console.error(`Erreur chargement ${labels[i]}:`, r.reason);
         }
       });
@@ -864,6 +868,7 @@ export default function FournisseurDashboard() {
     notifs_non_lues: portalNotifications.filter(isNotificationUnread).length,
     avis_ouverts_total: avisPublishedTotal,
     documents_total: documents.length,
+    mes_achats_total: mesAchats.length,
   };
 
   const markNotificationRead = async (id: number) => {
@@ -1146,7 +1151,7 @@ export default function FournisseurDashboard() {
                   </Alert>
                 )}
         {/* Cartes statistiques */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -1179,6 +1184,22 @@ export default function FournisseurDashboard() {
               </CardHeader>
               <CardContent>
                         <div className="text-2xl font-bold text-slate-800">{stats.documents_total}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                    <Card
+                      className="border-none shadow-sm hover:shadow-md transition-all cursor-pointer"
+                      onClick={() => setActiveTab("mes-achats")}
+                    >
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Mes achats</CardTitle>
+                        <div className="bg-teal-50 p-2 rounded-lg"><ShoppingBag className="w-4 h-4 text-teal-600" /></div>
+              </CardHeader>
+              <CardContent>
+                        <div className="text-2xl font-bold text-slate-800">{stats.mes_achats_total}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Cahiers des charges achetés</p>
               </CardContent>
             </Card>
           </motion.div>
