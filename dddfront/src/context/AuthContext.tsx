@@ -89,9 +89,14 @@ type RetryableConfig = {
   __retryCount?: number;
 };
 
-// Intercepteur pour ajouter le token XSRF
+// Intercepteur : CSRF + Bearer (localStorage) pour éviter les appels sans token juste après connexion
 api.interceptors.request.use(
   (config) => {
+    const storedToken = localStorage.getItem('access_token');
+    if (storedToken) {
+      config.headers.Authorization = `Bearer ${storedToken}`;
+    }
+
     const cookies = document.cookie.split('; ');
     const xsrfCookie = cookies.find(cookie => cookie.startsWith('XSRF-TOKEN='));
     
@@ -141,7 +146,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   // Calculer les rôles basés sur user
-  const isAdmin = user?.role?.name === 'ADMIN';
+  const isAdmin = user?.role?.name === 'ADMIN' || user?.role_id === 1;
   const isResponsableMarche = user?.role?.name === 'RESPONSABLE_MARCHE';
   const isFournisseur = user?.role?.name === 'FOURNISSEUR';
 

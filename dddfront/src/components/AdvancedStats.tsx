@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
@@ -33,7 +33,6 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   const { api, isReady, token, isAuthenticated } = useAuth();
-  const loadSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     aoEvolution: AOEvolutionItem[];
@@ -42,23 +41,26 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   } | null>(null);
 
   useEffect(() => {
-    if (!api || !isReady || !isAuthenticated || !token) return;
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
 
-    const seq = ++loadSeq.current;
+    let cancelled = false;
     const fetchStats = async () => {
       setLoading(true);
       try {
         const response = await api.get('/api/admin/dashboard-advanced-stats');
-        if (seq !== loadSeq.current) return;
-        setData(response.data);
+        if (!cancelled) setData(response.data);
       } catch (error) {
         console.error("Erreur chargement stats avancées:", error);
       } finally {
-        if (seq === loadSeq.current) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     void fetchStats();
+    return () => {
+      cancelled = true;
+    };
   }, [api, isReady, isAuthenticated, token]);
 
   if (loading) {

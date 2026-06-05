@@ -346,9 +346,8 @@ const AdminDashboard: React.FC = () => {
   const [selectedAOForAssign, setSelectedAOForAssign] = useState<AppelOffreAdmin | null>(null);
   const [selectedResponsableId, setSelectedResponsableId] = useState<number | null>(null);
 
-  const { user: authUser, api, logout, isReady, token, isAuthenticated } = useAuth();
+  const { user: authUser, api, logout, isReady, token, isAuthenticated, isAdmin: isAdminFromContext } = useAuth();
   const navigate = useNavigate();
-  const loadSeq = useRef(0);
   const getRoleName = (u: unknown) => {
     const roleContainer =
       typeof u === "object" && u !== null ? (u as { role?: string | { name?: string } }).role : undefined;
@@ -478,9 +477,10 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const fetchGlobalData = useCallback(async () => {
-    if (!api || !isReady || !isAuthenticated || !token) return;
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
+    if (!isAdminFromContext && getRoleName(authUser) !== 'ADMIN' && getRoleId(authUser) !== 1) return;
 
-    const seq = ++loadSeq.current;
     try {
       const results = await Promise.allSettled([
         api.get('/api/admin/dashboard-stats'),
@@ -488,10 +488,11 @@ const AdminDashboard: React.FC = () => {
         api.get('/api/admin/recent-activities'),
       ]);
 
-      if (seq !== loadSeq.current) return;
-
       if (results[0].status === 'fulfilled') {
-        setStats(results[0].value.data);
+        const data = results[0].value.data as DashboardStats;
+        if (data && typeof data.totalFournisseurs === 'number') {
+          setStats(data);
+        }
       } else {
         console.error('Erreur stats admin:', results[0].reason);
       }
@@ -508,10 +509,11 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error("Erreur chargement global:", error);
     }
-  }, [api, isReady, isAuthenticated, token]);
+  }, [api, isReady, isAuthenticated, token, isAdminFromContext, authUser]);
 
   const fetchAppelsOffres = useCallback(async () => {
-    if (!api || !isReady || !isAuthenticated || !token) return;
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
     const now = Date.now();
     if (now - lastAppelsFetchRef.current < 800) return;
     lastAppelsFetchRef.current = now;
@@ -543,7 +545,8 @@ const AdminDashboard: React.FC = () => {
   }, [api, isReady, isAuthenticated, token, pagination.appelsOffres.perPage, pagination.appelsOffres.currentPage, debouncedSearchTerm, filterStatut, advancedFilters, updatePaginationState]);
 
   const fetchFournisseurs = useCallback(async () => {
-    if (!api || !isReady || !isAuthenticated || !token) return;
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
     const now = Date.now();
     if (now - lastFournisseursFetchRef.current < 800) return;
     lastFournisseursFetchRef.current = now;
@@ -571,7 +574,8 @@ const AdminDashboard: React.FC = () => {
   }, [api, isReady, isAuthenticated, token, pagination.fournisseurs.perPage, pagination.fournisseurs.currentPage, debouncedSearchTerm, advancedFilters, updatePaginationState]);
 
   const fetchResponsables = useCallback(async () => {
-    if (!api || !isReady || !isAuthenticated || !token) return;
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
     const now = Date.now();
     if (now - lastResponsablesFetchRef.current < 800) return;
     lastResponsablesFetchRef.current = now;
@@ -607,23 +611,23 @@ const AdminDashboard: React.FC = () => {
       ]);
   }, [fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]);
 
-  // Initial Load
-  useEffect(() => {
-    const roleName = getRoleName(authUser);
-    const isAdmin = roleName === "ADMIN" || getRoleId(authUser) === 1;
-  
-    if (!isReady || !isAuthenticated || !token || !authUser || !isAdmin) {
-      if (isReady) setLoading(false);
-      return;
-    }
+  const loadOverviewData = useCallback(async () => {
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
+    if (!isAdminFromContext && getRoleName(authUser) !== 'ADMIN' && getRoleId(authUser) !== 1) return;
 
-    const init = async () => {
-        setLoading(true);
-        await fetchGlobalData();
-        setLoading(false);
-    };
-    void init();
-  }, [isReady, isAuthenticated, token, authUser, fetchGlobalData]); 
+    try {
+      setLoading(true);
+      await fetchGlobalData();
+    } finally {
+      setLoading(false);
+    }
+  }, [api, isReady, isAuthenticated, token, isAdminFromContext, authUser, fetchGlobalData]);
+
+  // Initial Load + rechargement après connexion
+  useEffect(() => {
+    void loadOverviewData();
+  }, [loadOverviewData]);
 
   // Effets de pagination séparés
   const [isMounted, setIsMounted] = useState(false);
@@ -633,15 +637,15 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-      if (isMounted && isReady && isAuthenticated && token) fetchAppelsOffres();
+      if (isMounted && isReady && isAuthenticated && (token || localStorage.getItem('access_token'))) fetchAppelsOffres();
   }, [fetchAppelsOffres, isMounted, isReady, isAuthenticated, token]);
 
   useEffect(() => {
-      if (isMounted && isReady && isAuthenticated && token) fetchFournisseurs();
+      if (isMounted && isReady && isAuthenticated && (token || localStorage.getItem('access_token'))) fetchFournisseurs();
   }, [fetchFournisseurs, isMounted, isReady, isAuthenticated, token]);
 
   useEffect(() => {
-      if (isMounted && isReady && isAuthenticated && token) fetchResponsables();
+      if (isMounted && isReady && isAuthenticated && (token || localStorage.getItem('access_token'))) fetchResponsables();
   }, [fetchResponsables, isMounted, isReady, isAuthenticated, token]);
 
   // Effet pour rendre l'overlay transparent pour la modale "Voir Dossier"
