@@ -28,12 +28,9 @@ class CahierAccesAchat extends Model
         'paye_le',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'paye_le' => 'datetime',
-        ];
-    }
+    protected $casts = [
+        'paye_le' => 'datetime',
+    ];
 
     public function user(): BelongsTo
     {

@@ -230,7 +230,7 @@ class CahierPaiementController extends Controller
                 'statut' => $achat->statut,
                 'deja_acquis' => true,
                 'achat_id' => $achat->id,
-                'paye_le' => $achat->paye_le?->toIso8601String(),
+                'paye_le' => $achat->paye_le?->toIso8601String() ?? $achat->paye_le,
             ]);
         }
 
@@ -251,7 +251,7 @@ class CahierPaiementController extends Controller
                         'statut' => $achat->statut,
                         'deja_acquis' => true,
                         'achat_id' => $achat->id,
-                        'paye_le' => $achat->paye_le?->toIso8601String(),
+                        'paye_le' => $achat->paye_le?->toIso8601String() ?? $achat->paye_le,
                     ]);
                 }
             } catch (RuntimeException) {

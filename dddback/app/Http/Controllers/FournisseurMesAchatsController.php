@@ -63,8 +63,12 @@ class FournisseurMesAchatsController extends Controller
             'provider_label' => self::PROVIDER_LABELS[$achat->provider] ?? $achat->provider,
             'statut' => $achat->statut,
             'reference_externe' => $achat->reference_externe,
-            'paye_le' => $achat->paye_le?->toIso8601String(),
-            'created_at' => $achat->created_at?->toIso8601String(),
+            'paye_le' => $achat->paye_le instanceof \DateTimeInterface
+                ? $achat->paye_le->format(\DateTimeInterface::ATOM)
+                : $achat->paye_le,
+            'created_at' => $achat->created_at instanceof \DateTimeInterface
+                ? $achat->created_at->format(\DateTimeInterface::ATOM)
+                : $achat->created_at,
             'appel_offre' => $ao ? [
                 'id' => $ao->id,
                 'titre' => $ao->titre,
