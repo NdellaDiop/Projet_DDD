@@ -83,6 +83,7 @@ import {
   AO_PIECE_LABELS,
   buildAppelOffreCreateFormData,
 } from "@/lib/appelOffreCreateFormData";
+import { validateAoPieceSize } from "@/lib/uploadLimits";
 import AuditHistory from "@/components/AuditHistory";
 import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
 import AdvancedStats from "@/components/AdvancedStats";
@@ -993,6 +994,16 @@ const AdminDashboard: React.FC = () => {
         });
         return;
       }
+      const avisSizeErr = validateAoPieceSize(avisAoFile, "Avis");
+      const cahierSizeErr = validateAoPieceSize(cahierChargesFile, "Cahier des charges");
+      if (avisSizeErr || cahierSizeErr) {
+        toast({
+          title: "Fichier trop volumineux",
+          description: [avisSizeErr, cahierSizeErr].filter(Boolean).join(" "),
+          variant: "destructive",
+        });
+        return;
+      }
       const formData = buildAppelOffreCreateFormData(
         newTender,
         avisAoFile,
@@ -1000,9 +1011,7 @@ const AdminDashboard: React.FC = () => {
         parsedDate
       );
 
-      await api.post("/api/appels-offres/with-documents", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post("/api/appels-offres/with-documents", formData);
 
       toast({
         title: "Succès",
