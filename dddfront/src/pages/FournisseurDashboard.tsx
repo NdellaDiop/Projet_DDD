@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FileText,
   Upload,
@@ -30,6 +30,8 @@ import {
   ChevronDown,
   ArrowRight,
   Download,
+  ShoppingBag,
+  Wallet,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -86,6 +88,28 @@ interface Document {
   chemin_fichier: string;
   url?: string;
   created_at: string;
+}
+
+interface MesAchat {
+  id: number;
+  montant_xof: number;
+  provider: string;
+  provider_label: string;
+  statut: string;
+  paye_le: string | null;
+  created_at: string;
+  libelle: string;
+  appel_offre: {
+    id: number;
+    titre: string;
+    reference: string;
+    statut: string;
+  } | null;
+  cahier_document: {
+    id: number;
+    nom_fichier: string;
+    download_url: string;
+  } | null;
 }
 
 interface FournisseurProfile {
@@ -159,9 +183,13 @@ function isNotificationUnread(n: InAppNotification): boolean {
 export default function FournisseurDashboard() {
   const { api, user, logout, refreshUser, isReady, token, isAuthenticated } = useAuth();
   const loadSeq = useRef(0);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("overview");
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [mesAchats, setMesAchats] = useState<MesAchat[]>([]);
+  const [loadingMesAchats, setLoadingMesAchats] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [newSuggestion, setNewSuggestion] = useState({ sujet: "", message: "" });
   const [profile, setProfile] = useState<FournisseurProfile | null>(null);
@@ -367,6 +395,138 @@ export default function FournisseurDashboard() {
       void loadDashboardData();
     }
   }, [isReady, isAuthenticated, token, loadDashboardData]);
+
+  const fetchMesAchats = useCallback(async (): Promise<MesAchat[]> => {
+    if (!api || !isReady || !isAuthenticated) return [];
+    try {
+      setLoadingMesAchats(true);
+      const res = await api.get("/api/fournisseur/mes-achats");
+      const list = Array.isArray(res.data?.data) ? (res.data.data as MesAchat[]) : [];
+      setMesAchats(list);
+      return list;
+    } catch (error) {
+      console.error("Erreur chargement mes achats:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger vos achats.",
+        variant: "destructive",
+      });
+      return [];
+    } finally {
+      setLoadingMesAchats(false);
+    }
+  }, [api, isReady, isAuthenticated]);
+
+  const pollPaymentUntilConfirmed = useCallback(
+    async (aoId: string) => {
+      if (!api) return;
+      setConfirmingPayment(true);
+      const maxAttempts = 40;
+      for (let i = 0; i < maxAttempts; i++) {
+        try {
+          const res = await api.get(`/api/appels-offres/${aoId}/cahier/paiement/statut`);
+          if (res.data?.deja_acquis || res.data?.statut === "completed") {
+            await fetchMesAchats();
+            toast({
+              title: "Paiement confirmé",
+              description: "Votre achat apparaît ci-dessous. Vous pouvez télécharger le cahier des charges.",
+            });
+            setConfirmingPayment(false);
+            return;
+          }
+        } catch {
+          /* nouvelle tentative */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
+      setConfirmingPayment(false);
+      toast({
+        title: "Confirmation en cours",
+        description: "Le paiement est en cours de validation. Actualisez cette page dans quelques instants.",
+      });
+    },
+    [api, fetchMesAchats]
+  );
+
+  const paymentReturnHandled = useRef(false);
+
+  useEffect(() => {
+    if (!isReady || !isAuthenticated || paymentReturnHandled.current) return;
+    const tab = searchParams.get("tab");
+    if (tab !== "mes-achats") return;
+
+    paymentReturnHandled.current = true;
+    setActiveTab("mes-achats");
+    const paiement = searchParams.get("paiement");
+    const aoId = searchParams.get("ao");
+    setSearchParams({}, { replace: true });
+
+    void (async () => {
+      const list = await fetchMesAchats();
+      if (paiement === "success") {
+        if (aoId && !list.some((a) => a.appel_offre?.id === Number(aoId))) {
+          await pollPaymentUntilConfirmed(aoId);
+        } else {
+          toast({
+            title: "Paiement confirmé",
+            description: "Retrouvez le cahier des charges dans la liste ci-dessous.",
+          });
+        }
+      } else if (paiement === "erreur" || paiement === "annule") {
+        toast({
+          title: "Paiement non finalisé",
+          description: "Le règlement n'a pas abouti. Vous pouvez réessayer depuis la fiche marché.",
+          variant: "destructive",
+        });
+      }
+    })();
+  }, [isReady, isAuthenticated, searchParams, setSearchParams, fetchMesAchats, pollPaymentUntilConfirmed]);
+
+  useEffect(() => {
+    if (activeTab === "mes-achats" && isReady && isAuthenticated) {
+      void fetchMesAchats();
+    }
+  }, [activeTab, isReady, isAuthenticated, fetchMesAchats]);
+
+  const formatAchatDate = (iso: string | null) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("fr-FR", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+    } catch {
+      return iso;
+    }
+  };
+
+  const downloadCahierAchat = async (achat: MesAchat) => {
+    if (!api || !achat.cahier_document?.download_url) {
+      toast({
+        title: "Téléchargement indisponible",
+        description: "Le fichier du cahier n'est pas disponible pour cet achat.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const response = await api.get(achat.cahier_document.download_url, { responseType: "blob" });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = achat.cahier_document.nom_fichier || `cahier-${achat.appel_offre?.reference ?? achat.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast({
+        title: "Erreur",
+        description: "Impossible de télécharger le cahier des charges.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -902,6 +1062,15 @@ export default function FournisseurDashboard() {
             </Button>
 
             <Button
+              variant={activeTab === "mes-achats" ? "default" : "ghost"}
+              className={`w-full justify-start ${activeTab === "mes-achats" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => setActiveTab("mes-achats")}
+            >
+              <ShoppingBag className="w-4 h-4 mr-3" />
+              Mes achats
+            </Button>
+
+            <Button
               variant={activeTab === "profile" ? "default" : "ghost"}
               className={`w-full justify-start ${activeTab === "profile" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
               onClick={() => setActiveTab("profile")}
@@ -937,6 +1106,7 @@ export default function FournisseurDashboard() {
                 {activeTab === 'overview' && "Tableau de bord Fournisseur"}
                 {activeTab === 'candidatures' && "Notifications & avis publiés"}
                 {activeTab === 'documents' && "Mes documents"}
+                {activeTab === 'mes-achats' && "Mes achats"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
                 {activeTab === 'profile' && "Profil Entreprise"}
               </h1>
@@ -945,6 +1115,7 @@ export default function FournisseurDashboard() {
                 {activeTab === 'candidatures' &&
                   "Vous consultez les avis et téléchargez les pièces sur la fiche marché ; le dépôt des offres se fait en présentiel. Notifications et suivi ci-dessous."}
                 {activeTab === 'documents' && "Pièces obligatoires : tenez votre dossier à jour pour que les PRM disposent de vos informations avant votre venue au siège (soumission physique)."}
+                {activeTab === 'mes-achats' && "Historique de vos achats de cahiers des charges : date, montant, marché et téléchargement."}
                 {activeTab === 'suggestions' && "Proposez des améliorations pour la plateforme."}
                 {activeTab === 'profile' && "Coordonnées, références professionnelles (clients, marchés passés) et aperçu de vos pièces."}
           </p>
@@ -1471,6 +1642,110 @@ export default function FournisseurDashboard() {
                 </CollapsibleContent>
               </Collapsible>
             </div>
+        )}
+
+        {/* MES ACHATS */}
+        {activeTab === "mes-achats" && (
+          <div className="animate-in fade-in duration-500 space-y-6">
+            {confirmingPayment && (
+              <Alert className="border-teal-200 bg-teal-50">
+                <Wallet className="h-4 w-4 text-teal-700" />
+                <AlertTitle className="text-teal-900">Confirmation du paiement…</AlertTitle>
+                <AlertDescription className="text-teal-800">
+                  Nous validons votre règlement. Cette page se mettra à jour automatiquement.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingBag className="h-5 w-5 text-primary" />
+                  Mes achats
+                </CardTitle>
+                <CardDescription>
+                  Cahiers des charges achetés en ligne : consultez la date, le montant et téléchargez vos fichiers (comme un historique de commandes).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingMesAchats ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">Chargement de vos achats…</p>
+                ) : mesAchats.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <ShoppingBag className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium text-slate-700">Aucun achat pour le moment</p>
+                    <p className="text-sm mt-2 max-w-md mx-auto">
+                      Lorsque vous payez un cahier des charges sur un marché, il apparaîtra ici avec la date et un bouton de téléchargement.
+                    </p>
+                    <Button variant="outline" className="mt-4" onClick={() => navigate("/appels-offres")}>
+                      Voir les appels d&apos;offres
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-semibold text-slate-700">Date & heure</th>
+                          <th className="text-left px-4 py-3 font-semibold text-slate-700">Marché</th>
+                          <th className="text-left px-4 py-3 font-semibold text-slate-700 hidden md:table-cell">Référence</th>
+                          <th className="text-left px-4 py-3 font-semibold text-slate-700">Produit</th>
+                          <th className="text-right px-4 py-3 font-semibold text-slate-700">Montant</th>
+                          <th className="text-left px-4 py-3 font-semibold text-slate-700 hidden sm:table-cell">Paiement</th>
+                          <th className="text-right px-4 py-3 font-semibold text-slate-700">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mesAchats.map((achat) => (
+                          <tr key={achat.id} className="border-b last:border-0 hover:bg-slate-50/80">
+                            <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                              {formatAchatDate(achat.paye_le ?? achat.created_at)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                className="font-medium text-slate-800 text-left hover:text-primary hover:underline"
+                                onClick={() =>
+                                  achat.appel_offre?.id &&
+                                  navigate(`/appels-offres/${achat.appel_offre.id}`)
+                                }
+                              >
+                                {achat.appel_offre?.titre ?? "—"}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-slate-500 hidden md:table-cell">
+                              {achat.appel_offre?.reference ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">{achat.libelle}</td>
+                            <td className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                              {Number(achat.montant_xof).toLocaleString("fr-FR")} FCFA
+                            </td>
+                            <td className="px-4 py-3 text-slate-500 hidden sm:table-cell">
+                              {achat.provider_label}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {achat.cahier_document ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void downloadCahierAchat(achat)}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Télécharger
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Fichier indisponible</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* MES DOCUMENTS */}

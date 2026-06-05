@@ -169,35 +169,21 @@ const AppelOffreDetails = () => {
     waveReturnHandled.current = false;
   }, [id]);
 
-  /** Après retour Wave (?paiement=wave&statut=success), tente une vérif serveur si WAVE_ALLOW_SYNC_VERIFY est activé côté API. */
+  /** Ancienne URL Wave (?paiement=wave) ou retour Orange : redirection vers Mes achats. */
   useEffect(() => {
     if (!api || !id || !isFournisseur || waveReturnHandled.current) return;
     const paiement = searchParams.get("paiement");
     const statut = searchParams.get("statut");
-    if (paiement !== "wave" || statut !== "success") return;
+    const legacyWave =
+      paiement === "wave" && statut === "success";
+    const legacyOrange =
+      paiement === "orange_money" && statut === "success";
+    if (!legacyWave && !legacyOrange) return;
 
     waveReturnHandled.current = true;
-    void (async () => {
-      try {
-        const res = await api.post(`/api/appels-offres/${id}/cahier/paiement/verifier-wave`);
-        if (res.data?.deja_acquis || res.data?.statut === "completed") {
-          toast({
-            title: "Paiement confirmé",
-            description:
-              "Vous pouvez télécharger le cahier des charges, le compléter pour répondre aux exigences, puis constituer vos plis pour le dépôt au siège.",
-          });
-        }
-      } catch {
-        /* 403 si vérif synchrone désactivée — normal en prod si webhook seulement */
-      }
-      try {
-        const r = await api.get(`/api/appels-offres/${id}`);
-        setAppelOffre(r.data.data || r.data);
-      } finally {
-        setSearchParams({}, { replace: true });
-      }
-    })();
-  }, [api, id, isFournisseur, searchParams, setSearchParams]);
+    setSearchParams({}, { replace: true });
+    navigate(`/fournisseur/dashboard?tab=mes-achats&paiement=success&ao=${id}`);
+  }, [api, id, isFournisseur, navigate, searchParams, setSearchParams]);
 
   const refreshDetails = async () => {
     if (!api || !id) return;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,14 @@ const PaiementCahier = () => {
   const [accepte, setAccepte] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [initiating, setInitiating] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+
+  const redirectMesAchats = useCallback(
+    (aoId: number) => {
+      navigate(`/fournisseur/dashboard?tab=mes-achats&paiement=success&ao=${aoId}`);
+    },
+    [navigate]
+  );
 
   const isFournisseur = user?.role?.name === "FOURNISSEUR";
 
@@ -108,6 +115,40 @@ const PaiementCahier = () => {
     })();
   }, [api, aoId, isAuthenticated, isFournisseur, isReady, navigate, user?.email, user?.name, user?.telephone]);
 
+  /** Détection automatique du paiement (sans bouton « J'ai payé ») — style Odoo. */
+  useEffect(() => {
+    if (step !== "payment" || !preview || !api) return;
+
+    let cancelled = false;
+    setAwaitingConfirmation(true);
+
+    const checkStatut = async () => {
+      try {
+        const res = await api.get(
+          `/api/appels-offres/${preview.appel_offre.id}/cahier/paiement/statut`
+        );
+        if (cancelled) return;
+        if (res.data?.deja_acquis || res.data?.statut === "completed") {
+          redirectMesAchats(preview.appel_offre.id);
+        }
+      } catch {
+        /* retry au prochain intervalle */
+      }
+    };
+
+    void checkStatut();
+    const interval = window.setInterval(() => void checkStatut(), 3000);
+    const onFocus = () => void checkStatut();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      setAwaitingConfirmation(false);
+    };
+  }, [step, preview, api, redirectMesAchats]);
+
   const lancerPaiement = async () => {
     if (!api || !preview || !accepte) {
       if (!accepte) {
@@ -128,7 +169,7 @@ const PaiementCahier = () => {
           demo_ui: "wave",
         });
         if (res.data?.deja_acquis) {
-          navigate(`/appels-offres/${preview.appel_offre.id}`);
+          redirectMesAchats(preview.appel_offre.id);
           return;
         }
         const url = res.data?.payment_url;
@@ -161,9 +202,9 @@ const PaiementCahier = () => {
       if (res.data?.deja_acquis) {
         toast({
           title: "Accès déjà acquis",
-          description: "Le cahier des charges est déjà disponible au téléchargement.",
+          description: "Consultez votre achat dans Mes achats.",
         });
-        navigate(`/appels-offres/${preview.appel_offre.id}`);
+        redirectMesAchats(preview.appel_offre.id);
         return;
       }
       const url = res.data?.payment_url;
@@ -195,42 +236,6 @@ const PaiementCahier = () => {
     }
   };
 
-  const verifierEtRetourner = async () => {
-    if (!api || !preview) return;
-    try {
-      setVerifying(true);
-      if (moyen === "wave") {
-        try {
-          const res = await api.post(
-            `/api/appels-offres/${preview.appel_offre.id}/cahier/paiement/verifier-wave`
-          );
-          if (res.data?.deja_acquis || res.data?.statut === "completed") {
-            toast({
-              title: "Paiement confirmé",
-              description: "Vous pouvez télécharger le cahier des charges.",
-            });
-            navigate(`/appels-offres/${preview.appel_offre.id}`);
-            return;
-          }
-        } catch {
-          /* vérif synchrone peut être désactivée en prod */
-        }
-      }
-      toast({
-        title: "Vérification en cours",
-        description:
-          "Si vous venez de payer, le déblocage peut prendre quelques instants. Revenez à la fiche marché.",
-      });
-      navigate(`/appels-offres/${preview.appel_offre.id}`);
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const canGoInfos = step === "method" && providersDisponibles.length > 0;
-  const canGoPayment =
-    step === "infos" && phone.trim().length >= 8 && name.trim().length >= 2 && accepte;
-
   const handleBack = () => {
     if (preview?.appel_offre?.id) {
       navigate(`/appels-offres/${preview.appel_offre.id}`);
@@ -238,6 +243,10 @@ const PaiementCahier = () => {
       navigate(-1);
     }
   };
+
+  const canGoInfos = step === "method" && providersDisponibles.length > 0;
+  const canGoPayment =
+    step === "infos" && phone.trim().length >= 8 && name.trim().length >= 2 && accepte;
 
   const copierLienPaiement = async () => {
     if (!paymentUrl) return;
@@ -286,9 +295,9 @@ const PaiementCahier = () => {
               <Button
                 type="button"
                 className="w-full h-12 text-base font-semibold bg-teal-600 hover:bg-teal-700"
-                onClick={() => navigate(`/appels-offres/${preview.appel_offre.id}`)}
+                onClick={() => redirectMesAchats(preview.appel_offre.id)}
               >
-                Retour à la fiche marché
+                Voir dans Mes achats
               </Button>
             </>
           ) : providersDisponibles.length === 0 ? (
@@ -463,14 +472,11 @@ const PaiementCahier = () => {
                     </div>
                   </div>
 
-                  <Button
-                    type="button"
-                    className="w-full h-12 text-base font-semibold bg-teal-600 hover:bg-teal-700"
-                    disabled={verifying}
-                    onClick={() => void verifierEtRetourner()}
-                  >
-                    {verifying ? "Vérification…" : "J'ai effectué le paiement"}
-                  </Button>
+                  <p className="text-center text-sm text-muted-foreground">
+                    {awaitingConfirmation
+                      ? "Après votre paiement sur Wave ou Orange Money, vous serez redirigé automatiquement vers Mes achats."
+                      : "Finalisez le règlement via le QR code ou le lien ci-dessus."}
+                  </p>
                 </>
               )}
             </>

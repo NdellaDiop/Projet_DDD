@@ -100,6 +100,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:FOURNISSEUR');
     Route::post('paiements/cahier/simulation/confirmer', [CahierPaiementSimulationController::class, 'confirmer'])
         ->middleware('role:FOURNISSEUR');
+    Route::get('appels-offres/{appel_offre}/cahier/paiement/statut', [CahierPaiementController::class, 'statut'])
+        ->middleware('role:FOURNISSEUR');
     Route::post('appels-offres/{appel_offre}/cahier/paiement/verifier-wave', [CahierPaiementController::class, 'verifierSessionWave'])
         ->middleware('role:FOURNISSEUR');
     Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);
@@ -156,6 +158,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('fournisseur/profile', [FournisseurCandidatureController::class, 'showProfile']);
         Route::put('fournisseur/profile', [FournisseurCandidatureController::class, 'updateProfile']);
         Route::get('fournisseur/candidatures', [FournisseurCandidatureController::class, 'getOwnCandidatures']);
+        Route::get('fournisseur/mes-achats', [\App\Http\Controllers\FournisseurMesAchatsController::class, 'index']);
         Route::get('fournisseur/documents-legaux', [DocumentController::class, 'indexLegal']);
         Route::post('fournisseur/documents-legaux', [DocumentController::class, 'storeLegal']);
         Route::delete('fournisseur/documents-legaux/{document}', [DocumentController::class, 'destroyLegal']);

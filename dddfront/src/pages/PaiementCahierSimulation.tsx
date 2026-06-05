@@ -101,12 +101,12 @@ const PaiementCahierSimulation = () => {
       toast({
         title: "Règlement simulé enregistré",
         description:
-          "Aucun montant n’a été prélevé. Vous pouvez télécharger le cahier des charges et le compléter pour répondre aux exigences avant le dépôt des plis.",
+          "Aucun montant n’a été prélevé. Retrouvez le cahier dans Mes achats.",
       });
       if (preview?.appel_offre?.id) {
-        navigate(`/appels-offres/${preview.appel_offre.id}`);
+        navigate(`/fournisseur/dashboard?tab=mes-achats&paiement=success&ao=${preview.appel_offre.id}`);
       } else {
-        navigate("/appels-offres");
+        navigate("/fournisseur/dashboard?tab=mes-achats");
       }
     } catch (e: unknown) {
       const msg =

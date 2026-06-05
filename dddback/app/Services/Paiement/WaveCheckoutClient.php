@@ -28,8 +28,8 @@ class WaveCheckoutClient
         $payload = [
             'amount' => $amount,
             'currency' => 'XOF',
-            'success_url' => $frontend.'/appels-offres/'.$appelOffre->id.'?paiement=wave&statut=success',
-            'error_url' => $frontend.'/appels-offres/'.$appelOffre->id.'?paiement=wave&statut=erreur',
+            'success_url' => $frontend.'/fournisseur/dashboard?tab=mes-achats&paiement=success&ao='.$appelOffre->id,
+            'error_url' => $frontend.'/fournisseur/dashboard?tab=mes-achats&paiement=erreur&ao='.$appelOffre->id,
             'client_reference' => (string) $achat->id,
         ];
 

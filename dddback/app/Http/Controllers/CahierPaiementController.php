@@ -202,6 +202,72 @@ class CahierPaiementController extends Controller
     }
 
     /**
+     * Statut du paiement cahier pour le marché (polling après redirection Wave / OM).
+     */
+    public function statut(Request $request, AppelOffre $appelOffre): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user || ! $user->isFournisseur()) {
+            return response()->json(['message' => 'Réservé aux fournisseurs.'], 403);
+        }
+
+        $achat = CahierAccesAchat::query()
+            ->where('user_id', $user->id)
+            ->where('appel_offre_id', $appelOffre->id)
+            ->latest('id')
+            ->first();
+
+        if (! $achat) {
+            return response()->json([
+                'statut' => null,
+                'deja_acquis' => false,
+                'message' => 'Aucun paiement en cours pour ce marché.',
+            ]);
+        }
+
+        if ($achat->isCompleted()) {
+            return response()->json([
+                'statut' => $achat->statut,
+                'deja_acquis' => true,
+                'achat_id' => $achat->id,
+                'paye_le' => $achat->paye_le?->toIso8601String(),
+            ]);
+        }
+
+        if (
+            $achat->provider === CahierAccesAchat::PROVIDER_WAVE
+            && $achat->reference_externe
+            && config('paiement.wave.allow_sync_verify')
+        ) {
+            try {
+                $session = app(WaveCheckoutClient::class)->getCheckoutSession($achat->reference_externe);
+                $complete = ($session['checkout_status'] ?? '') === 'complete'
+                    && (($session['payment_status'] ?? '') === 'succeeded');
+                if ($complete) {
+                    $this->cahierPaiement->marquerCommePaye($achat, $session['id'] ?? $achat->reference_externe);
+                    $achat->refresh();
+
+                    return response()->json([
+                        'statut' => $achat->statut,
+                        'deja_acquis' => true,
+                        'achat_id' => $achat->id,
+                        'paye_le' => $achat->paye_le?->toIso8601String(),
+                    ]);
+                }
+            } catch (RuntimeException) {
+                /* webhook ou nouvelle tentative */
+            }
+        }
+
+        return response()->json([
+            'statut' => $achat->statut,
+            'deja_acquis' => false,
+            'achat_id' => $achat->id,
+            'provider' => $achat->provider,
+        ]);
+    }
+
+    /**
      * Secours : après retour utilisateur, interroge Wave pour finaliser si le webhook n’a pas encore été reçu.
      * À utiliser surtout en développement (WAVE_ALLOW_SYNC_VERIFY=true).
      */
