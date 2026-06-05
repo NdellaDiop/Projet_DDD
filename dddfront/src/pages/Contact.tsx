@@ -103,7 +103,7 @@ export default function Contact() {
       
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative py-16 md:py-24 bg-gradient-to-br from-primary/5 via-primary/5 to-transparent">
+        <section className="relative py-10 md:py-14 bg-gradient-to-br from-primary/5 via-primary/5 to-transparent">
           <div className="container">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -111,7 +111,7 @@ export default function Contact() {
               transition={{ duration: 0.5 }}
               className="text-center max-w-3xl mx-auto"
             >
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                 Contactez-nous
               </h1>
               <p className="text-lg text-muted-foreground">
@@ -122,7 +122,7 @@ export default function Contact() {
         </section>
 
         {/* Contact Section */}
-        <section className="py-12 md:py-16">
+        <section className="py-8 md:py-10">
           <div className="container">
             <div className="grid gap-8 lg:grid-cols-3">
               {/* Informations de contact */}

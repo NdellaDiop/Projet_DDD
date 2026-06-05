@@ -40,14 +40,14 @@ const features = [
 
 const FeaturesSection = () => {
   return (
-    <section className="py-20 md:py-28">
+    <section className="pt-2 pb-6 md:pt-3 md:pb-8">
       <div className="container max-w-5xl">
         {/* Header */}
-        <div className="mx-auto max-w-2xl text-center mb-16">
-          <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full">
+        <div className="mx-auto max-w-2xl text-center mb-8">
+          <span className="inline-block px-4 py-1.5 mb-3 text-xs font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full">
             Fonctionnalités
           </span>
-          <h2 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl mb-4">
+          <h2 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl mb-3">
             Une plateforme conçue pour vous
           </h2>
           <p className="text-muted-foreground text-lg">
@@ -56,19 +56,19 @@ const FeaturesSection = () => {
         </div>
 
         {/* Features Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-5">
           {features.map((feature, index) => (
             <div
               key={index}
-              className="group relative rounded-2xl border border-border bg-card p-8 transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1"
+              className="group relative rounded-2xl border border-border bg-card p-6 transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1"
             >
               {/* Icon */}
-              <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                <feature.icon className="h-7 w-7" />
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                <feature.icon className="h-6 w-6" />
               </div>
 
               {/* Content */}
-              <h3 className="mb-3 font-display text-xl font-semibold text-foreground">
+              <h3 className="mb-2 font-display text-xl font-semibold text-foreground">
                 {feature.title}
               </h3>
               <p className="text-muted-foreground leading-relaxed">

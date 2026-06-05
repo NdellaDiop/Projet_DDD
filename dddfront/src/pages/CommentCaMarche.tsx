@@ -87,7 +87,7 @@ const CommentCaMarche = () => {
       <Header />
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+        <section className="py-10 md:py-14 bg-gradient-to-br from-primary/5 via-background to-accent/5">
           <div className="container">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -95,10 +95,10 @@ const CommentCaMarche = () => {
               transition={{ duration: 0.5 }}
               className="mx-auto max-w-3xl text-center"
             >
-              <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary rounded-full">
+              <span className="inline-block px-4 py-1.5 mb-3 text-xs font-semibold uppercase tracking-wider bg-primary/10 text-primary rounded-full">
                 Guide
               </span>
-              <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl mb-6">
+              <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl mb-4">
                 Comment ça marche ?
               </h1>
               <p className="text-muted-foreground text-lg md:text-xl">
@@ -109,9 +109,9 @@ const CommentCaMarche = () => {
         </section>
 
         {/* Steps Section — ancre pour le pied de page */}
-        <section id="guide-depot" className="py-20 md:py-28 scroll-mt-24">
+        <section id="guide-depot" className="py-10 md:py-14 scroll-mt-16">
           <div className="container">
-            <div className="space-y-16 md:space-y-24">
+            <div className="space-y-10 md:space-y-14">
               {steps.map((step, index) => (
                 <motion.div
                   key={index}
@@ -158,10 +158,10 @@ const CommentCaMarche = () => {
         </section>
 
         {/* Benefits Section */}
-        <section className="py-20 md:py-28 bg-secondary text-secondary-foreground">
+        <section className="py-10 md:py-14 bg-secondary text-secondary-foreground">
           <div className="container">
-            <div className="mx-auto max-w-2xl text-center mb-16">
-              <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl mb-4">
+            <div className="mx-auto max-w-2xl text-center mb-8">
+              <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl mb-3">
                 Pourquoi utiliser notre plateforme ?
               </h2>
               <p className="text-secondary-foreground/80 text-lg">
@@ -169,7 +169,7 @@ const CommentCaMarche = () => {
               </p>
             </div>
 
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4 md:gap-6">
               {benefits.map((benefit, index) => (
                 <motion.div
                   key={index}
@@ -195,15 +195,15 @@ const CommentCaMarche = () => {
         </section>
 
         {/* CTA Section */}
-        <section className="py-20 md:py-28">
+        <section className="py-10 md:py-14">
           <div className="container">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
-              className="mx-auto max-w-4xl text-center bg-gradient-to-br from-primary to-primary/80 rounded-3xl p-12 md:p-16"
+              className="mx-auto max-w-4xl text-center bg-gradient-to-br from-primary to-primary/80 rounded-3xl p-8 md:p-10"
             >
-              <h2 className="font-display text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
+              <h2 className="font-display text-3xl md:text-4xl font-bold text-primary-foreground mb-3">
                 Prêt à commencer ?
               </h2>
               <p className="text-primary-foreground/80 text-lg mb-8 max-w-2xl mx-auto">

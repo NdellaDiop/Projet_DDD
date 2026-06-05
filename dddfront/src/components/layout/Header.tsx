@@ -33,7 +33,7 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/80">
       {/* Pleine largeur « container » (sans max-w-5xl) pour limiter les bandes blanches vides sur grand écran */}
-      <div className="container flex min-h-[3.75rem] items-center justify-between gap-3 py-2 md:min-h-[4.25rem] md:gap-4 md:py-2.5">
+      <div className="container flex min-h-[3rem] items-center justify-between gap-2 py-1.5 md:min-h-[3.25rem] md:gap-3 md:py-2">
         {/* Marque : logo + libellé sur une ligne (à partir de sm) */}
         <Link
           to="/"
@@ -55,7 +55,7 @@ const Header = () => {
             <Link
               key={link.href}
               to={link.href}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors xl:px-4 ${
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors xl:px-4 ${
                 isActive(link.href)
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"

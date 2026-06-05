@@ -4,17 +4,17 @@ import { ArrowRight, UserPlus, FileText } from "lucide-react";
 
 const CTASection = () => {
   return (
-    <section className="py-20 md:py-28">
+    <section className="py-10 md:py-14">
       <div className="container max-w-5xl">
-        <div className="relative overflow-hidden rounded-3xl gradient-hero p-10 md:p-16">
+        <div className="relative overflow-hidden rounded-3xl gradient-hero p-8 md:p-10">
           {/* Background decorations */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-accent/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 left-0 w-60 h-60 bg-white/10 rounded-full blur-3xl" />
 
-          <div className="relative z-10 grid gap-10 lg:grid-cols-2 lg:items-center">
+          <div className="relative z-10 grid gap-6 lg:grid-cols-2 lg:items-center lg:gap-8">
             {/* Left Content */}
             <div>
-              <h2 className="font-display text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl mb-6">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl mb-4">
                 Prêt à saisir de nouvelles{" "}
                 <span className="text-accent">opportunités</span> ?
               </h2>
@@ -40,7 +40,7 @@ const CTASection = () => {
             </div>
 
             {/* Right Stats/Benefits */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
               {[
                 { value: "Gratuit", label: "Inscription et consultation" },
                 { value: "Sécurisé", label: "Données protégées" },
@@ -49,7 +49,7 @@ const CTASection = () => {
               ].map((item, index) => (
                 <div
                   key={index}
-                  className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/10"
+                  className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 md:p-5 border border-white/10"
                 >
                   <div className="font-display text-2xl font-bold text-white mb-1">
                     {item.value}

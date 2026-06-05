@@ -31,11 +31,11 @@ const steps = [
 
 const HowItWorksSection = () => {
   return (
-    <section className="py-20 md:py-28 bg-secondary text-secondary-foreground overflow-hidden">
+    <section className="py-10 md:py-14 bg-secondary text-secondary-foreground overflow-hidden">
       <div className="container max-w-5xl">
         {/* Header */}
-        <div className="mx-auto max-w-2xl text-center mb-16">
-          <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider bg-accent text-accent-foreground rounded-full">
+        <div className="mx-auto max-w-2xl text-center mb-8">
+          <span className="inline-block px-4 py-1.5 mb-3 text-xs font-semibold uppercase tracking-wider bg-accent text-accent-foreground rounded-full">
             Processus
           </span>
           <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl mb-4">
@@ -51,26 +51,26 @@ const HowItWorksSection = () => {
           {/* Connection Line (desktop) */}
           <div className="absolute top-24 left-0 right-0 h-0.5 bg-secondary-foreground/10 hidden lg:block" />
 
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4 md:gap-6">
             {steps.map((step, index) => (
               <div
                 key={index}
                 className="relative group"
               >
                 {/* Step Card */}
-                <div className="relative z-10 bg-secondary-foreground/5 backdrop-blur-sm rounded-2xl p-8 h-full border border-secondary-foreground/10 transition-all duration-300 hover:bg-secondary-foreground/10 hover:border-accent/50">
+                <div className="relative z-10 bg-secondary-foreground/5 backdrop-blur-sm rounded-2xl p-6 h-full border border-secondary-foreground/10 transition-all duration-300 hover:bg-secondary-foreground/10 hover:border-accent/50">
                   {/* Step Number */}
                   <div className="absolute -top-4 left-6 px-3 py-1 bg-accent text-accent-foreground font-display font-bold text-sm rounded-full">
                     {step.step}
                   </div>
 
                   {/* Icon */}
-                  <div className="mb-6 mt-2 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-                    <step.icon className="h-8 w-8" />
+                  <div className="mb-4 mt-2 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+                    <step.icon className="h-7 w-7" />
                   </div>
 
                   {/* Content */}
-                  <h3 className="font-display text-xl font-semibold mb-3">
+                  <h3 className="font-display text-xl font-semibold mb-2">
                     {step.title}
                   </h3>
                   <p className="text-secondary-foreground/70 leading-relaxed">

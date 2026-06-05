@@ -139,7 +139,7 @@ setAppelsOffres(tenders);
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1">
-          <section className="py-20 md:py-28 bg-muted/50">
+          <section className="py-10 md:py-14 bg-muted/50">
             <div className="container text-center">
               <p className="text-lg text-muted-foreground">Chargement des appels d'offres...</p>
             </div>
@@ -155,7 +155,7 @@ setAppelsOffres(tenders);
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1">
-          <section className="py-20 md:py-28 bg-muted/50">
+          <section className="py-10 md:py-14 bg-muted/50">
             <div className="container text-center">
               <p className="text-lg text-destructive">{error}</p>
             </div>
@@ -171,10 +171,10 @@ setAppelsOffres(tenders);
       <Header />
       <main className="flex-1">
         {/* Hero */}
-        <section className="gradient-hero py-16 md:py-20">
+        <section className="gradient-hero py-10 md:py-14">
           <div className="container">
             <div className="max-w-3xl">
-              <h1 className="font-display text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl mb-4">
+              <h1 className="font-display text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl mb-3">
                 Appels d'Offres
               </h1>
               <p className="text-white/80 text-lg max-w-2xl">
@@ -186,7 +186,7 @@ setAppelsOffres(tenders);
         </section>
 
         {/* Filters */}
-        <section className="py-8 border-b border-border bg-card sticky top-16 md:top-20 z-40">
+        <section className="py-6 border-b border-border bg-card sticky top-12 md:top-14 z-40">
           <div className="container">
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1">
@@ -215,7 +215,7 @@ setAppelsOffres(tenders);
         </section>
 
         {/* Results */}
-        <section className="py-10 md:py-16">
+        <section className="py-8 md:py-10">
           <div className="container">
             {/* Results count */}
             <div className="flex items-center justify-between mb-8">

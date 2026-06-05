@@ -82,7 +82,7 @@ const ActiveTendersSection = () => {
 
   if (loading) {
     return (
-      <section className="py-20 md:py-28 bg-muted/50">
+      <section className="py-10 md:py-14 bg-muted/50">
         <div className="container max-w-5xl text-center">
           <p className="text-lg text-muted-foreground">Chargement des appels d'offres...</p>
         </div>
@@ -92,7 +92,7 @@ const ActiveTendersSection = () => {
 
   if (appelsOffres.length === 0) {
     return (
-      <section className="py-20 md:py-28 bg-muted/50">
+      <section className="py-10 md:py-14 bg-muted/50">
         <div className="container max-w-5xl text-center">
           <p className="text-lg text-muted-foreground">Aucun appel d'offres actif pour le moment.</p>
         </div>
@@ -101,18 +101,18 @@ const ActiveTendersSection = () => {
   }
 
   return (
-    <section className="py-20 md:py-28 bg-muted/50">
+    <section className="pt-2 pb-10 md:pt-3 md:pb-14 bg-muted/50">
       <div className="container max-w-5xl">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
           <div>
-            <span className="inline-block px-4 py-1.5 mb-4 text-xs font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full">
+            <span className="inline-block px-4 py-1.5 mb-3 text-xs font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full">
               Opportunités
             </span>
             <h2 className="font-display text-3xl font-bold tracking-tight text-foreground md:text-4xl">
               Appels d'Offres en Cours
             </h2>
-            <p className="mt-3 text-muted-foreground text-lg max-w-xl">
+            <p className="mt-2 text-muted-foreground text-lg max-w-xl">
               Consultez les avis publiés et les modalités de dépôt des plis (présentiel) pour chaque marché.
             </p>
           </div>
@@ -125,7 +125,7 @@ const ActiveTendersSection = () => {
         </div>
 
         {/* Tenders Grid */}
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 md:gap-5">
           {appelsOffres.map((tender) => {
             const daysLeft = calculateDaysLeft(tender.date_limite_depot);
 
