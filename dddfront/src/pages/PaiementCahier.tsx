@@ -409,55 +409,55 @@ const PaiementCahier = () => {
 
               {step === "payment" && paymentUrl && (
                 <>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                     <Button
                       type="button"
                       variant="ghost"
-                      className="-ml-2"
+                      size="sm"
+                      className="h-9 shrink-0 px-2"
                       onClick={() => {
                         setPaymentUrl(null);
                         setStep("infos");
                       }}
                     >
-                      <ArrowLeft className="h-4 w-4 mr-2" /> Retour
+                      <ArrowLeft className="h-4 w-4 mr-1" /> Retour
                     </Button>
-                    <div className="text-sm text-muted-foreground inline-flex items-center gap-2">
+                    <div className="text-sm text-muted-foreground inline-flex items-center gap-2 shrink-0">
                       <QrCode className="h-4 w-4" /> {titreMoyen}
                     </div>
                   </div>
 
-                  <div className="rounded-lg border bg-white p-5 text-center">
-                    <h3 className="text-2xl font-semibold text-slate-800">Finaliser le paiement</h3>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Scannez le QR code avec votre téléphone ou ouvrez le lien {titreMoyen} pour régler{" "}
+                  <div className="overflow-hidden rounded-xl border bg-white p-4 sm:p-6 text-center">
+                    <h3 className="text-xl font-semibold text-slate-800 sm:text-2xl">Finaliser le paiement</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                      Scannez le QR code ou utilisez le lien {titreMoyen} pour régler{" "}
                       <strong>{Number(preview.montant_xof).toLocaleString("fr-FR")} FCFA</strong>.
                     </p>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Une confirmation SMS ou notification peut vous être envoyée par {titreMoyen}.
-                    </p>
-                    <div className="mt-6 flex justify-center">
-                      <div className="rounded-xl bg-white p-3 border">
-                        <QRCode value={paymentUrl} size={220} />
-                      </div>
+                    <div className="mx-auto mt-6 w-full max-w-[240px] rounded-xl border bg-slate-50 p-3">
+                      <QRCode
+                        value={paymentUrl}
+                        size={256}
+                        className="h-auto w-full max-w-full"
+                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                      />
                     </div>
-                    <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+                    <div className="mt-6 grid w-full gap-2">
                       <Button
                         type="button"
-                        variant="link"
-                        className="text-teal-700"
+                        variant="outline"
+                        className="h-11 w-full border-teal-200 text-teal-800 hover:bg-teal-50"
                         onClick={() => window.open(paymentUrl, "_blank", "noopener,noreferrer")}
                       >
-                        <ExternalLink className="h-4 w-4 mr-2 inline" />
-                        Ouvrir {titreMoyen} dans un nouvel onglet
+                        <ExternalLink className="h-4 w-4 mr-2 shrink-0" />
+                        Ouvrir {titreMoyen}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
-                        className="border-teal-200 text-teal-800"
+                        className="h-11 w-full border-slate-200 text-slate-700 hover:bg-slate-50"
                         onClick={() => void copierLienPaiement()}
                       >
-                        <Copy className="h-4 w-4 mr-2" />
+                        <Copy className="h-4 w-4 mr-2 shrink-0" />
                         Copier le lien de paiement
                       </Button>
                     </div>
