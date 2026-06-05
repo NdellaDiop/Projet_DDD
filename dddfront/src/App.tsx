@@ -14,6 +14,7 @@ import { Toaster } from "@/components/ui/toaster";
 import FournisseurDashboard from "./pages/FournisseurDashboard";
 import ResponsableDashboard from "./pages/ResponsableDashboard";
 import Contact from "./pages/Contact";
+import PaiementCahier from "./pages/PaiementCahier";
 import PaiementCahierSimulation from "./pages/PaiementCahierSimulation";
 
 // Composant de chargement réutilisable
@@ -66,6 +67,19 @@ function App() {
               <FournisseurDashboard />
             ) : (
               <Navigate to="/connexion" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/paiement/cahier"
+          element={
+            !isReady ? (
+              <LoadingScreen />
+            ) : isAuthenticated && isFournisseur ? (
+              <PaiementCahier />
+            ) : (
+              <Navigate to="/connexion" replace state={{ from: "/paiement/cahier" }} />
             )
           }
         />

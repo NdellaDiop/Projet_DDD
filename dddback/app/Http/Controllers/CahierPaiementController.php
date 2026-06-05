@@ -19,6 +19,59 @@ class CahierPaiementController extends Controller
     ) {}
 
     /**
+     * Récapitulatif pour la page de paiement unifiée (choix du moyen, montant, préremplissage).
+     */
+    public function preview(Request $request, AppelOffre $appelOffre): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user || ! $user->isFournisseur() || ! $user->fournisseur) {
+            return response()->json(['message' => 'Réservé aux comptes fournisseur.'], 403);
+        }
+
+        if (! in_array($appelOffre->statut, [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED], true)) {
+            return response()->json(['message' => 'Marché non disponible.'], 404);
+        }
+
+        if (! $appelOffre->cahier_paiement_requis || (int) ($appelOffre->cahier_prix_xof ?? 0) <= 0) {
+            return response()->json(['message' => 'Aucun paiement requis pour le cahier des charges de ce marché.'], 422);
+        }
+
+        $deja = CahierAccesAchat::query()
+            ->where('user_id', $user->id)
+            ->where('appel_offre_id', $appelOffre->id)
+            ->where('statut', CahierAccesAchat::STATUT_COMPLETED)
+            ->exists();
+
+        $achatEnCours = CahierAccesAchat::query()
+            ->where('user_id', $user->id)
+            ->where('appel_offre_id', $appelOffre->id)
+            ->where('statut', CahierAccesAchat::STATUT_PENDING)
+            ->first();
+
+        $user->loadMissing('fournisseur');
+        $telephone = $user->telephone ?? $user->fournisseur?->telephone;
+
+        return response()->json([
+            'appel_offre' => [
+                'id' => $appelOffre->id,
+                'titre' => $appelOffre->titre,
+                'reference' => $appelOffre->reference,
+            ],
+            'montant_xof' => (int) $appelOffre->cahier_prix_xof,
+            'deja_acquis' => $deja,
+            'achat_statut' => $achatEnCours?->statut,
+            'paiement_wave_active' => (bool) config('paiement.wave.enabled'),
+            'paiement_orange_money_active' => (bool) config('paiement.orange_money.enabled'),
+            'cahier_simulation_active' => (bool) config('paiement.simulation_enabled'),
+            'fournisseur' => [
+                'nom' => $user->name,
+                'email' => $user->email,
+                'telephone' => is_string($telephone) ? $telephone : null,
+            ],
+        ]);
+    }
+
+    /**
      * Crée la ligne d’achat et retourne une URL de paiement (Wave ou Orange Money).
      */
     public function initier(Request $request, AppelOffre $appelOffre): JsonResponse

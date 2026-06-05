@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import QRCode from "react-qr-code";
-import { Phone, MapPin, Clock, ArrowLeft, ArrowLeftRight, QrCode } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, QrCode } from "lucide-react";
+import { PaiementCahierLayout } from "@/components/paiement/PaiementCahierLayout";
+import { OrangeMoneyLogo, WaveLogo } from "@/components/paiement/PaymentMethodLogos";
 
 /** Page type « réservation » (réf. booking.demdikk.sn) — paiement cahier simulé, aucun débit réel. */
 
@@ -25,81 +26,6 @@ interface PreviewPayload {
 
 type DemoUi = "wave" | "orange_money";
 type Step = "method" | "infos" | "qr";
-
-function WaveLogo({ className }: { className?: string }) {
-  // Utilise une image réelle si disponible dans `public/payment-icons/wave.png`.
-  // Sinon fallback SVG.
-  const [imgOk, setImgOk] = useState(true);
-  const src = "/payment-icons/wave.png";
-  if (imgOk) {
-    return (
-      <img
-        src={src}
-        alt="Wave"
-        className={className}
-        onError={() => setImgOk(false)}
-        loading="lazy"
-        decoding="async"
-      />
-    );
-  }
-  return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <rect x="0" y="0" width="64" height="64" rx="16" fill="#3DD5C6" />
-      <path
-        d="M14 22c0-2.2 1.8-4 4-4h4c2.1 0 3.9 1.7 4 3.8l1.3 18.5c.1 1.4 2.1 1.6 2.5.2l4.7-16.8c.5-1.8 2.1-3 4-3h3.2c1.9 0 3.6 1.2 4 3l4.7 16.8c.4 1.4 2.4 1.2 2.5-.2L54 22.7c.1-2.1 1.9-3.7 4-3.7h.0"
-        fill="none"
-        stroke="#0B2E2A"
-        strokeWidth="4.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.92"
-      />
-      <circle cx="51.5" cy="44.5" r="3.2" fill="#0B2E2A" opacity="0.92" />
-    </svg>
-  );
-}
-
-function OrangeMoneyLogo({ className }: { className?: string }) {
-  // Utilise une image réelle si disponible dans `public/payment-icons/orange-money.png`.
-  // Sinon fallback SVG.
-  const [imgOk, setImgOk] = useState(true);
-  const src = "/payment-icons/orange-money.png";
-  if (imgOk) {
-    return (
-      <img
-        src={src}
-        alt="Orange Money"
-        className={className}
-        onError={() => setImgOk(false)}
-        loading="lazy"
-        decoding="async"
-      />
-    );
-  }
-  return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <rect x="0" y="0" width="64" height="64" rx="16" fill="#111827" />
-      <path
-        d="M22 42V22h7.5c6.8 0 11.5 4.1 11.5 10s-4.7 10-11.5 10H22Z"
-        fill="#F97316"
-      />
-      <path
-        d="M30.8 28.4h-3.2v7.2h3.2c2.7 0 4.6-1.5 4.6-3.6s-1.9-3.6-4.6-3.6Z"
-        fill="#111827"
-        opacity="0.85"
-      />
-      <path
-        d="M44 20h-6.5c-.9 0-1.4 1-.8 1.7l2.4 2.7c-7.7 3.2-13.6 9.2-16.4 16.8-.3.9.6 1.8 1.5 1.4 7.2-2.7 13-8.5 15.7-15.7l2.4 2.7c.6.7 1.7.3 1.7-.7V20Z"
-        fill="#F97316"
-        opacity="0.95"
-      />
-      <text x="10" y="57" fontSize="9" fill="#F97316" fontFamily="ui-sans-serif, system-ui" fontWeight="700">
-        Orange Money
-      </text>
-    </svg>
-  );
-}
 
 const PaiementCahierSimulation = () => {
   const [searchParams] = useSearchParams();
@@ -232,36 +158,7 @@ const PaiementCahierSimulation = () => {
     (moyen !== "wave" || (wavePhone.trim().length >= 8 && waveName.trim().length >= 2));
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      {/* Bandeau type site réservation */}
-      <div className="bg-teal-700 text-white text-sm">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-2">
-          <span className="inline-flex items-center gap-2">
-            <Phone className="h-4 w-4 shrink-0" aria-hidden />
-            Contactez-nous : +221 33 824 10 10
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <MapPin className="h-4 w-4 shrink-0" aria-hidden />
-            5, Avenue Birago Diop — Point E, Dakar
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <Clock className="h-4 w-4 shrink-0" aria-hidden />
-            24h/24 — 7j/7
-          </span>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-lg px-4 py-10">
-        <Button type="button" variant="ghost" className="mb-6 -ml-2" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Retour
-        </Button>
-
-        <Card className="shadow-md">
-          <CardHeader className="border-b bg-white">
-            <CardTitle className="text-xl text-slate-800">Paiement</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-6">
+    <PaiementCahierLayout onBack={() => navigate(-1)}>
             {loading && (
               <p className="text-sm text-muted-foreground text-center py-8">Chargement du récapitulatif…</p>
             )}
@@ -458,11 +355,7 @@ const PaiementCahierSimulation = () => {
                 )}
               </>
             )}
-          </CardContent>
-        </Card>
-
-      </div>
-    </div>
+    </PaiementCahierLayout>
   );
 };
 

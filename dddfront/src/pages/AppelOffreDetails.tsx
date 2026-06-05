@@ -119,7 +119,6 @@ const AppelOffreDetails = () => {
   const [aoDocFile, setAoDocFile] = useState<File | null>(null);
   const [uploadingAoDoc, setUploadingAoDoc] = useState(false);
   const [deletingAoDocId, setDeletingAoDocId] = useState<number | null>(null);
-  const [initPaiementEnCours, setInitPaiementEnCours] = useState(false);
   const [savingAttribution, setSavingAttribution] = useState(false);
   const [attributaireNom, setAttributaireNom] = useState("");
   const [attributaireNinea, setAttributaireNinea] = useState("");
@@ -286,59 +285,6 @@ const AppelOffreDetails = () => {
         description: "Impossible de télécharger ce document.",
         variant: "destructive",
       });
-    }
-  };
-
-  const initierPaiementCahier = async (
-    provider: "wave" | "orange_money" | "simulation",
-    opts?: { demo_ui?: "wave" | "orange_money" }
-  ) => {
-    if (!api || !appelOffre) return;
-    if (!isAuthenticated || !isFournisseur) {
-      navigate("/connexion", { state: { from: `/appels-offres/${appelOffre.id}` } });
-      return;
-    }
-    try {
-      setInitPaiementEnCours(true);
-      const res = await api.post(`/api/appels-offres/${appelOffre.id}/cahier/paiement/initier`, {
-        provider,
-        ...(opts?.demo_ui ? { demo_ui: opts.demo_ui } : {}),
-      });
-      if (res.data?.deja_acquis) {
-        await refreshDetails();
-        toast({
-          title: "Accès déjà acquis",
-          description:
-            "Le bouton Télécharger est maintenant disponible pour le cahier des charges.",
-        });
-        return;
-      }
-      const paymentUrl = res.data?.payment_url;
-      if (typeof paymentUrl === "string" && /^https?:\/\//i.test(paymentUrl)) {
-        // Pour la simulation, l’URL pointe vers une page interne (flux QR).
-        window.location.assign(paymentUrl);
-        return;
-      }
-      toast({
-        title: "Paiement",
-        description:
-          typeof res.data?.message === "string"
-            ? res.data.message
-            : "Impossible d’obtenir l’URL de paiement. Vérifiez la configuration Wave / Orange Money sur le serveur.",
-      });
-      await refreshDetails();
-    } catch (err: unknown) {
-      const msg =
-        typeof err === "object" && err !== null && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast({
-        title: "Erreur",
-        description: typeof msg === "string" ? msg : "Impossible d’initier le paiement.",
-        variant: "destructive",
-      });
-    } finally {
-      setInitPaiementEnCours(false);
     }
   };
 
@@ -697,56 +643,19 @@ const AppelOffreDetails = () => {
                                                       ) : isFournisseur ? (
                                                         <>
                                                           {(appelOffre.paiement_wave_active || appelOffre.paiement_orange_money_active || appelOffre.cahier_simulation_active) ? (
-                                                            <>
-                                                              {appelOffre.paiement_wave_active && (
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="default"
-                                                                  disabled={initPaiementEnCours}
-                                                                  onClick={() =>
-                                                                    appelOffre.cahier_simulation_active
-                                                                      ? initierPaiementCahier("simulation", { demo_ui: "wave" })
-                                                                      : initierPaiementCahier("wave")
-                                                                  }
-                                                                >
-                                                                  <Wallet className="h-4 w-4 mr-2" />
-                                                                  Wave —{" "}
-                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
-                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
-                                                                    : "payer"}
-                                                                </Button>
-                                                              )}
-                                                              {appelOffre.paiement_orange_money_active && (
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="outline"
-                                                                  disabled={initPaiementEnCours}
-                                                                  onClick={() =>
-                                                                    appelOffre.cahier_simulation_active
-                                                                      ? initierPaiementCahier("simulation", { demo_ui: "orange_money" })
-                                                                      : initierPaiementCahier("orange_money")
-                                                                  }
-                                                                >
-                                                                  Orange Money —{" "}
-                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
-                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
-                                                                    : "payer"}
-                                                                </Button>
-                                                              )}
-                                                              {appelOffre.cahier_simulation_active && (
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="secondary"
-                                                                  disabled={initPaiementEnCours}
-                                                                  onClick={() => initierPaiementCahier("simulation")}
-                                                                >
-                                                                  Payer (simulation / démo) —{" "}
-                                                                  {(appelOffre.cahier_prix_xof ?? 0) > 0
-                                                                    ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
-                                                                    : "sans débit"}
-                                                                </Button>
-                                                              )}
-                                                            </>
+                                                            <Button
+                                                              size="sm"
+                                                              variant="default"
+                                                              onClick={() =>
+                                                                navigate(`/paiement/cahier?ao=${appelOffre.id}`)
+                                                              }
+                                                            >
+                                                              <Wallet className="h-4 w-4 mr-2" />
+                                                              Payer le cahier —{" "}
+                                                              {(appelOffre.cahier_prix_xof ?? 0) > 0
+                                                                ? `${Number(appelOffre.cahier_prix_xof).toLocaleString("fr-FR")} FCFA`
+                                                                : ""}
+                                                            </Button>
                                                           ) : (
                                                             <span className="text-xs text-muted-foreground">
                                                               Paiement en ligne non configuré sur le serveur (Wave / Orange / simulation).

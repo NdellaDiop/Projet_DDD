@@ -92,6 +92,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // CANDIDATURES
     Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);
+    Route::get('appels-offres/{appel_offre}/cahier/paiement/preview', [CahierPaiementController::class, 'preview'])
+        ->middleware('role:FOURNISSEUR');
     Route::post('appels-offres/{appel_offre}/cahier/paiement/initier', [CahierPaiementController::class, 'initier'])
         ->middleware('role:FOURNISSEUR');
     Route::get('paiements/cahier/simulation/preview', [CahierPaiementSimulationController::class, 'preview'])
