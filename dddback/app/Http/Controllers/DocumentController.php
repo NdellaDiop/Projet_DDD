@@ -6,7 +6,9 @@ use App\Models\Document;
 use App\Models\Candidature;
 use App\Models\Fournisseur;
 use App\Models\LogActivite;
+use App\Support\ApiUserResolver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\DocumentResource;
 use Illuminate\Validation\Rule;
@@ -177,12 +179,23 @@ class DocumentController extends Controller
         return new DocumentResource($document);
     }
 
-    public function download(Document $document)
+    public function download(Request $request, Document $document)
     {
+        $user = ApiUserResolver::forDocumentAccess($request);
+        if (! $user) {
+            return response()->json([
+                'message' => 'Authentification requise pour télécharger ce document.',
+            ], 401);
+        }
+
         // Charger les relations nécessaires pour la vérification des permissions
         $document->load(['candidature.appelOffre.responsableMarche', 'appelOffre.responsableMarche']);
-        
-        $this->authorize('view', $document);
+
+        if (! Gate::forUser($user)->allows('view', $document)) {
+            return response()->json([
+                'message' => 'Vous n\'êtes pas autorisé à télécharger ce document.',
+            ], 403);
+        }
         
         // Priorité au stockage non-public (local). Fallback vers public pour les anciens fichiers.
         if (Storage::disk(self::DOCUMENTS_LOCAL_DISK)->exists($document->chemin_fichier)) {

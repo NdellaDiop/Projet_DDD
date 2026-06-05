@@ -103,7 +103,7 @@ function formatDateLimiteFicheAvis(iso: string): string {
 
 const AppelOffreDetails = () => {
   const { id } = useParams();
-  const { api, user, isAuthenticated, isFournisseur, isAdmin, isResponsableMarche } = useAuth();
+  const { api, user, token, isReady, isAuthenticated, isFournisseur, isAdmin, isResponsableMarche } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const waveReturnHandled = useRef(false);
@@ -161,10 +161,10 @@ const AppelOffreDetails = () => {
       }
     };
 
-    if (id) {
+    if (id && isReady) {
         fetchDetails();
     }
-  }, [id, api]);
+  }, [id, api, isReady, isAuthenticated, user?.id, token]);
 
   useEffect(() => {
     waveReturnHandled.current = false;
@@ -305,12 +305,12 @@ const AppelOffreDetails = () => {
         ...(opts?.demo_ui ? { demo_ui: opts.demo_ui } : {}),
       });
       if (res.data?.deja_acquis) {
+        await refreshDetails();
         toast({
           title: "Accès déjà acquis",
           description:
-            "Téléchargez le cahier, complétez les pièces ou formulaires prévus par le marché, puis préparez votre dossier pour le dépôt physique.",
+            "Le bouton Télécharger est maintenant disponible pour le cahier des charges.",
         });
-        await refreshDetails();
         return;
       }
       const paymentUrl = res.data?.payment_url;

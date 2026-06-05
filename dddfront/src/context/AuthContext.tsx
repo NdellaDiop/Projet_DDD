@@ -193,8 +193,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false);
         }
       } else {
-        authDebug('⚠️ Pas de token dans localStorage');
+        authDebug('⚠️ Pas de token dans localStorage — purge session Sanctum résiduelle');
         setIsAuthenticated(false);
+        setUser(null);
+        delete api.defaults.headers.common['Authorization'];
+        try {
+          await api.get('/sanctum/csrf-cookie');
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          await api.post('/api/logout');
+        } catch {
+          /* 401 si déjà déconnecté côté serveur */
+        }
         setIsReady(true);
         setLoading(false);
       }

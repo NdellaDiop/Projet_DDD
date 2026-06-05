@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\ApiUserResolver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Gate;
@@ -51,8 +52,16 @@ class AppelOffreResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'candidatures_count' => $this->whenCounted('candidatures'),
+            'pieces_ao_manquantes' => $this->when(
+                auth()->check() && in_array(auth()->user()?->role?->name, ['ADMIN', 'RESPONSABLE_MARCHE'], true),
+                fn () => $this->piecesAoManquantes()
+            ),
+            'pieces_ao_completes' => $this->when(
+                auth()->check() && in_array(auth()->user()?->role?->name, ['ADMIN', 'RESPONSABLE_MARCHE'], true),
+                fn () => $this->piecesAoCompletes()
+            ),
             'documents' => $this->whenLoaded('documents', function () use ($request) {
-                $user = $request->user();
+                $user = ApiUserResolver::forDocumentAccess($request);
 
                 return $this->documents->map(function ($doc) use ($user) {
                     $canDownload = $user
