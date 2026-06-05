@@ -23,6 +23,43 @@ class AppelOffre extends Model
     public const TYPE_SERVICES_COURANTS = 'services_courants';
     public const TYPE_PRESTATIONS_INTELLECTUELLES = 'prestations_intellectuelles';
 
+    /** Pièces obligatoires avant publication d'un AO. */
+    public const REQUIRED_AO_DOCUMENTS = ['AVIS_APPEL_OFFRES', 'CAHIER_DES_CHARGES'];
+
+    /**
+     * @return array<string, string>
+     */
+    public static function requiredAoDocumentLabels(): array
+    {
+        return [
+            'AVIS_APPEL_OFFRES' => "Avis d'appel d'offres",
+            'CAHIER_DES_CHARGES' => 'Cahier des charges',
+        ];
+    }
+
+    /**
+     * Catégories de pièces AO encore absentes (documents relation chargée ou requête légère).
+     *
+     * @return list<string>
+     */
+    public function piecesAoManquantes(): array
+    {
+        $present = $this->relationLoaded('documents')
+            ? $this->documents->pluck('categorie')->unique()->all()
+            : $this->documents()
+                ->whereIn('categorie', self::REQUIRED_AO_DOCUMENTS)
+                ->pluck('categorie')
+                ->unique()
+                ->all();
+
+        return array_values(array_diff(self::REQUIRED_AO_DOCUMENTS, $present));
+    }
+
+    public function piecesAoCompletes(): bool
+    {
+        return $this->piecesAoManquantes() === [];
+    }
+
     /**
      * @return array<string, string>
      */

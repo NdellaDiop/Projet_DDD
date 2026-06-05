@@ -6,9 +6,15 @@ use App\Models\AppelOffre;
 use App\Models\CahierAccesAchat;
 use App\Models\Candidature;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 
 class AppelOffreService
 {
+    public function __construct(
+        private readonly AppelOffreDocumentService $documentService
+    ) {
+    }
     /**
      * Récupère tous les appels d'offres.
      *
@@ -30,6 +36,21 @@ class AppelOffreService
     public function createAppelOffre(array $data): AppelOffre
     {
         return AppelOffre::create($data);
+    }
+
+    /**
+     * Création atomique : AO + avis + cahier en une transaction (rollback si échec upload).
+     */
+    public function createAppelOffreWithDocuments(array $data, UploadedFile $avis, UploadedFile $cahier, int $userId): AppelOffre
+    {
+        return DB::transaction(function () use ($data, $avis, $cahier, $userId) {
+            $appelOffre = AppelOffre::create($data);
+
+            $this->documentService->attachToAppelOffre($appelOffre, $avis, 'AVIS_APPEL_OFFRES', $userId);
+            $this->documentService->attachToAppelOffre($appelOffre, $cahier, 'CAHIER_DES_CHARGES', $userId);
+
+            return $appelOffre->load(['responsableMarche.user', 'documents'])->loadCount('candidatures');
+        });
     }
 
     /**

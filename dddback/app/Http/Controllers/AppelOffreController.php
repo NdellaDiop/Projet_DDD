@@ -7,6 +7,7 @@ use App\Models\LogActivite;
 use App\Services\AppelOffreService;
 use App\Services\NotificationService;
 use App\Http\Requests\StoreAppelOffreRequest;
+use App\Http\Requests\StoreAppelOffreWithDocumentsRequest;
 use App\Http\Requests\UpdateAppelOffreRequest;
 use App\Http\Requests\PublishAppelOffreRequest;
 use App\Http\Requests\CloseAppelOffreRequest;
@@ -87,6 +88,26 @@ class AppelOffreController extends Controller
     {
         $appelOffre = $this->appelOffreService->createAppelOffre($request->validated());
         $this->log('create_appel_offre', "Création AO #{$appelOffre->id}");
+        return (new AppelOffreResource($appelOffre))->response()->setStatusCode(201);
+    }
+
+    /**
+     * Création atomique : métadonnées + avis + cahier (évite un brouillon sans pièces).
+     */
+    public function storeWithDocuments(StoreAppelOffreWithDocumentsRequest $request)
+    {
+        $this->authorize('create', AppelOffre::class);
+
+        $data = $request->safe()->except(['avis', 'cahier']);
+        $appelOffre = $this->appelOffreService->createAppelOffreWithDocuments(
+            $data,
+            $request->file('avis'),
+            $request->file('cahier'),
+            (int) auth()->id()
+        );
+
+        $this->log('create_appel_offre', "Création AO #{$appelOffre->id} avec pièces jointes");
+
         return (new AppelOffreResource($appelOffre))->response()->setStatusCode(201);
     }
     
@@ -177,8 +198,12 @@ class AppelOffreController extends Controller
         
         // Si c'est l'admin, il voit tout (y compris les AO non assignés)
         if ($user->role->name === 'ADMIN') {
-            $query->with('responsableMarche.user')
-                ->withCount('candidatures');
+            $query->with([
+                'responsableMarche.user',
+                'documents' => fn ($q) => $q
+                    ->select('id', 'appel_offre_id', 'categorie', 'nom_fichier')
+                    ->whereIn('categorie', AppelOffre::REQUIRED_AO_DOCUMENTS),
+            ])->withCount('candidatures');
         } else {
             $responsable = $user->responsableMarche;
             if (!$responsable) {
@@ -187,7 +212,12 @@ class AppelOffreController extends Controller
 
             // Les responsables voient UNIQUEMENT leurs propres appels d'offres
             $query->where('responsable_marche_id', $responsable->id)
-                ->with('responsableMarche.user')
+                ->with([
+                    'responsableMarche.user',
+                    'documents' => fn ($q) => $q
+                        ->select('id', 'appel_offre_id', 'categorie', 'nom_fichier')
+                        ->whereIn('categorie', AppelOffre::REQUIRED_AO_DOCUMENTS),
+                ])
                 ->withCount('candidatures');
         }
         

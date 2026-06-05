@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:RESPONSABLE_MARCHE,ADMIN')->group(function () {
         Route::get('responsable/dashboard-advanced-stats', [AdminDashboardController::class, 'getResponsableAdvancedStats']);
         Route::post('appels-offres', [AppelOffreController::class, 'store']);
+        Route::post('appels-offres/with-documents', [AppelOffreController::class, 'storeWithDocuments']);
         Route::put('appels-offres/{appel_offre}', [AppelOffreController::class, 'update']);
         Route::post('appels-offres/{appel_offre}/publish', [AppelOffreController::class, 'publish']);
         Route::post('appels-offres/{appel_offre}/close', [AppelOffreController::class, 'close']);

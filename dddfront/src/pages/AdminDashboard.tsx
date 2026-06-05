@@ -79,6 +79,10 @@ import {
 } from "@/lib/legalDocuments";
 import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
 import { TYPE_MARCHE_OPTIONS, type TypeMarche } from "@/lib/appelOffreCategorisation";
+import {
+  AO_PIECE_LABELS,
+  buildAppelOffreCreateFormData,
+} from "@/lib/appelOffreCreateFormData";
 import AuditHistory from "@/components/AuditHistory";
 import AdvancedSearch, { FilterConfig } from "@/components/AdvancedSearch";
 import AdvancedStats from "@/components/AdvancedStats";
@@ -208,6 +212,8 @@ interface AppelOffreAdmin {
   date_cloture?: string;
   cahier_paiement_requis?: boolean;
   cahier_prix_xof?: number | null;
+  pieces_ao_manquantes?: string[];
+  pieces_ao_completes?: boolean;
 }
 
 interface CandidatureAdmin {
@@ -987,44 +993,21 @@ const AdminDashboard: React.FC = () => {
         });
         return;
       }
-      const prix = newTender.cahier_paiement_requis
-        ? Math.max(1, parseInt(String(newTender.cahier_prix_xof).replace(/\D/g, ""), 10) || 0)
-        : null;
-      const createRes = await api.post("/api/appels-offres", {
-        reference: newTender.reference,
-        source_financement: newTender.source_financement,
-        mode_passation: newTender.mode_passation.trim(),
-        type_marche: newTender.type_marche,
-        titre: newTender.titre,
-        description: newTender.description,
-        modalites_soumission_physique: newTender.modalites_soumission_physique.trim() || null,
-        // HTML datetime-local n'inclut pas de timezone ; on envoie un ISO pour éviter les décalages côté serveur.
-        date_limite_depot: parsedDate.toISOString(),
-        statut: "draft",
-        cahier_paiement_requis: newTender.cahier_paiement_requis,
-        cahier_prix_xof: newTender.cahier_paiement_requis ? prix : null,
+      const formData = buildAppelOffreCreateFormData(
+        newTender,
+        avisAoFile,
+        cahierChargesFile,
+        parsedDate
+      );
+
+      await api.post("/api/appels-offres/with-documents", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const created = createRes.data?.data || createRes.data;
-      const createdId: number | undefined = created?.id;
-      if (!createdId) {
-        throw new Error("Création OK mais l'identifiant de l'appel d'offres est introuvable.");
-      }
-
-      const uploadDoc = async (file: File, categorie: string) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("categorie", categorie);
-        formData.append("appel_offre_id", String(createdId));
-        await api.post("/api/documents", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      };
-
-      await uploadDoc(avisAoFile, "AVIS_APPEL_OFFRES");
-      await uploadDoc(cahierChargesFile, "CAHIER_DES_CHARGES");
-
-      toast({ title: "Succès", description: "Appel d'offres créé en brouillon." });
+      toast({
+        title: "Succès",
+        description: "Appel d'offres créé en brouillon avec l'avis et le cahier des charges.",
+      });
       setIsCreateAOOpen(false);
       setNewTender({
         reference: "",
@@ -1069,7 +1052,12 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Publié", description: "L'appel d'offres est maintenant visible." });
       loadMesAppelsOffres();
     } catch (error) {
-      toast({ title: "Erreur", description: getErrorMessage(error, "Impossible de publier."), variant: "destructive" });
+      const msg = getErrorMessage(error, "Impossible de publier.");
+      toast({
+        title: "Publication impossible",
+        description: msg,
+        variant: "destructive",
+      });
     }
   };
 
@@ -2174,7 +2162,20 @@ const AdminDashboard: React.FC = () => {
                           <TableCell className="font-mono text-xs font-medium text-slate-600">{ao.reference}</TableCell>
                           <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
                           <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
-                          <TableCell>{getStatutBadgeAO(ao.statut)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1 items-start">
+                              {getStatutBadgeAO(ao.statut)}
+                              {ao.statut === "draft" &&
+                                (ao.pieces_ao_manquantes?.length ?? 0) > 0 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]"
+                                  >
+                                    Pièces manquantes
+                                  </Badge>
+                                )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             {ao.responsable?.name ? (
                               <span className="text-sm text-slate-700">{ao.responsable.name}</span>
@@ -2201,8 +2202,29 @@ const AdminDashboard: React.FC = () => {
                                   <MapPin className="w-3 h-3 mr-1" /> Modalités
                                 </Button>
                               )}
-                              {ao.statut === 'draft' && (
-                                <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => handlePublish(ao.id)} title="Publier">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                onClick={() => navigate(`/appels-offres/${ao.id}`)}
+                                title="Fiche publique : documents, modalités, publication"
+                              >
+                                <FileText className="w-3 h-3 mr-1" /> Fiche
+                              </Button>
+                              {ao.statut === "draft" && (
+                                <Button
+                                  size="sm"
+                                  className="h-8 bg-blue-600 hover:bg-blue-700"
+                                  disabled={(ao.pieces_ao_manquantes?.length ?? 0) > 0}
+                                  onClick={() => handlePublish(ao.id)}
+                                  title={
+                                    (ao.pieces_ao_manquantes?.length ?? 0) > 0
+                                      ? `Ajoutez : ${(ao.pieces_ao_manquantes ?? [])
+                                          .map((c) => AO_PIECE_LABELS[c] ?? c)
+                                          .join(", ")}`
+                                      : "Publier"
+                                  }
+                                >
                                   <Megaphone className="w-3 h-3 mr-1" /> Publier
                                 </Button>
                               )}
@@ -2756,7 +2778,7 @@ const AdminDashboard: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Créer un Appel d'Offre</DialogTitle>
             <DialogDescription className="text-sm">
-              Créez le brouillon et joignez tout de suite l&apos;avis d&apos;appel d&apos;offres et le cahier des charges (requis avant publication).
+              L&apos;avis et le cahier sont enregistrés en même temps que le brouillon. Si l&apos;envoi échoue, rien n&apos;est créé.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateTender} className="space-y-4 py-4">
