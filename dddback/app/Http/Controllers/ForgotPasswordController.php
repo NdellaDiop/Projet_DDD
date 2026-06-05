@@ -38,8 +38,10 @@ class ForgotPasswordController extends Controller
             ]
         );
 
-        // Lien vers le frontend (adaptez l'URL selon votre config React)
-        $resetLink = env('FRONTEND_URL', 'http://localhost:8081') . "/reset-password?token={$token}&email={$request->email}";
+        // config() et non env() : en prod avec config:cache, env() retourne null → localhost par défaut.
+        $frontend = rtrim((string) config('app.frontend_url', config('app.url')), '/');
+        $resetLink = $frontend.'/reset-password?token='.rawurlencode($token)
+            .'&email='.rawurlencode($request->email);
 
         // Envoi de l'email (Version simple avec Mail::raw pour l'instant)
         // Idéalement, utilisez une classe Mailable dédiée
