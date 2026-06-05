@@ -696,9 +696,6 @@ export default function FournisseurDashboard() {
   const stats = {
     notifs_non_lues: portalNotifications.filter(isNotificationUnread).length,
     avis_ouverts_total: avisPublishedTotal,
-    candidatures_total: candidatures.length,
-    candidatures_en_cours: candidatures.filter((c) => c.statut === "submitted" || c.statut === "SOUMISE" || c.statut === "under_review" || c.statut === "EN_EVALUATION").length,
-    candidatures_acceptees: candidatures.filter((c) => c.statut === "accepted" || c.statut === "ACCEPTEE").length,
     documents_total: documents.length,
   };
 
@@ -971,7 +968,7 @@ export default function FournisseurDashboard() {
                   </Alert>
                 )}
         {/* Cartes statistiques */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -997,21 +994,6 @@ export default function FournisseurDashboard() {
           </motion.div>
 
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Suivi dans le portail</CardTitle>
-                        <div className="bg-slate-100 p-2 rounded-lg"><Clock className="w-4 h-4 text-slate-600" /></div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-slate-700">{stats.candidatures_total}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Sans dépôt en ligne, ce compteur reste en général à 0 (éventuel historique ou saisie par le service).
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                     <Card className="border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Mes documents</CardTitle>
