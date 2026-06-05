@@ -114,6 +114,44 @@ interface DashboardStats {
   totalResponsables: number;
 }
 
+const EMPTY_DASHBOARD_STATS: DashboardStats = {
+  totalFournisseurs: 0,
+  fournisseursActifs: 0,
+  fournisseursEnAttente: 0,
+  fournisseursRejetes: 0,
+  totalAppelsOffres: 0,
+  appelsOffresActifs: 0,
+  appelsOffresClotures: 0,
+  appelsOffresBrouillon: 0,
+  totalCandidatures: 0,
+  candidaturesEnCours: 0,
+  candidaturesRetenues: 0,
+  candidaturesRejetees: 0,
+  totalResponsables: 0,
+};
+
+function parseDashboardStats(payload: unknown): DashboardStats | null {
+  if (!payload || typeof payload !== "object") return null;
+  const d = payload as Record<string, unknown>;
+  if (d.totalFournisseurs === undefined && d.totalAppelsOffres === undefined) return null;
+  const num = (key: keyof DashboardStats) => Number(d[key] ?? 0);
+  return {
+    totalFournisseurs: num("totalFournisseurs"),
+    fournisseursActifs: num("fournisseursActifs"),
+    fournisseursEnAttente: num("fournisseursEnAttente"),
+    fournisseursRejetes: num("fournisseursRejetes"),
+    totalAppelsOffres: num("totalAppelsOffres"),
+    appelsOffresActifs: num("appelsOffresActifs"),
+    appelsOffresClotures: num("appelsOffresClotures"),
+    appelsOffresBrouillon: num("appelsOffresBrouillon"),
+    totalCandidatures: num("totalCandidatures"),
+    candidaturesEnCours: num("candidaturesEnCours"),
+    candidaturesRetenues: num("candidaturesRetenues"),
+    candidaturesRejetees: num("candidaturesRejetees"),
+    totalResponsables: num("totalResponsables"),
+  };
+}
+
 interface AppelOffre {
   id: number;
   titre: string;
@@ -381,21 +419,7 @@ const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState("vue-ensemble");
 
   // Données du dashboard
-  const [stats, setStats] = useState<DashboardStats>({
-    totalFournisseurs: 0,
-    fournisseursActifs: 0,
-    fournisseursEnAttente: 0,
-    fournisseursRejetes: 0,
-    totalAppelsOffres: 0,
-    appelsOffresActifs: 0,
-    appelsOffresClotures: 0,
-    appelsOffresBrouillon: 0,
-    totalCandidatures: 0,
-    candidaturesEnCours: 0,
-    candidaturesRetenues: 0,
-    candidaturesRejetees: 0,
-    totalResponsables: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS);
 
   const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
@@ -477,9 +501,7 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const fetchGlobalData = useCallback(async () => {
-    const hasToken = Boolean(token || localStorage.getItem('access_token'));
-    if (!api || !isReady || !isAuthenticated || !hasToken) return;
-    if (!isAdminFromContext && getRoleName(authUser) !== 'ADMIN' && getRoleId(authUser) !== 1) return;
+    if (!api || !isReady || !isAuthenticated) return;
 
     try {
       const results = await Promise.allSettled([
@@ -489,9 +511,11 @@ const AdminDashboard: React.FC = () => {
       ]);
 
       if (results[0].status === 'fulfilled') {
-        const data = results[0].value.data as DashboardStats;
-        if (data && typeof data.totalFournisseurs === 'number') {
-          setStats(data);
+        const parsed = parseDashboardStats(results[0].value.data);
+        if (parsed) {
+          setStats(parsed);
+        } else {
+          console.error('Réponse stats admin invalide:', results[0].value.data);
         }
       } else {
         console.error('Erreur stats admin:', results[0].reason);
@@ -509,7 +533,7 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error("Erreur chargement global:", error);
     }
-  }, [api, isReady, isAuthenticated, token, isAdminFromContext, authUser]);
+  }, [api, isReady, isAuthenticated]);
 
   const fetchAppelsOffres = useCallback(async () => {
     const hasToken = Boolean(token || localStorage.getItem('access_token'));
@@ -612,9 +636,7 @@ const AdminDashboard: React.FC = () => {
   }, [fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]);
 
   const loadOverviewData = useCallback(async () => {
-    const hasToken = Boolean(token || localStorage.getItem('access_token'));
-    if (!api || !isReady || !isAuthenticated || !hasToken) return;
-    if (!isAdminFromContext && getRoleName(authUser) !== 'ADMIN' && getRoleId(authUser) !== 1) return;
+    if (!api || !isReady || !isAuthenticated) return;
 
     try {
       setLoading(true);
@@ -622,12 +644,24 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [api, isReady, isAuthenticated, token, isAdminFromContext, authUser, fetchGlobalData]);
+  }, [api, isReady, isAuthenticated, fetchGlobalData]);
 
-  // Initial Load + rechargement après connexion
+  // Chargement initial + après connexion (authUser?.id évite les re-renders inutiles)
   useEffect(() => {
+    if (!isReady || !isAuthenticated) return;
     void loadOverviewData();
-  }, [loadOverviewData]);
+  }, [isReady, isAuthenticated, authUser?.id, loadOverviewData]);
+
+  // Secours : si les cartes restent à 0, retenter une fois après un court délai
+  useEffect(() => {
+    if (!isReady || !isAuthenticated) return;
+    const timer = window.setTimeout(() => {
+      if (stats.totalFournisseurs === 0 && stats.totalAppelsOffres === 0 && stats.totalResponsables === 0) {
+        void fetchGlobalData();
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [isReady, isAuthenticated, authUser?.id, fetchGlobalData, stats.totalFournisseurs, stats.totalAppelsOffres, stats.totalResponsables]);
 
   // Effets de pagination séparés
   const [isMounted, setIsMounted] = useState(false);
