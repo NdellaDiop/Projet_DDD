@@ -319,8 +319,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await api.get('/sanctum/csrf-cookie');
       await new Promise(resolve => setTimeout(resolve, 200));
       await api.post('/api/logout');
-      
+
       localStorage.removeItem('access_token');
+      delete api.defaults.headers.common['Authorization'];
       setToken(null);
       setUser(null);
       setIsAuthenticated(false); // ✅ Explicite
@@ -328,6 +329,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: unknown) {
       console.error('Erreur de déconnexion:', getApiErrorMessage(error));
       localStorage.removeItem('access_token');
+      delete api.defaults.headers.common['Authorization'];
       setToken(null);
       setUser(null);
       setIsAuthenticated(false); // ✅ Explicite

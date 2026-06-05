@@ -19,8 +19,12 @@ class DocumentPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, Document $document): bool
+    public function view(?User $user, Document $document): bool
     {
+        if (! $user) {
+            return false;
+        }
+
         if ($user->role->name === 'ADMIN') {
             return true;
         }

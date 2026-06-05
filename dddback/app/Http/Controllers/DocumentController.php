@@ -13,6 +13,9 @@ use Illuminate\Validation\Rule;
 
 class DocumentController extends Controller
 {
+    private const DOCUMENTS_LOCAL_DISK = 'local';
+    private const DOCUMENTS_PUBLIC_DISK = 'public';
+
     public function store(Request $request)
     {
         $this->authorize('create', Document::class);
@@ -36,7 +39,8 @@ class DocumentController extends Controller
         ]);
 
         $file = $request->file('file');
-        $path = $file->store('documents', 'public');
+        // Stockage non-public : accès uniquement via l'API (download protégé).
+        $path = $file->store('documents', self::DOCUMENTS_LOCAL_DISK);
 
         $doc = Document::create([
             'user_id' => auth()->id(),
@@ -99,7 +103,8 @@ class DocumentController extends Controller
         ]);
 
         $file = $request->file('file');
-        $path = $file->store('documents', 'public');
+        // Stockage non-public : accès uniquement via l'API (download protégé).
+        $path = $file->store('documents', self::DOCUMENTS_LOCAL_DISK);
 
         $doc = Document::create([
             'user_id' => $user->id,
@@ -120,7 +125,9 @@ class DocumentController extends Controller
     {
         $this->authorize('delete', $document);
 
-        Storage::disk('public')->delete($document->chemin_fichier);
+        Storage::disk(self::DOCUMENTS_LOCAL_DISK)->delete($document->chemin_fichier);
+        // Compatibilité : si un ancien fichier était sur le disque public
+        Storage::disk(self::DOCUMENTS_PUBLIC_DISK)->delete($document->chemin_fichier);
         $document->delete();
 
         $this->log('delete_legal_document', "Suppression doc legal #{$document->id}");
@@ -177,21 +184,31 @@ class DocumentController extends Controller
         
         $this->authorize('view', $document);
         
-        if (!Storage::disk('public')->exists($document->chemin_fichier)) {
-            return response()->json(['message' => 'Document non trouvé.'], 404);
+        // Priorité au stockage non-public (local). Fallback vers public pour les anciens fichiers.
+        if (Storage::disk(self::DOCUMENTS_LOCAL_DISK)->exists($document->chemin_fichier)) {
+            return Storage::disk(self::DOCUMENTS_LOCAL_DISK)->download(
+                $document->chemin_fichier,
+                $document->nom_fichier
+            );
         }
-        
-        return Storage::disk('public')->download(
-            $document->chemin_fichier,
-            $document->nom_fichier
-        );
+
+        if (Storage::disk(self::DOCUMENTS_PUBLIC_DISK)->exists($document->chemin_fichier)) {
+            return Storage::disk(self::DOCUMENTS_PUBLIC_DISK)->download(
+                $document->chemin_fichier,
+                $document->nom_fichier
+            );
+        }
+
+        return response()->json(['message' => 'Document non trouvé.'], 404);
     }
 
     public function destroy(Document $document)
     {
         $this->authorize('delete', $document);
 
-        Storage::disk('public')->delete($document->chemin_fichier);
+        Storage::disk(self::DOCUMENTS_LOCAL_DISK)->delete($document->chemin_fichier);
+        // Compatibilité : si un ancien fichier était sur le disque public
+        Storage::disk(self::DOCUMENTS_PUBLIC_DISK)->delete($document->chemin_fichier);
         $document->delete();
 
         $this->log('delete_document', "Suppression document #{$document->id}");

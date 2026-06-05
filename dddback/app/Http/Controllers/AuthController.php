@@ -84,10 +84,24 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        if ($user) {
+            // Révoquer tous les tokens Sanctum (pas seulement le token courant).
+            $user->tokens()->delete();
+        }
+
+        // La connexion SPA utilise aussi la session web (Sanctum stateful) :
+        // sans invalidation, le navigateur reste « connecté » via cookie après logout.
+        Auth::guard('web')->logout();
+
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         return response()->json([
-            'message' => 'Déconnecté avec succès.'
+            'message' => 'Déconnecté avec succès.',
         ]);
     }
 

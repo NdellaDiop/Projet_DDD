@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 class AppelOffreResource extends JsonResource
 {
@@ -54,17 +55,9 @@ class AppelOffreResource extends JsonResource
                 $user = $request->user();
 
                 return $this->documents->map(function ($doc) use ($user) {
-                    $canDownload = false;
-                    if ($user) {
-                        if ($user->role->name === 'ADMIN') {
-                            $canDownload = true;
-                        } elseif ($user->role->name === 'RESPONSABLE_MARCHE' && $user->responsableMarche
-                            && (int) $this->responsable_marche_id === (int) $user->responsableMarche->id) {
-                            $canDownload = true;
-                        } elseif ($user->role->name === 'FOURNISSEUR') {
-                            $canDownload = $doc->fournisseurPeutTelechargerPieceAoPubliee($user);
-                        }
-                    }
+                    $canDownload = $user
+                        ? Gate::forUser($user)->allows('view', $doc)
+                        : false;
 
                     $blocagePaiement = $doc->categorie === 'CAHIER_DES_CHARGES'
                         && (bool) ($this->cahier_paiement_requis ?? false)
@@ -75,7 +68,8 @@ class AppelOffreResource extends JsonResource
                         'id' => $doc->id,
                         'nom_fichier' => $doc->nom_fichier,
                         'categorie' => $doc->categorie,
-                        'download_url' => $canDownload ? url("/api/documents/{$doc->id}/download") : null,
+                        // Chemin relatif : le front appelle l'API avec auth (pas de lien /storage public).
+                        'download_url' => $canDownload ? "/api/documents/{$doc->id}/download" : null,
                         'telechargement_bloque' => !$canDownload,
                         'blocage_paiement_cahier' => $blocagePaiement,
                         'created_at' => $doc->created_at,

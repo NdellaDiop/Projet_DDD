@@ -1,0 +1,42 @@
+# Exemple de configuration Apache pour https://pmp.demdikk.sn
+# Copier vers /etc/apache2/sites-available/pmp.conf (HTTP)
+# Certbot créera pmp-le-ssl.conf pour HTTPS.
+#
+# IMPORTANT — fichiers uploadés :
+# - Ne PAS exposer /storage publiquement.
+# - Les téléchargements passent par GET /api/documents/{id}/download (auth + policy).
+
+<VirtualHost *:80>
+    ServerName pmp.demdikk.sn
+
+    DocumentRoot /var/www/ddd/dddfront/dist
+
+    # Bloquer tout accès direct à l'ancien lien symbolique public/storage
+    <Location "/storage">
+        Require all denied
+    </Location>
+
+    <Directory /var/www/ddd/dddfront/dist>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+        FallbackResource /index.html
+    </Directory>
+
+    # API Laravel + Sanctum (pas de Alias /storage)
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/(api|sanctum)
+    RewriteRule ^ /var/www/ddd/dddback/public/index.php [L]
+
+    <Directory /var/www/ddd/dddback/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    <FilesMatch \.php$>
+        SetHandler "proxy:unix:/run/php/php8.3-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    ErrorLog ${APACHE_LOG_DIR}/pmp-error.log
+    CustomLog ${APACHE_LOG_DIR}/pmp-access.log combined
+</VirtualHost>

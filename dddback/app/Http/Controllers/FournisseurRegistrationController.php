@@ -156,7 +156,8 @@ class FournisseurRegistrationController extends Controller
      */
     private function storeLegalFile(int $userId, string $categorie, \Illuminate\Http\UploadedFile $file): Document
     {
-        $path = $file->store('documents', 'public');
+        // Stockage non-public : accès uniquement via l'API (download protégé).
+        $path = $file->store('documents', 'local');
 
         return Document::create([
             'user_id' => $userId,
