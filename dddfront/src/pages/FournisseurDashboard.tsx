@@ -608,13 +608,11 @@ export default function FournisseurDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (profile?.statut && profile.statut !== "actif") {
-      // Réinitialise le champ pour permettre une nouvelle sélection après validation
+    if (profile?.statut === "rejete") {
       e.target.value = "";
       toast({
-        title: "Compte non validé",
-        description:
-          "Votre compte doit être validé par l'administrateur avant de déposer vos documents légaux.",
+        title: "Compte rejeté",
+        description: "Vous ne pouvez plus déposer de documents légaux. Contactez le service des marchés.",
         variant: "destructive",
       });
       return;
@@ -626,16 +624,25 @@ export default function FournisseurDashboard() {
 
     try {
       setUploadingDoc(true);
-      await api.post("/api/fournisseur/documents-legaux", formData, {
+      const res = await api.post("/api/fournisseur/documents-legaux", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      toast({
-        title: "Document uploadé",
-        description: `${legalDocumentLabel(categorie)} ajouté avec succès`,
-      });
-
-      loadDashboardData();
+      if (res.data?.auto_validated) {
+        toast({
+          title: "Compte activé",
+          description:
+            res.data?.message ||
+            "Votre dossier est complet : votre compte fournisseur a été validé automatiquement.",
+        });
+        await loadDashboardData();
+      } else {
+        toast({
+          title: "Document uploadé",
+          description: `${legalDocumentLabel(categorie)} ajouté avec succès`,
+        });
+        await loadDashboardData();
+      }
     } catch (error: unknown) {
       toast({
         title: "Erreur d'upload",
@@ -1497,7 +1504,7 @@ export default function FournisseurDashboard() {
                                 <p className="mt-0.5 text-xs leading-relaxed">
                                   {profile.statut === "rejete"
                                     ? "Votre compte fournisseur a été rejeté par l'administrateur. Vous ne pouvez pas déposer de documents légaux. Contactez le service des marchés pour plus d'informations."
-                                    : "Le dépôt de vos documents légaux sera ouvert dès que l'administrateur aura validé votre compte. Vous serez prévenu par email."}
+                                    : "Complétez les pièces manquantes ci-dessous. Si la validation automatique est activée sur le portail, votre compte sera activé dès que le dossier sera complet."}
                                 </p>
                               </div>
                             </div>
@@ -1538,7 +1545,7 @@ export default function FournisseurDashboard() {
                       accept=".pdf,.jpg,.jpeg,.png"
                                         className="max-w-md bg-slate-50"
                                         onChange={(e) => handleDocumentUpload(e, typeDoc)}
-                      disabled={uploadingDoc || (profile?.statut !== undefined && profile.statut !== "actif")}
+                      disabled={uploadingDoc || profile?.statut === "rejete"}
                     />
                   </div>
 

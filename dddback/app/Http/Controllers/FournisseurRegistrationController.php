@@ -7,6 +7,7 @@ use App\Models\Fournisseur;
 use App\Models\Role;
 use App\Models\User;
 use App\Rules\SenegalPhoneNumber;
+use App\Services\FournisseurValidationService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -132,22 +133,34 @@ class FournisseurRegistrationController extends Controller
             ], 500);
         }
 
-        // Notifications admin (best-effort : ne bloque pas la création si ça échoue)
-        try {
-            $this->notifierAdmins(
-                $payload['fournisseur']->nom_entreprise,
-                (int) $payload['fournisseur']->id
-            );
-        } catch (\Throwable $e) {
-            // ignore
+        $fournisseur = $payload['fournisseur']->fresh(['user']);
+        $autoValidated = app(FournisseurValidationService::class)->tenterAutoValidation($fournisseur, 'inscription');
+
+        if ($autoValidated) {
+            $fournisseur->refresh();
+        } else {
+            // Notifications admin (best-effort : ne bloque pas la création si ça échoue)
+            try {
+                $this->notifierAdmins(
+                    $fournisseur->nom_entreprise,
+                    (int) $fournisseur->id
+                );
+            } catch (\Throwable $e) {
+                // ignore
+            }
         }
 
+        $estActif = $fournisseur->statut === 'actif';
+
         return response()->json([
-            'message' => "Votre dossier a été soumis. L'administrateur le validera après examen des pièces.",
+            'message' => $estActif
+                ? 'Votre compte est activé. Vous pouvez vous connecter dès maintenant.'
+                : "Votre dossier a été soumis. L'administrateur le validera après examen des pièces.",
+            'auto_validated' => $estActif,
             'fournisseur' => [
-                'id' => $payload['fournisseur']->id,
-                'nom_entreprise' => $payload['fournisseur']->nom_entreprise,
-                'statut' => $payload['fournisseur']->statut,
+                'id' => $fournisseur->id,
+                'nom_entreprise' => $fournisseur->nom_entreprise,
+                'statut' => $fournisseur->statut,
             ],
         ], 201);
     }

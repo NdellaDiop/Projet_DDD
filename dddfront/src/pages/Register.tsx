@@ -282,14 +282,16 @@ export default function Register() {
 
       // Override du Content-Type par défaut (JSON) pour que le navigateur
       // pose lui-même le boundary multipart/form-data adapté au FormData.
-      await api.post("/api/register-fournisseur", fd, {
+      const res = await api.post("/api/register-fournisseur", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
+      const autoValidated = res.data?.auto_validated === true;
       toast({
-        title: "Dossier soumis avec succès",
-        description:
-          "Votre dossier est en attente de validation par l'administrateur. Vous serez notifié dès qu'il sera traité.",
+        title: autoValidated ? "Compte activé" : "Dossier soumis avec succès",
+        description: autoValidated
+          ? "Votre dossier est complet : vous pouvez vous connecter immédiatement."
+          : "Votre dossier est en attente de validation par l'administrateur. Vous serez notifié dès qu'il sera traité.",
       });
       navigate("/connexion", { replace: true });
     } catch (err: unknown) {
@@ -830,9 +832,9 @@ function Step3Recap(props: {
       </section>
 
       <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-        Après soumission, votre dossier passera au statut « en attente de validation ». Vous
-        recevrez une notification par email dès que l'administrateur l'aura examiné. Vous
-        pourrez alors vous connecter.
+        Si la validation automatique est activée sur le portail et que votre dossier est complet,
+        votre compte peut être activé immédiatement après soumission. Sinon, il passera en
+        « en attente de validation » jusqu&apos;à examen par l&apos;administrateur.
       </div>
     </div>
   );

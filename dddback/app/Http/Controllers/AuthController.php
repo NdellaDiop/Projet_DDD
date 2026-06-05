@@ -68,9 +68,15 @@ class AuthController extends Controller
         $user = Auth::user();
 
         if ($user->is_active === false) {
-            return response()->json([
-                'message' => 'Compte non activé. Veuillez contacter l\'administrateur.'
-            ], 403);
+            $user->loadMissing(['role', 'fournisseur']);
+            $peutSeConnecterEnAttente = $user->role?->name === 'FOURNISSEUR'
+                && $user->fournisseur?->statut === 'en_attente';
+
+            if (! $peutSeConnecterEnAttente) {
+                return response()->json([
+                    'message' => 'Compte non activé. Veuillez contacter l\'administrateur.',
+                ], 403);
+            }
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

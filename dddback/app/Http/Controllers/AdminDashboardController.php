@@ -9,6 +9,7 @@ use App\Models\Fournisseur;
 use App\Models\ResponsableMarche;
 use App\Models\LogActivite;
 use App\Models\Candidature;
+use App\Services\FournisseurValidationService;
 use App\Services\NotificationService;
 
 class AdminDashboardController extends Controller
@@ -408,66 +409,21 @@ class AdminDashboardController extends Controller
      * La validation est refusée si une des pièces légales obligatoires est absente :
      * le dossier doit être complet avant que l'administrateur ne valide.
      */
-    public function validateFournisseur(Fournisseur $fournisseur)
+    public function validateFournisseur(Fournisseur $fournisseur, FournisseurValidationService $validation)
     {
-        \Illuminate\Support\Facades\Log::info("Début validation fournisseur #{$fournisseur->id}");
+        $result = $validation->valider($fournisseur, 'admin');
 
-        if (! $fournisseur->user) {
-            \Illuminate\Support\Facades\Log::warning("Utilisateur introuvable pour fournisseur #{$fournisseur->id}");
-            return response()->json(['message' => 'Utilisateur associé introuvable pour ce fournisseur.'], 404);
+        if (! $result['validated']) {
+            $status = isset($result['pieces_manquantes']) ? 422 : 404;
+
+            return response()->json(array_filter([
+                'message' => $result['message'],
+                'pieces_manquantes' => $result['pieces_manquantes'] ?? null,
+                'libelles_manquantes' => $result['libelles_manquantes'] ?? null,
+            ]), $status);
         }
 
-        // Vérification de la complétude du dossier légal
-        $presentes = Document::query()
-            ->where('user_id', $fournisseur->user->id)
-            ->whereIn('categorie', Document::LEGAL_CATEGORIES)
-            ->pluck('categorie')
-            ->unique()
-            ->values()
-            ->all();
-        $manquantes = array_values(array_diff(Document::LEGAL_CATEGORIES, $presentes));
-
-        if (! empty($manquantes)) {
-            $labels = Document::legalCategoryLabels();
-            $libelles = array_map(fn ($c) => $labels[$c] ?? $c, $manquantes);
-
-            return response()->json([
-                'message' => 'Dossier incomplet : impossible de valider tant que les pièces obligatoires ne sont pas présentes.',
-                'pieces_manquantes' => $manquantes,
-                'libelles_manquantes' => $libelles,
-            ], 422);
-        }
-
-        $fournisseur->user->is_active = true;
-        $fournisseur->user->save();
-
-        $fournisseur->statut = 'actif';
-        $fournisseur->save();
-
-        \Illuminate\Support\Facades\Log::info("Utilisateur activé.");
-
-        // Try-catch pour éviter le crash si l'envoi de mail échoue
-        try {
-            $this->log('validate_fournisseur', "Validation fournisseur #{$fournisseur->id}");
-
-            $notificationService = app(NotificationService::class);
-
-            // Notification interne (base de données)
-            $notificationService->notifyUser(
-                $fournisseur->user->id,
-                'Votre compte a été validé. Vous pouvez maintenant accéder à la plateforme.'
-            );
-
-            \Illuminate\Support\Facades\Log::info("Tentative envoi mail à: " . $fournisseur->user->email);
-            // Envoi de l'email de confirmation
-            $notificationService->sendAccountValidatedEmail($fournisseur->user);
-            \Illuminate\Support\Facades\Log::info("Mail envoyé avec succès (théoriquement).");
-        } catch (\Exception $e) {
-            // Loguer l'erreur pour le débogage
-            \Illuminate\Support\Facades\Log::error("Erreur envoi email validation: " . $e->getMessage());
-        }
-
-        return response()->json(['message' => 'Fournisseur validé avec succès.']);
+        return response()->json(['message' => $result['message']]);
     }
 
     /**

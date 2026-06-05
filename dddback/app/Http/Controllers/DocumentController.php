@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Candidature;
 use App\Models\Fournisseur;
 use App\Models\LogActivite;
+use App\Services\FournisseurValidationService;
 use App\Support\ApiUserResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -90,12 +91,10 @@ class DocumentController extends Controller
             return response()->json(['message' => 'Vous n\'êtes pas autorisé à uploader des documents légaux.'], 403);
         }
 
-        // Le fournisseur ne peut renseigner ses pièces légales qu'après validation
-        // de son compte par l'administrateur (statut « actif »).
         $fournisseur = $user->fournisseur;
-        if (!$fournisseur || $fournisseur->statut !== 'actif') {
+        if (! $fournisseur || $fournisseur->statut === 'rejete') {
             return response()->json([
-                'message' => "Votre compte fournisseur doit être validé par l'administrateur avant de pouvoir déposer vos documents légaux.",
+                'message' => 'Votre compte fournisseur a été rejeté. Contactez le service des marchés.',
             ], 403);
         }
 
@@ -120,7 +119,25 @@ class DocumentController extends Controller
 
         $this->log('upload_legal_document', "Upload doc legal #{$doc->id}");
 
-        return (new DocumentResource($doc))->response()->setStatusCode(201);
+        $autoValidated = null;
+        if ($fournisseur->statut === 'en_attente') {
+            $autoValidated = app(FournisseurValidationService::class)
+                ->tenterAutoValidation($fournisseur->fresh(['user']), 'upload_document');
+            if ($autoValidated) {
+                $fournisseur->refresh();
+            }
+        }
+
+        return (new DocumentResource($doc))
+            ->additional([
+                'auto_validated' => $autoValidated !== null,
+                'fournisseur_statut' => $fournisseur->statut,
+                'message' => $autoValidated
+                    ? 'Dossier complet : votre compte a été activé automatiquement.'
+                    : null,
+            ])
+            ->response()
+            ->setStatusCode(201);
     }
 
     public function destroyLegal(Document $document)
