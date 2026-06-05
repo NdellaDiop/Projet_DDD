@@ -341,8 +341,9 @@ const AdminDashboard: React.FC = () => {
   const [selectedAOForAssign, setSelectedAOForAssign] = useState<AppelOffreAdmin | null>(null);
   const [selectedResponsableId, setSelectedResponsableId] = useState<number | null>(null);
 
-  const { user: authUser, api, logout } = useAuth();
-  const navigate = useNavigate();  
+  const { user: authUser, api, logout, isReady, token, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const loadSeq = useRef(0);
   const getRoleName = (u: unknown) => {
     const roleContainer =
       typeof u === "object" && u !== null ? (u as { role?: string | { name?: string } }).role : undefined;
@@ -472,26 +473,40 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   const fetchGlobalData = useCallback(async () => {
-    if (!api) return;
-    const now = Date.now();
-    if (now - lastGlobalFetchRef.current < 800) return;
-    lastGlobalFetchRef.current = now;
+    if (!api || !isReady || !isAuthenticated || !token) return;
+
+    const seq = ++loadSeq.current;
     try {
-      const [statsRes, suggestionsRes, activitiesRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get('/api/admin/dashboard-stats'),
         api.get('/api/admin/suggestions'),
-        api.get('/api/admin/recent-activities')
+        api.get('/api/admin/recent-activities'),
       ]);
-      setStats(statsRes.data);
-      setSuggestions(suggestionsRes.data);
-      setRecentActivities(activitiesRes.data);
+
+      if (seq !== loadSeq.current) return;
+
+      if (results[0].status === 'fulfilled') {
+        setStats(results[0].value.data);
+      } else {
+        console.error('Erreur stats admin:', results[0].reason);
+      }
+
+      if (results[1].status === 'fulfilled') {
+        const payload = results[1].value.data;
+        setSuggestions(Array.isArray(payload) ? payload : []);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        const payload = results[2].value.data;
+        setRecentActivities(Array.isArray(payload) ? payload : []);
+      }
     } catch (error) {
       console.error("Erreur chargement global:", error);
     }
-  }, [api]);
+  }, [api, isReady, isAuthenticated, token]);
 
   const fetchAppelsOffres = useCallback(async () => {
-    if (!api) return;
+    if (!api || !isReady || !isAuthenticated || !token) return;
     const now = Date.now();
     if (now - lastAppelsFetchRef.current < 800) return;
     lastAppelsFetchRef.current = now;
@@ -520,10 +535,10 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error("Erreur chargement AO:", error);
     }
-  }, [api, pagination.appelsOffres.perPage, pagination.appelsOffres.currentPage, debouncedSearchTerm, filterStatut, advancedFilters, updatePaginationState]);
+  }, [api, isReady, isAuthenticated, token, pagination.appelsOffres.perPage, pagination.appelsOffres.currentPage, debouncedSearchTerm, filterStatut, advancedFilters, updatePaginationState]);
 
   const fetchFournisseurs = useCallback(async () => {
-    if (!api) return;
+    if (!api || !isReady || !isAuthenticated || !token) return;
     const now = Date.now();
     if (now - lastFournisseursFetchRef.current < 800) return;
     lastFournisseursFetchRef.current = now;
@@ -548,10 +563,10 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error("Erreur chargement Fournisseurs:", error);
     }
-  }, [api, pagination.fournisseurs.perPage, pagination.fournisseurs.currentPage, debouncedSearchTerm, advancedFilters, updatePaginationState]);
+  }, [api, isReady, isAuthenticated, token, pagination.fournisseurs.perPage, pagination.fournisseurs.currentPage, debouncedSearchTerm, advancedFilters, updatePaginationState]);
 
   const fetchResponsables = useCallback(async () => {
-    if (!api) return;
+    if (!api || !isReady || !isAuthenticated || !token) return;
     const now = Date.now();
     if (now - lastResponsablesFetchRef.current < 800) return;
     lastResponsablesFetchRef.current = now;
@@ -575,7 +590,7 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error("Erreur chargement PRM:", error);
     }
-  }, [api, pagination.responsables.perPage, pagination.responsables.currentPage, debouncedSearchTerm, updatePaginationState]);
+  }, [api, isReady, isAuthenticated, token, pagination.responsables.perPage, pagination.responsables.currentPage, debouncedSearchTerm, updatePaginationState]);
 
   // Wrapper de compatibilité pour recharger toutes les données
   const fetchDashboardData = useCallback(async () => {
@@ -592,8 +607,8 @@ const AdminDashboard: React.FC = () => {
     const roleName = getRoleName(authUser);
     const isAdmin = roleName === "ADMIN" || getRoleId(authUser) === 1;
   
-    if (!authUser || !isAdmin) {
-      setLoading(false);
+    if (!isReady || !isAuthenticated || !token || !authUser || !isAdmin) {
+      if (isReady) setLoading(false);
       return;
     }
 
@@ -602,8 +617,8 @@ const AdminDashboard: React.FC = () => {
         await fetchGlobalData();
         setLoading(false);
     };
-    init();
-  }, [authUser, fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]); 
+    void init();
+  }, [isReady, isAuthenticated, token, authUser, fetchGlobalData]); 
 
   // Effets de pagination séparés
   const [isMounted, setIsMounted] = useState(false);
@@ -613,16 +628,16 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-      if (isMounted) fetchAppelsOffres();
-  }, [fetchAppelsOffres, isMounted]);
+      if (isMounted && isReady && isAuthenticated && token) fetchAppelsOffres();
+  }, [fetchAppelsOffres, isMounted, isReady, isAuthenticated, token]);
 
   useEffect(() => {
-      if (isMounted) fetchFournisseurs();
-  }, [fetchFournisseurs, isMounted]);
+      if (isMounted && isReady && isAuthenticated && token) fetchFournisseurs();
+  }, [fetchFournisseurs, isMounted, isReady, isAuthenticated, token]);
 
   useEffect(() => {
-      if (isMounted) fetchResponsables();
-  }, [fetchResponsables, isMounted]);
+      if (isMounted && isReady && isAuthenticated && token) fetchResponsables();
+  }, [fetchResponsables, isMounted, isReady, isAuthenticated, token]);
 
   // Effet pour rendre l'overlay transparent pour la modale "Voir Dossier"
   useEffect(() => {

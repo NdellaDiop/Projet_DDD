@@ -32,8 +32,8 @@ interface FormattedPieItem {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
-  const { api } = useAuth();
-  const hasFetchedRef = useRef(false);
+  const { api, isReady, token, isAuthenticated } = useAuth();
+  const loadSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     aoEvolution: AOEvolutionItem[];
@@ -42,22 +42,24 @@ const AdvancedStats: React.FC<AdvancedStatsProps> = ({ className }) => {
   } | null>(null);
 
   useEffect(() => {
+    if (!api || !isReady || !isAuthenticated || !token) return;
+
+    const seq = ++loadSeq.current;
     const fetchStats = async () => {
-      if (!api) return;
-      if (hasFetchedRef.current) return;
-      hasFetchedRef.current = true;
+      setLoading(true);
       try {
         const response = await api.get('/api/admin/dashboard-advanced-stats');
+        if (seq !== loadSeq.current) return;
         setData(response.data);
       } catch (error) {
         console.error("Erreur chargement stats avancées:", error);
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     };
 
-    fetchStats();
-  }, [api]);
+    void fetchStats();
+  }, [api, isReady, isAuthenticated, token]);
 
   if (loading) {
     return (
