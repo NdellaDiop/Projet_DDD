@@ -1102,7 +1102,7 @@ export default function FournisseurDashboard() {
         </aside>
 
         <main className="ml-64 min-h-0 flex-1 overflow-y-auto">
-          <div className="w-full max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 md:py-8">
+          <div className="w-full p-8">
         
         {/* En-tête de section dynamique */}
         <div className="flex justify-between items-center mb-8">
