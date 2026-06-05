@@ -1151,9 +1151,9 @@ export default function FournisseurDashboard() {
                   </Alert>
                 )}
         {/* Cartes statistiques */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+                  <motion.div className="h-full" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                    <Card className="h-full border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Notifications non lues</CardTitle>
                         <div className="bg-amber-50 p-2 rounded-lg"><Bell className="w-4 h-4 text-amber-600" /></div>
@@ -1164,8 +1164,8 @@ export default function FournisseurDashboard() {
             </Card>
           </motion.div>
 
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
+                  <motion.div className="h-full" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                    <Card className="h-full border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Avis publiés (ouverts)</CardTitle>
                         <div className="bg-blue-50 p-2 rounded-lg"><FileText className="w-4 h-4 text-blue-600" /></div>
@@ -1176,8 +1176,8 @@ export default function FournisseurDashboard() {
             </Card>
           </motion.div>
 
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                    <Card className="border-none shadow-sm hover:shadow-md transition-all">
+                  <motion.div className="h-full" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                    <Card className="h-full border-none shadow-sm hover:shadow-md transition-all">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Mes documents</CardTitle>
                         <div className="bg-purple-50 p-2 rounded-lg"><Upload className="w-4 h-4 text-purple-600" /></div>
@@ -1188,9 +1188,9 @@ export default function FournisseurDashboard() {
             </Card>
           </motion.div>
 
-                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                  <motion.div className="h-full" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                     <Card
-                      className="border-none shadow-sm hover:shadow-md transition-all cursor-pointer"
+                      className="h-full border-none shadow-sm hover:shadow-md transition-all cursor-pointer"
                       onClick={() => setActiveTab("mes-achats")}
                     >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -1199,7 +1199,6 @@ export default function FournisseurDashboard() {
               </CardHeader>
               <CardContent>
                         <div className="text-2xl font-bold text-slate-800">{stats.mes_achats_total}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Cahiers des charges achetés</p>
               </CardContent>
             </Card>
           </motion.div>
