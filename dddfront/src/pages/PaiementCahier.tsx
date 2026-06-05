@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import QRCode from "react-qr-code";
-import { ArrowLeft, ArrowLeftRight, ExternalLink, QrCode } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Copy, ExternalLink, QrCode } from "lucide-react";
 import { PaiementCahierLayout } from "@/components/paiement/PaiementCahierLayout";
 import { OrangeMoneyLogo, WaveLogo } from "@/components/paiement/PaymentMethodLogos";
 
@@ -239,6 +239,20 @@ const PaiementCahier = () => {
     }
   };
 
+  const copierLienPaiement = async () => {
+    if (!paymentUrl) return;
+    try {
+      await navigator.clipboard.writeText(paymentUrl);
+      toast({ title: "Lien copié" });
+    } catch {
+      toast({
+        title: "Copie impossible",
+        description: "Copiez le lien depuis la barre d'adresse du navigateur.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <PaiementCahierLayout onBack={handleBack}>
       {loading && (
@@ -426,15 +440,27 @@ const PaiementCahier = () => {
                         <QRCode value={paymentUrl} size={220} />
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="mt-4 text-teal-700"
-                      onClick={() => window.open(paymentUrl, "_blank", "noopener,noreferrer")}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2 inline" />
-                      Ouvrir {titreMoyen} dans un nouvel onglet
-                    </Button>
+                    <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="text-teal-700"
+                        onClick={() => window.open(paymentUrl, "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2 inline" />
+                        Ouvrir {titreMoyen} dans un nouvel onglet
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-teal-200 text-teal-800"
+                        onClick={() => void copierLienPaiement()}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copier le lien de paiement
+                      </Button>
+                    </div>
                   </div>
 
                   <Button
