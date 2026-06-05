@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,7 +118,7 @@ interface Suggestion {
 interface InAppNotification {
   id: number;
   message: string;
-  is_read: boolean;
+  is_read: boolean | 0 | 1;
   created_at: string;
 }
 
@@ -143,8 +143,22 @@ interface CommentItem {
   };
 }
 
+function unwrapList<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (typeof payload === "object" && payload !== null && "data" in payload) {
+    const inner = (payload as { data?: unknown }).data;
+    return Array.isArray(inner) ? (inner as T[]) : [];
+  }
+  return [];
+}
+
+function isNotificationUnread(n: InAppNotification): boolean {
+  return n.is_read === false || n.is_read === 0 || !n.is_read;
+}
+
 export default function FournisseurDashboard() {
-  const { api, user, logout, refreshUser } = useAuth();
+  const { api, user, logout, refreshUser, isReady, token, isAuthenticated } = useAuth();
+  const loadSeq = useRef(0);
   const [activeTab, setActiveTab] = useState("overview");
   const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -205,64 +219,101 @@ export default function FournisseurDashboard() {
   });
 
   const loadDashboardData = useCallback(async () => {
-    if (!api) return;
+    if (!api || !isReady || !isAuthenticated || !token) return;
+
+    const seq = ++loadSeq.current;
     try {
       setLoading(true);
-      const [candidaturesRes, documentsRes, profileRes, suggestionsRes, notificationsRes, avisRes] = await Promise.all([
+
+      const results = await Promise.allSettled([
         api.get("/api/fournisseur/candidatures", {
-          params: { page: pagination.currentPage, per_page: pagination.perPage }
+          params: { page: pagination.currentPage, per_page: pagination.perPage },
         }),
         api.get("/api/fournisseur/documents-legaux"),
         api.get("/api/fournisseur/profile"),
         api.get("/api/suggestions"),
-        api.get("/api/notifications").catch(() => ({ data: [] as InAppNotification[] })),
-        api
-          .get("/api/appels-offres", {
-            params: { per_page: 8, statut: "published" },
-          })
-          .catch(() => ({ data: { data: [] as AvisOuvertResume[], meta: { total: 0 } } })),
+        api.get("/api/notifications"),
+        api.get("/api/appels-offres", {
+          params: { per_page: 8, statut: "published" },
+        }),
       ]);
 
-      const rawNotifs = notificationsRes.data;
-      setPortalNotifications(Array.isArray(rawNotifs) ? rawNotifs : []);
+      if (seq !== loadSeq.current) return;
 
-      const avisPayload = avisRes.data as {
+      const pick = <T,>(index: number): T | null =>
+        results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<{ data: T }>).value.data : null;
+
+      const notificationsPayload = pick<InAppNotification[] | { data?: InAppNotification[] }>(4);
+      setPortalNotifications(unwrapList<InAppNotification>(notificationsPayload));
+
+      const avisPayload = pick<{
         data?: AvisOuvertResume[];
         meta?: { total?: number };
-      };
-      const avisRows = Array.isArray(avisPayload?.data) ? avisPayload.data : [];
+      }>(5);
+      const avisRows = unwrapList<AvisOuvertResume>(avisPayload);
       setAvisOuverts(avisRows);
       setAvisPublishedTotal(
         typeof avisPayload?.meta?.total === "number" ? avisPayload.meta.total : avisRows.length
       );
 
-      const candData = candidaturesRes.data;
-      const candidaturesList = Array.isArray(candData.data) ? candData.data : candData;
-      
-      if (candData.meta) {
-        setPagination(prev => ({
+      const docsPayload = pick<Document[] | { data?: Document[] }>(1);
+      setDocuments(unwrapList<Document>(docsPayload));
+
+      const suggestionsPayload = pick<Suggestion[]>(3);
+      setSuggestions(unwrapList<Suggestion>(suggestionsPayload));
+
+      const profileData = pick<FournisseurProfile>(2);
+      if (profileData) {
+        setProfile(profileData);
+        setProfileForm({
+          nom_entreprise: profileData.nom_entreprise || "",
+          adresse: profileData.adresse || "",
+          telephone: profileData.telephone || "",
+          email_contact: profileData.email_contact || "",
+          ninea: profileData.ninea ?? "",
+          rccm: profileData.rccm ?? "",
+          references_professionnelles: profileData.references_professionnelles ?? "",
+        });
+      }
+
+      const candPayload = pick<{
+        data?: Candidature[];
+        meta?: {
+          current_page: number;
+          last_page: number;
+          total: number;
+          per_page: number;
+        };
+      }>(0);
+
+      const candidaturesList = unwrapList<Candidature>(candPayload);
+
+      if (candPayload?.meta) {
+        setPagination((prev) => ({
           ...prev,
-          currentPage: candData.meta.current_page,
-          totalPages: candData.meta.last_page,
-          totalItems: candData.meta.total,
-          perPage: candData.meta.per_page
+          currentPage: candPayload.meta!.current_page,
+          totalPages: candPayload.meta!.last_page,
+          totalItems: candPayload.meta!.total,
+          perPage: candPayload.meta!.per_page,
         }));
       } else {
-        setPagination(prev => ({
+        setPagination((prev) => ({
           ...prev,
           currentPage: 1,
           totalPages: 1,
-          totalItems: Array.isArray(candidaturesList) ? candidaturesList.length : 0,
-          perPage: Array.isArray(candidaturesList) ? (candidaturesList.length || 15) : 15
+          totalItems: candidaturesList.length,
+          perPage: candidaturesList.length || prev.perPage,
         }));
       }
 
-      if (!Array.isArray(candidaturesList) || candidaturesList.length === 0) {
-        setCandidatures([]);
-      } else {
+      // Afficher tout de suite la liste (vue d'ensemble) ; détails chargés ensuite.
+      setCandidatures(candidaturesList);
+
+      if (candidaturesList.length > 0) {
         const BATCH = 6;
         const candidaturesWithDocs: Candidature[] = [];
         for (let i = 0; i < candidaturesList.length; i += BATCH) {
+          if (seq !== loadSeq.current) return;
           const slice = candidaturesList.slice(i, i + BATCH);
           const batchResults = await Promise.all(
             slice.map(async (cand: Candidature) => {
@@ -291,35 +342,31 @@ export default function FournisseurDashboard() {
           );
           candidaturesWithDocs.push(...batchResults);
         }
-
-        setCandidatures(candidaturesWithDocs);
+        if (seq === loadSeq.current) {
+          setCandidatures(candidaturesWithDocs);
+        }
       }
 
-      const docsData = documentsRes.data;
-      setDocuments(Array.isArray(docsData) ? docsData : docsData.data || []);
-
-      setSuggestions(suggestionsRes.data || []);
-
-      setProfile(profileRes.data);
-      setProfileForm({
-        nom_entreprise: profileRes.data.nom_entreprise || "",
-        adresse: profileRes.data.adresse || "",
-        telephone: profileRes.data.telephone || "",
-        email_contact: profileRes.data.email_contact || "",
-        ninea: profileRes.data.ninea ?? "",
-        rccm: profileRes.data.rccm ?? "",
-        references_professionnelles: profileRes.data.references_professionnelles ?? "",
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          const labels = ["candidatures", "documents", "profil", "suggestions", "notifications", "avis"];
+          console.error(`Erreur chargement ${labels[i]}:`, r.reason);
+        }
       });
     } catch (error: unknown) {
       console.error("Erreur chargement dashboard:", error);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) {
+        setLoading(false);
+      }
     }
-  }, [api, pagination.currentPage, pagination.perPage]);
+  }, [api, isAuthenticated, isReady, pagination.currentPage, pagination.perPage, token]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    if (isReady && isAuthenticated && token) {
+      void loadDashboardData();
+    }
+  }, [isReady, isAuthenticated, token, loadDashboardData]);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -647,7 +694,7 @@ export default function FournisseurDashboard() {
   };
 
   const stats = {
-    notifs_non_lues: portalNotifications.filter((n) => !n.is_read).length,
+    notifs_non_lues: portalNotifications.filter(isNotificationUnread).length,
     avis_ouverts_total: avisPublishedTotal,
     candidatures_total: candidatures.length,
     candidatures_en_cours: candidatures.filter((c) => c.statut === "submitted" || c.statut === "SOUMISE" || c.statut === "under_review" || c.statut === "EN_EVALUATION").length,
@@ -990,10 +1037,10 @@ export default function FournisseurDashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
-                {portalNotifications.filter((n) => !n.is_read).length > 0 ? (
+                {portalNotifications.filter(isNotificationUnread).length > 0 ? (
                   <div className="space-y-3">
                     {portalNotifications
-                      .filter((n) => !n.is_read)
+                      .filter(isNotificationUnread)
                       .slice(0, 5)
                       .map((n) => (
                         <div
@@ -1076,7 +1123,7 @@ export default function FournisseurDashboard() {
                       {portalNotifications.map((n) => (
                         <li
                           key={n.id}
-                          className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:justify-between ${!n.is_read ? "bg-amber-50/50" : ""}`}
+                          className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:justify-between ${isNotificationUnread(n) ? "bg-amber-50/50" : ""}`}
                         >
                           <div className="min-w-0 pr-2">
                             <p className="text-sm text-slate-800">{n.message}</p>
@@ -1084,7 +1131,7 @@ export default function FournisseurDashboard() {
                               {new Date(n.created_at).toLocaleString("fr-FR")}
                             </p>
                           </div>
-                          {!n.is_read ? (
+                          {isNotificationUnread(n) ? (
                             <Button size="sm" variant="secondary" onClick={() => void markNotificationRead(n.id)}>
                               Marquer lu
                             </Button>
