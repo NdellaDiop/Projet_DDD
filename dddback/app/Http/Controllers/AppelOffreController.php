@@ -172,13 +172,11 @@ class AppelOffreController extends Controller
     }
 
     /**
-     * Réouvre un appel d'offres clôturé (admin uniquement).
+     * Réouvre un appel d'offres clôturé (admin ou PRM responsable de l'avis).
      */
     public function reopen(Request $request, AppelOffre $appelOffre)
     {
-        if (! auth()->user()?->isAdmin()) {
-            return response()->json(['message' => 'Non autorisé'], 403);
-        }
+        $this->authorize('reopen', $appelOffre);
 
         if ($appelOffre->statut !== AppelOffre::STATUS_CLOSED) {
             return response()->json([
@@ -369,20 +367,13 @@ class AppelOffreController extends Controller
     }
 
     /**
-     * Attribution du marché (alignée dépôt physique).
-     * L’admin ou le PRM responsable enregistre la décision après réception/évaluation en présentiel.
+     * Attribution du marché (alignée dépôt physique) — administrateur uniquement.
      */
     public function attribuer(Request $request, AppelOffre $appelOffre)
     {
         $user = $request->user();
-        if (! $user || (! $user->isAdmin() && ! $user->isResponsableMarche())) {
+        if (! $user?->isAdmin()) {
             return response()->json(['message' => 'Non autorisé'], 403);
-        }
-
-        if (! $user->isAdmin()) {
-            if (! $user->responsableMarche || (int) $appelOffre->responsable_marche_id !== (int) $user->responsableMarche->id) {
-                return response()->json(['message' => 'Accès refusé'], 403);
-            }
         }
 
         if ($appelOffre->statut !== AppelOffre::STATUS_CLOSED) {
@@ -418,14 +409,8 @@ class AppelOffreController extends Controller
     public function annulerAttribution(Request $request, AppelOffre $appelOffre)
     {
         $user = $request->user();
-        if (! $user || (! $user->isAdmin() && ! $user->isResponsableMarche())) {
+        if (! $user?->isAdmin()) {
             return response()->json(['message' => 'Non autorisé'], 403);
-        }
-
-        if (! $user->isAdmin()) {
-            if (! $user->responsableMarche || (int) $appelOffre->responsable_marche_id !== (int) $user->responsableMarche->id) {
-                return response()->json(['message' => 'Accès refusé'], 403);
-            }
         }
 
         $appelOffre->fill([

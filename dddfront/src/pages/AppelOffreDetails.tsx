@@ -126,7 +126,8 @@ const AppelOffreDetails = () => {
   const [attributionCommentaire, setAttributionCommentaire] = useState("");
 
   const canManageAoDocs = isAuthenticated && (isAdmin || isResponsableMarche);
-  const canAttribuer = isAuthenticated && (isAdmin || isResponsableMarche);
+  /** L'attribution du marché est réservée à l'administrateur. */
+  const canAttribuer = isAuthenticated && isAdmin;
 
   const aoDocCategoryLabel: Record<string, string> = {
     AVIS_APPEL_OFFRES: "Avis d'appel d'offres (PDF, gratuit)",
@@ -792,6 +793,15 @@ const AppelOffreDetails = () => {
                                       <ExternalLink className="mr-2 h-4 w-4" />
                                       Itinéraire siège (carte)
                                     </a>
+                                </div>
+                            ) : isResponsableMarche ? (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-slate-600 text-center leading-snug">
+                                      Consultation publique de l&apos;avis. Pour publier, clôturer ou réouvrir vos marchés, utilisez votre tableau de bord responsable.
+                                    </p>
+                                    <Button className="w-full" size="lg" variant="secondary" type="button" onClick={() => navigate("/responsable/dashboard")}>
+                                        Mon tableau de bord PRM
+                                    </Button>
                                 </div>
                             ) : !isAuthenticated ? (
                                 <div className="space-y-3">

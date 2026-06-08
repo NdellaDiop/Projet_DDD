@@ -71,8 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('appels-offres/{appel_offre}', [AppelOffreController::class, 'update']);
         Route::post('appels-offres/{appel_offre}/publish', [AppelOffreController::class, 'publish']);
         Route::post('appels-offres/{appel_offre}/close', [AppelOffreController::class, 'close']);
-        Route::post('appels-offres/{appel_offre}/attribution', [AppelOffreController::class, 'attribuer']);
-        Route::post('appels-offres/{appel_offre}/attribution/annuler', [AppelOffreController::class, 'annulerAttribution']);
+        Route::post('appels-offres/{appel_offre}/reopen', [AppelOffreController::class, 'reopen']);
         Route::get('responsable/mes-appels-offres', [AppelOffreController::class, 'indexForResponsable']);
         Route::get('responsable/appels-offres/{appel_offre}/candidatures-recues', [AppelOffreController::class, 'getCandidatures'])->middleware('candidature.enabled');
         Route::get('responsable/candidatures/{candidature}/documents-legaux', [DocumentController::class, 'getFournisseurLegalDocuments'])->middleware('candidature.enabled');
@@ -89,7 +88,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Assignation / retours arrière statut AO (Admin uniquement)
     Route::post('appels-offres/{appel_offre}/assign', [AppelOffreController::class, 'assign'])->middleware('role:ADMIN');
-    Route::post('appels-offres/{appel_offre}/reopen', [AppelOffreController::class, 'reopen'])->middleware('role:ADMIN');
+    Route::post('appels-offres/{appel_offre}/attribution', [AppelOffreController::class, 'attribuer'])->middleware('role:ADMIN');
+    Route::post('appels-offres/{appel_offre}/attribution/annuler', [AppelOffreController::class, 'annulerAttribution'])->middleware('role:ADMIN');
     Route::post('appels-offres/{appel_offre}/unpublish', [AppelOffreController::class, 'unpublish'])->middleware('role:ADMIN');
 
     // CANDIDATURES

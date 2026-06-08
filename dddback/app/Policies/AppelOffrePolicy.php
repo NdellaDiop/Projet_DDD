@@ -65,6 +65,14 @@ class AppelOffrePolicy
             && $appelOffre->statut === AppelOffre::STATUS_PUBLISHED;
     }
 
+    public function reopen(User $user, AppelOffre $appelOffre): bool
+    {
+        return $user->isResponsableMarche()
+            && $user->responsableMarche
+            && (int) $appelOffre->responsable_marche_id === (int) $user->responsableMarche->id
+            && $appelOffre->statut === AppelOffre::STATUS_CLOSED;
+    }
+
     public function restore(User $user, AppelOffre $appelOffre): bool
     {
         return $user->isAdmin();

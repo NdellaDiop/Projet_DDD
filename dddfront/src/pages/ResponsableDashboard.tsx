@@ -48,7 +48,8 @@ import {
   Send,
   Filter,
   Search,
-  Award
+  Award,
+  RotateCcw,
 } from "lucide-react";
 import AdvancedSearch from "@/components/AdvancedSearch";
 import ResponsableAdvancedStats from "@/components/ResponsableAdvancedStats";
@@ -724,7 +725,7 @@ export default function ResponsableDashboard() {
     const label = titre ? `« ${titre} »` : "cet appel d'offres";
     if (
       !confirm(
-        `Confirmer la clôture de ${label} ?\n\nLe dépôt des plis ne sera plus ouvert.`
+        `Confirmer la clôture de ${label} ?\n\nLe dépôt des plis ne sera plus ouvert. Vous pourrez réouvrir l'appel d'offres plus tard si nécessaire.`
       )
     ) {
       return;
@@ -735,6 +736,29 @@ export default function ResponsableDashboard() {
       loadData();
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de clôturer.", variant: "destructive" });
+    }
+  };
+
+  const handleReopen = async (id: number, titre?: string) => {
+    if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Réouvrir ${label} ?\n\nL'appel d'offres repassera au statut « publié » (ouvert).`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.post(`/api/appels-offres/${id}/reopen`);
+      toast({ title: "Réouvert", description: "L'appel d'offres est de nouveau publié." });
+      loadData();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de réouvrir cet appel d'offres."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -1550,6 +1574,17 @@ export default function ResponsableDashboard() {
                                             <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id, ao.titre)} title="Clôturer">
                                                 <Archive className="w-3 h-3 mr-1" /> Clôturer
                                             </Button>
+                                        )}
+                                        {ao.statut === "closed" && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 border-green-200 text-green-800 hover:bg-green-50"
+                                            onClick={() => handleReopen(ao.id, ao.titre)}
+                                            title="Réouvrir l'appel d'offres"
+                                          >
+                                            <RotateCcw className="w-3 h-3 mr-1" /> Réouvrir
+                                          </Button>
                                         )}
                                         {/* Dépôt en présentiel : pas de candidatures en ligne */}
                                       </div>
