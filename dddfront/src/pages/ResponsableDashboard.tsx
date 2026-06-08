@@ -1411,7 +1411,7 @@ export default function ResponsableDashboard() {
                           {getStatutBadge(ao.statut)}
                           <Button size="sm" variant="outline" className="h-8" onClick={() => navigate(`/appels-offres/${ao.id}`)}>
                             <FileText className="w-3 h-3 mr-1" />
-                            Détails
+                            Fiche
                           </Button>
                         </div>
                       </div>
@@ -1538,9 +1538,9 @@ export default function ResponsableDashboard() {
                                           variant="outline"
                                           className="h-8"
                                           onClick={() => navigate(`/appels-offres/${ao.id}`)}
-                                          title="Ouvrir le détail (documents & infos)"
+                                          title="Ouvrir la fiche (documents & infos)"
                                         >
-                                          <FileText className="w-3 h-3 mr-1" /> Détails
+                                          <FileText className="w-3 h-3 mr-1" /> Fiche
                                         </Button>
                                         {(ao.statut === "draft" || ao.statut === "published") && (
                                           <Button
