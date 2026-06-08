@@ -27,7 +27,6 @@ import {
   Send,
   UserCircle,
   Bell,
-  ChevronDown,
   ArrowRight,
   Download,
   ShoppingBag,
@@ -42,16 +41,9 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import DashboardNavbar from "@/components/layout/DashboardNavbar";
 import FournisseurChatWidget from "@/components/chat/FournisseurChatWidget";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { DataTablePagination } from "@/components/ui/DataTablePagination";
-import { exportData } from "@/lib/exportUtils";
 import {
   isValidSenegalPhone,
   sanitizePhoneInput,
@@ -62,23 +54,6 @@ import {
   ALL_LEGAL_DOCUMENT_UPLOAD_CATEGORIES,
   legalDocumentLabel,
 } from "@/lib/legalDocuments";
-
-interface Candidature {
-  id: number;
-  appel_offre_id: number;
-  fournisseur_id: number;
-  statut: string;
-  date_soumission: string;
-  montant_propose?: number;
-  appel_offre: {
-    id: number;
-    titre: string;
-    numero_reference: string;
-    date_limite: string;
-    statut: string;
-  };
-  documents?: Document[];
-}
 
 interface Document {
   id: number;
@@ -154,19 +129,6 @@ interface AvisOuvertResume {
   statut?: string;
 }
 
-interface CommentItem {
-  id: number;
-  message: string;
-  created_at: string;
-  user?: {
-    id: number;
-    name: string;
-  };
-  document?: {
-    nom_fichier: string;
-  };
-}
-
 function unwrapList<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
   if (typeof payload === "object" && payload !== null && "data" in payload) {
@@ -185,7 +147,6 @@ export default function FournisseurDashboard() {
   const loadSeq = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("overview");
-  const [candidatures, setCandidatures] = useState<Candidature[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [mesAchats, setMesAchats] = useState<MesAchat[]>([]);
   const [loadingMesAchats, setLoadingMesAchats] = useState(false);
@@ -210,21 +171,11 @@ export default function FournisseurDashboard() {
     references_professionnelles: "",
   });
 
-  // États pour la modification de candidature
-  const [editingCandidature, setEditingCandidature] = useState<Candidature | null>(null);
-  const [editMontant, setEditMontant] = useState("");
-  
-  // États pour les commentaires
-  const [candidatureComments, setCandidatureComments] = useState<Record<number, CommentItem[]>>({});
-  const [expandedCandidatureId, setExpandedCandidatureId] = useState<number | null>(null);
-  const [newComments, setNewComments] = useState<Record<number, string>>({});
-  const [submittingComments, setSubmittingComments] = useState<Record<number, boolean>>({});
   const [isPasswordSettingsOpen, setIsPasswordSettingsOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
   const [portalNotifications, setPortalNotifications] = useState<InAppNotification[]>([]);
   const [avisOuverts, setAvisOuverts] = useState<AvisOuvertResume[]>([]);
   const [avisPublishedTotal, setAvisPublishedTotal] = useState(0);
-  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
 
   const getErrorMessage = (error: unknown, fallback: string): string => {
     if (
@@ -239,13 +190,6 @@ export default function FournisseurDashboard() {
     return fallback;
   };
 
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    perPage: 15,
-  });
-
   const loadDashboardData = useCallback(async () => {
     if (!api || !isReady || !isAuthenticated || !token) return;
 
@@ -254,9 +198,6 @@ export default function FournisseurDashboard() {
       setLoading(true);
 
       const results = await Promise.allSettled([
-        api.get("/api/fournisseur/candidatures", {
-          params: { page: pagination.currentPage, per_page: pagination.perPage },
-        }),
         api.get("/api/fournisseur/documents-legaux"),
         api.get("/api/fournisseur/profile"),
         api.get("/api/suggestions"),
@@ -272,29 +213,29 @@ export default function FournisseurDashboard() {
       const pick = <T,>(index: number): T | null =>
         results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<{ data: T }>).value.data : null;
 
-      const notificationsPayload = pick<InAppNotification[] | { data?: InAppNotification[] }>(4);
+      const notificationsPayload = pick<InAppNotification[] | { data?: InAppNotification[] }>(3);
       setPortalNotifications(unwrapList<InAppNotification>(notificationsPayload));
 
       const avisPayload = pick<{
         data?: AvisOuvertResume[];
         meta?: { total?: number };
-      }>(5);
+      }>(4);
       const avisRows = unwrapList<AvisOuvertResume>(avisPayload);
       setAvisOuverts(avisRows);
       setAvisPublishedTotal(
         typeof avisPayload?.meta?.total === "number" ? avisPayload.meta.total : avisRows.length
       );
 
-      const achatsPayload = pick<{ data?: MesAchat[] }>(6);
+      const achatsPayload = pick<{ data?: MesAchat[] }>(5);
       setMesAchats(Array.isArray(achatsPayload?.data) ? achatsPayload.data : []);
 
-      const docsPayload = pick<Document[] | { data?: Document[] }>(1);
+      const docsPayload = pick<Document[] | { data?: Document[] }>(0);
       setDocuments(unwrapList<Document>(docsPayload));
 
-      const suggestionsPayload = pick<Suggestion[]>(3);
+      const suggestionsPayload = pick<Suggestion[]>(2);
       setSuggestions(unwrapList<Suggestion>(suggestionsPayload));
 
-      const profileData = pick<FournisseurProfile>(2);
+      const profileData = pick<FournisseurProfile>(1);
       if (profileData) {
         setProfile(profileData);
         setProfileForm({
@@ -308,80 +249,9 @@ export default function FournisseurDashboard() {
         });
       }
 
-      const candPayload = pick<{
-        data?: Candidature[];
-        meta?: {
-          current_page: number;
-          last_page: number;
-          total: number;
-          per_page: number;
-        };
-      }>(0);
-
-      const candidaturesList = unwrapList<Candidature>(candPayload);
-
-      if (candPayload?.meta) {
-        setPagination((prev) => ({
-          ...prev,
-          currentPage: candPayload.meta!.current_page,
-          totalPages: candPayload.meta!.last_page,
-          totalItems: candPayload.meta!.total,
-          perPage: candPayload.meta!.per_page,
-        }));
-      } else {
-        setPagination((prev) => ({
-          ...prev,
-          currentPage: 1,
-          totalPages: 1,
-          totalItems: candidaturesList.length,
-          perPage: candidaturesList.length || prev.perPage,
-        }));
-      }
-
-      // Afficher tout de suite la liste (vue d'ensemble) ; détails chargés ensuite.
-      setCandidatures(candidaturesList);
-
-      if (candidaturesList.length > 0) {
-        const BATCH = 6;
-        const candidaturesWithDocs: Candidature[] = [];
-        for (let i = 0; i < candidaturesList.length; i += BATCH) {
-          if (seq !== loadSeq.current) return;
-          const slice = candidaturesList.slice(i, i + BATCH);
-          const batchResults = await Promise.all(
-            slice.map(async (cand: Candidature) => {
-              try {
-                const [candidatureDetail, commentsRes] = await Promise.all([
-                  api.get(`/api/candidatures/${cand.id}`),
-                  api.get(`/api/candidatures/${cand.id}/comments`).catch(() => ({ data: [] })),
-                ]);
-                const candidatureData = candidatureDetail.data?.data || candidatureDetail.data;
-                const commentsData = commentsRes.data || [];
-
-                setCandidatureComments((prev) => ({
-                  ...prev,
-                  [cand.id]: Array.isArray(commentsData) ? commentsData : [],
-                }));
-
-                return {
-                  ...cand,
-                  documents: candidatureData?.documents || [],
-                };
-              } catch (err) {
-                console.error(`Erreur chargement documents pour candidature ${cand.id}:`, err);
-                return { ...cand, documents: [] };
-              }
-            })
-          );
-          candidaturesWithDocs.push(...batchResults);
-        }
-        if (seq === loadSeq.current) {
-          setCandidatures(candidaturesWithDocs);
-        }
-      }
-
       results.forEach((r, i) => {
         if (r.status === "rejected") {
-          const labels = ["candidatures", "documents", "profil", "suggestions", "notifications", "avis", "achats"];
+          const labels = ["documents", "profil", "suggestions", "notifications", "avis", "achats"];
           console.error(`Erreur chargement ${labels[i]}:`, r.reason);
         }
       });
@@ -392,7 +262,7 @@ export default function FournisseurDashboard() {
         setLoading(false);
       }
     }
-  }, [api, isAuthenticated, isReady, pagination.currentPage, pagination.perPage, token]);
+  }, [api, isAuthenticated, isReady, token]);
 
   useEffect(() => {
     if (isReady && isAuthenticated && token) {
@@ -707,46 +577,6 @@ export default function FournisseurDashboard() {
     }
   };
 
-  const handleEditClick = (candidature: Candidature) => {
-    setEditingCandidature(candidature);
-    setEditMontant(candidature.montant_propose ? candidature.montant_propose.toString() : "");
-  };
-
-  const handleUpdateCandidature = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!api || !editingCandidature) return;
-
-    try {
-      // On envoie aussi le statut et la date_soumission pour passer la validation du StoreCandidatureRequest si elle est stricte, 
-      // mais idéalement le backend ne devrait pas en avoir besoin pour un update partiel.
-      // Cependant, j'ai réutilisé StoreCandidatureRequest pour l'update, donc il faut respecter les règles.
-      // Attendons, StoreCandidatureRequest demande 'fournisseur_id', 'statut', 'date_soumission'.
-      // Je vais envoyer ces données pour être sûr.
-      
-      await api.put(`/api/candidatures/${editingCandidature.id}`, {
-        montant_propose: parseFloat(editMontant),
-        fournisseur_id: editingCandidature.fournisseur_id,
-        statut: editingCandidature.statut,
-        date_soumission: editingCandidature.date_soumission
-      });
-
-      setCandidatures(prev => prev.map(c => c.id === editingCandidature.id ? { ...c, montant_propose: parseFloat(editMontant) } : c));
-      setEditingCandidature(null);
-      
-      toast({
-        title: "Candidature mise à jour",
-        description: "Le montant proposé pour vos offres a été modifié.",
-      });
-    } catch (error: unknown) {
-      console.error(error);
-      toast({
-        title: "Erreur",
-        description: getErrorMessage(error, "Impossible de mettre à jour la candidature."),
-        variant: "destructive"
-      });
-    }
-  };
-
   const handleCreateSuggestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!api) return;
@@ -838,32 +668,6 @@ export default function FournisseurDashboard() {
     }
   };
 
-  const getStatutBadge = (statut: string) => {
-    const variants: Record<
-      string,
-      { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ComponentType<{ className?: string }>; label: string }
-    > = {
-      submitted: { variant: "default", icon: Clock, label: "Soumise" },
-      SOUMISE: { variant: "default", icon: Clock, label: "Soumise" }, // Rétrocompatibilité
-      under_review: { variant: "secondary", icon: Eye, label: "En évaluation" },
-      EN_EVALUATION: { variant: "secondary", icon: Eye, label: "En évaluation" },
-      accepted: { variant: "default", icon: CheckCircle, label: "Acceptée" },
-      ACCEPTEE: { variant: "default", icon: CheckCircle, label: "Acceptée" },
-      rejected: { variant: "destructive", icon: XCircle, label: "Rejetée" },
-      REJETEE: { variant: "destructive", icon: XCircle, label: "Rejetée" },
-    };
-
-    const config = variants[statut] || { variant: "default", icon: AlertCircle, label: statut };
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="gap-1">
-        <Icon className="w-3 h-3" />
-        {config.label}
-      </Badge>
-    );
-  };
-
   const stats = {
     notifs_non_lues: portalNotifications.filter(isNotificationUnread).length,
     avis_ouverts_total: avisPublishedTotal,
@@ -881,73 +685,6 @@ export default function FournisseurDashboard() {
         title: "Erreur",
         description: getErrorMessage(error, "Impossible de mettre à jour la notification."),
         variant: "destructive",
-      });
-    }
-  };
-
-  const handlePageChange = (page: number) => {
-    setPagination(prev => ({ ...prev, currentPage: page }));
-  };
-
-  const handlePerPageChange = (perPage: number) => {
-    setPagination(prev => ({ ...prev, perPage, currentPage: 1 }));
-  };
-
-  const handleExportData = async (type: 'excel' | 'pdf') => {
-    if (!api) return;
-    try {
-      // On demande toutes les données pour l'export (paramètre 'all=true' à gérer côté backend si nécessaire, 
-      // sinon on récupère tout ce qu'on peut)
-      const response = await api.get('/api/fournisseur/candidatures', {
-        params: { per_page: 1000 } 
-      });
-      
-      const rawData = response.data.data || response.data;
-      
-      // Définir les colonnes pour l'export
-      const columns = [
-        { header: "Appel d'offres", key: "appel_offre.titre" },
-        { header: "Référence", key: "appel_offre.numero_reference" },
-        { 
-          header: "Date limite", 
-          key: "appel_offre.date_limite",
-          format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString() : "-"
-        },
-        { 
-          header: "Date soumission", 
-          key: "date_soumission",
-          format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString() : "-"
-        },
-        { 
-          header: "Montant (FCFA)", 
-          key: "montant_propose",
-          format: (val: unknown) => val ? Number(val).toLocaleString() : "Non renseigné"
-        },
-        { 
-          header: "Statut", 
-          key: "statut",
-          format: (val: unknown) => val === 'submitted' ? 'Soumise' : 
-                                   val === 'accepted' ? 'Acceptée' : 
-                                   val === 'rejected' ? 'Rejetée' : String(val ?? '')
-        }
-      ];
-
-      // Appeler exportData avec la bonne signature (format, options)
-      exportData(type, {
-        fileName: soumissionEnLigne
-          ? `mes_candidatures_${new Date().toISOString().split("T")[0]}`
-          : `historique_portail_${new Date().toISOString().split("T")[0]}`,
-        title: soumissionEnLigne ? "Mes candidatures" : "Historique portail (dossiers enregistrés)",
-        columns: columns,
-        data: rawData
-      });
-
-    } catch (error) {
-      console.error("Erreur export:", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'exporter les données.",
-        variant: "destructive"
       });
     }
   };
@@ -1367,300 +1104,6 @@ export default function FournisseurDashboard() {
                 </CardContent>
               </Card>
 
-              <Collapsible open={historiqueOuvert} onOpenChange={setHistoriqueOuvert} className="space-y-3">
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between" type="button">
-                    <span>
-                      Dossiers enregistrés dans l&apos;outil — {candidatures.length} ligne(s)
-                    </span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform ${historiqueOuvert ? "rotate-180" : ""}`}
-                    />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-4 pt-2">
-                  <p className="text-sm text-muted-foreground">
-                    Vous ne déposez pas vos offres via ce portail : vous consultez l&apos;avis, téléchargez le cahier puis vous rendez sur place. Les lignes ci-dessous ne correspondent qu&apos;à un éventuel historique ou à une saisie effectuée par le service des marchés.
-                  </p>
-                  {candidatures.length > 0 ? (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleExportData("excel")}>
-                          <Download className="mr-2 h-4 w-4" /> Excel
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleExportData("pdf")}>
-                          <Download className="mr-2 h-4 w-4" /> PDF
-                        </Button>
-                      </div>
-                      <div className="grid gap-4">
-                                          {candidatures.map((candidature) => (
-                                                          <div key={candidature.id} className="border rounded-lg p-6 bg-white hover:shadow-md transition-all">
-                                                              <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-                                                                  <div className="flex-1 space-y-3">
-                                                    <div>
-                                                                          <h3 className="text-lg font-bold text-slate-800">{candidature.appel_offre.titre}</h3>
-                                                                          <Badge variant="outline" className="mt-1">{candidature.appel_offre.numero_reference}</Badge>
-                                                    </div>
-                                                                      
-                                                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                                                                          <div className="flex justify-between md:justify-start gap-2">
-                                                                              <span className="text-muted-foreground">Date limite:</span>
-                                                                              <span className="font-medium">{new Date(candidature.appel_offre.date_limite).toLocaleDateString()}</span>
-                                                    </div>
-                                                                          <div className="flex justify-between md:justify-start gap-2">
-                                                                              <span className="text-muted-foreground">Soumis le:</span>
-                                                                              <span className="font-medium">{new Date(candidature.date_soumission).toLocaleDateString()}</span>
-                                                    </div>
-                                                                          {candidature.montant_propose !== null && candidature.montant_propose !== undefined && candidature.montant_propose > 0 && (
-                                                                              <div className="flex justify-between md:justify-start gap-2">
-                                                                                  <span className="text-muted-foreground">Montant:</span>
-                                                                                  <span className="font-medium text-primary">{candidature.montant_propose.toLocaleString()} FCFA</span>
-                                                      </div>
-                                                    )}
-                                                                          {(!candidature.montant_propose || candidature.montant_propose === 0) && (
-                                                                              <div className="flex justify-between md:justify-start gap-2">
-                                                                                  <span className="text-muted-foreground">Montant:</span>
-                                                                                  <span className="font-medium text-orange-600">Non renseigné</span>
-                                        </div>
-                                      )}
-                                        </div>
-                                                                      
-                                                                      {/* Documents déposés pour cette candidature */}
-                                                                      {candidature.documents && candidature.documents.length > 0 && (
-                                                                        <div className="mt-4 pt-4 border-t border-slate-200">
-                                                                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                                              <FileText className="w-4 h-4" />
-                                                                            Documents déposés ({candidature.documents.length})
-                                                                          </h4>
-                                                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                                            {candidature.documents.map((doc: Document) => (
-                                                                              <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100">
-                                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                                  <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                                                                                  <span className="text-xs text-slate-700 truncate" title={doc.nom_fichier}>
-                                                                                    {doc.nom_fichier}
-                                              </span>
-                                            </div>
-                                              <Button
-                                                size="sm"
-                                                                                  variant="ghost"
-                                                                                  className="h-7 px-2 shrink-0"
-                                                                                  onClick={async () => {
-                                                                                    if (!api) return;
-                                                                                    try {
-                                                                                      const response = await api.get(`/api/documents/${doc.id}/download`, {
-                                                                                        responseType: 'blob'
-                                                                                      });
-                                                                                      
-                                                                                      const blob = new Blob([response.data]);
-                                                                                      const contentType = response.headers['content-type'] || doc.type_fichier || 'application/pdf';
-                                                                                      
-                                                                                      // Pour les PDFs et images, ouvrir dans un nouvel onglet
-                                                                                      if (contentType.includes('pdf') || contentType.includes('image')) {
-                                                                                        const url = window.URL.createObjectURL(blob);
-                                                                                        window.open(url, '_blank', 'noopener,noreferrer');
-                                                                                        // Nettoyer l'URL après un délai
-                                                                                        setTimeout(() => window.URL.revokeObjectURL(url), 100);
-                                                                                      } else {
-                                                                                        // Pour les autres types, télécharger
-                                                                                        const url = window.URL.createObjectURL(blob);
-                                                                                        const link = document.createElement('a');
-                                                                                        link.href = url;
-                                                                                        link.target = '_blank';
-                                                                                        link.rel = 'noopener noreferrer';
-                                                                                        
-                                                                                        const extension = contentType.includes('word') ? '.docx'
-                                                                                          : contentType.includes('excel') ? '.xlsx'
-                                                                                          : '.pdf';
-                                                                                        
-                                                                                        link.download = doc.nom_fichier || `document${extension}`;
-                                                                                        document.body.appendChild(link);
-                                                                                        link.click();
-                                                                                        document.body.removeChild(link);
-                                                                                        window.URL.revokeObjectURL(url);
-                                                                                      }
-                                                                                    } catch (error: unknown) {
-                                                                                      console.error("Erreur ouverture document:", error);
-                                                                                      toast({
-                                                                                        title: "Erreur",
-                                                                                        description: getErrorMessage(error, "Impossible d'ouvrir le document."),
-                                                                                        variant: "destructive"
-                                                                                      });
-                                                                                    }
-                                                                                  }}
-                                              >
-                                                                                  <Eye className="w-3 h-3 mr-1" />
-                                                                                  Voir
-                                              </Button>
-                                                                              </div>
-                                                                            ))}
-                                                                          </div>
-                                                      </div>
-                                                    )}
-                                                                      
-                                                                      {/* Section Commentaires */}
-                                                                      <div className="mt-4 pt-4 border-t border-slate-200">
-                                                                        <div className="flex items-center justify-between mb-3">
-                                                                          <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                                                                            <MessageSquare className="w-4 h-4" />
-                                                                            Commentaires ({candidatureComments[candidature.id]?.length || 0})
-                                                                          </h4>
-                                              <Button
-                                                                            variant="ghost"
-                                                size="sm"
-                                                                            onClick={() => {
-                                                                              if (expandedCandidatureId === candidature.id) {
-                                                                                setExpandedCandidatureId(null);
-                                                                              } else {
-                                                                                setExpandedCandidatureId(candidature.id);
-                                                                                // Charger les commentaires si pas encore chargés
-                                                                                if (!candidatureComments[candidature.id] && api) {
-                                                                                  api.get(`/api/candidatures/${candidature.id}/comments`)
-                                                                                    .then(res => {
-                                                                                      setCandidatureComments(prev => ({
-                                                                                        ...prev,
-                                                                                        [candidature.id]: Array.isArray(res.data) ? res.data : []
-                                                                                      }));
-                                                                                    })
-                                                                                    .catch(err => console.error("Erreur chargement commentaires:", err));
-                                                                                }
-                                                                              }
-                                                                            }}
-                                                                          >
-                                                                            {expandedCandidatureId === candidature.id ? "Masquer" : "Voir"}
-                                              </Button>
-                                            </div>
-                                                                        
-                                                                        {expandedCandidatureId === candidature.id && (
-                                                                          <div className="space-y-3">
-                                                                            {/* Liste des commentaires */}
-                                                                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                                                              {candidatureComments[candidature.id]?.length === 0 ? (
-                                                                                <p className="text-xs text-muted-foreground text-center py-2">
-                                                                                  Aucun commentaire pour le moment.
-                                                                                </p>
-                                                                              ) : (
-                                                                                candidatureComments[candidature.id]?.map((comment) => (
-                                                                                  <div key={comment.id} className={`p-2 rounded-lg border text-xs ${comment.user?.id === user?.id ? 'bg-primary/5 border-primary/20' : 'bg-slate-50 border-slate-200'}`}>
-                                                                                    <div className="flex items-start justify-between mb-1">
-                                                                                      <span className="font-semibold text-slate-700">
-                                                                                        {comment.user?.name || 'Utilisateur'}
-                                                                                      </span>
-                                                                                      <span className="text-muted-foreground">
-                                                                                        {new Date(comment.created_at).toLocaleString()}
-                                                                                      </span>
-                                          </div>
-                                                                                    <p className="text-slate-600 whitespace-pre-wrap">{comment.message}</p>
-                                                                                  </div>
-                                                                                ))
-                                                                              )}
-                                      </div>
-                      
-                                                                            {/* Formulaire de réponse */}
-                                                                            <div className="space-y-2 border-t pt-2">
-                                                                              <Textarea
-                                                                                placeholder="Répondre au responsable..."
-                                                                                value={newComments[candidature.id] || ""}
-                                                                                onChange={(e) => setNewComments(prev => ({
-                                                                                  ...prev,
-                                                                                  [candidature.id]: e.target.value
-                                                                                }))}
-                                                                                rows={2}
-                                                                                className="resize-none text-xs"
-                                                                              />
-                                                                              <div className="flex justify-end">
-                                              <Button
-                                                size="sm"
-                                                                                  onClick={async () => {
-                                                                                    if (!api || !newComments[candidature.id]?.trim()) return;
-                                                                                    
-                                                                                    setSubmittingComments(prev => ({ ...prev, [candidature.id]: true }));
-                                                                                    try {
-                                                                                      const response = await api.post(`/api/candidatures/${candidature.id}/comments`, {
-                                                                                        message: newComments[candidature.id].trim()
-                                                                                      });
-                                                                                      
-                                                                                      setCandidatureComments(prev => ({
-                                                                                        ...prev,
-                                                                                        [candidature.id]: [...(prev[candidature.id] || []), response.data]
-                                                                                      }));
-                                                                                      setNewComments(prev => ({ ...prev, [candidature.id]: "" }));
-                                                                                      toast({
-                                                                                        title: "Commentaire envoyé",
-                                                                                        description: "Votre réponse a été envoyée au responsable.",
-                                                                                      });
-                                                                                    } catch (error: unknown) {
-                                                                                      console.error("Erreur envoi commentaire:", error);
-                                                                                      toast({
-                                                                                        title: "Erreur",
-                                                                                        description: getErrorMessage(error, "Impossible d'envoyer le commentaire."),
-                                                                                        variant: "destructive"
-                                                                                      });
-                                                                                    } finally {
-                                                                                      setSubmittingComments(prev => ({ ...prev, [candidature.id]: false }));
-                                                                                    }
-                                                                                  }}
-                                                                                  disabled={!newComments[candidature.id]?.trim() || submittingComments[candidature.id]}
-                                                                                  className="h-7 text-xs"
-                                                                                >
-                                                                                  {submittingComments[candidature.id] ? (
-                                                                                    <>
-                                                                                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent mr-1"></div>
-                                                                                      Envoi...
-                                                                                    </>
-                                                                                  ) : (
-                                                                                    <>
-                                                                                      <Send className="w-3 h-3 mr-1" />
-                                                                                      Envoyer
-                                                                                    </>
-                                                                                  )}
-                                              </Button>
-                                                                              </div>
-                                                                            </div>
-                                                                          </div>
-                                                                        )}
-                                                                      </div>
-                                                  </div>
-                                                                  <div className="flex flex-col items-end gap-2">
-                                                                      {getStatutBadge(candidature.statut)}
-                                                                      {soumissionEnLigne &&
-                                                                      (candidature.statut === 'submitted' || candidature.statut === 'SOUMISE') &&
-                                                                       candidature.appel_offre.statut !== 'closed' && (
-                                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(candidature)}>
-                                                                            Modifier
-                                              </Button>
-                                                                      )}
-                                                                      {candidature.appel_offre.statut === 'closed' && (
-                                                                        <Badge variant="outline" className="text-xs">
-                                                                          Appel d'offres clôturé
-                                                                        </Badge>
-                                                                      )}
-                                                </div>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-
-                                      {candidatures.length > 0 && (
-                                        <div className="mt-6">
-                                          <DataTablePagination
-                                            currentPage={pagination.currentPage}
-                                            totalPages={pagination.totalPages}
-                                            totalItems={pagination.totalItems}
-                                            perPage={pagination.perPage}
-                                            onPageChange={handlePageChange}
-                                            onPerPageChange={handlePerPageChange}
-                                          />
-                                        </div>
-                                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground py-2">
-                      Aucune ligne : comportement normal tant que la procédure est uniquement présentielle (pas de candidature en ligne).
-                    </p>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
             </div>
         )}
 
@@ -2388,40 +1831,6 @@ export default function FournisseurDashboard() {
                 <Button type="submit">Enregistrer</Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODALE DE MODIFICATION CANDIDATURE (NOUVEAU) */}
-      <Dialog open={!!editingCandidature} onOpenChange={(open) => !open && setEditingCandidature(null)}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Modifier ma candidature</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleUpdateCandidature} className="space-y-4 py-4">
-                      <div className="space-y-2">
-              <Label>Appel d'offres</Label>
-              <div className="p-3 bg-slate-50 border rounded-md text-sm font-medium">
-                {editingCandidature?.appel_offre.titre}
-              </div>
-                      </div>
-
-                      <div className="space-y-2">
-              <Label htmlFor="edit-montant">Montant de vos offres (FCFA)</Label>
-                        <Input
-                id="edit-montant"
-                type="number"
-                min="0"
-                value={editMontant}
-                onChange={(e) => setEditMontant(e.target.value)}
-                required
-              />
-                    </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingCandidature(null)}>Annuler</Button>
-              <Button type="submit">Mettre à jour</Button>
-            </DialogFooter>
-                  </form>
         </DialogContent>
       </Dialog>
 
