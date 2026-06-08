@@ -189,19 +189,8 @@ class FournisseurRegistrationController extends Controller
      */
     private function notifierAdmins(string $raisonSociale, int $fournisseurId): void
     {
-        $adminIds = User::whereHas('role', function ($q) {
-            $q->where('name', 'ADMIN');
-        })->pluck('id');
-
-        if ($adminIds->isEmpty()) {
-            return;
-        }
-
-        $service = app(NotificationService::class);
         $message = "Nouveau dossier fournisseur à valider : « {$raisonSociale} » (dossier #{$fournisseurId}). Vérifiez les pièces légales avant validation.";
 
-        foreach ($adminIds as $id) {
-            $service->notifyUser((int) $id, $message);
-        }
+        app(NotificationService::class)->notifyAdmins($message);
     }
 }

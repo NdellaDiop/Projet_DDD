@@ -117,7 +117,8 @@ class CandidatureCommentController extends Controller
                 $message = "Nouveau commentaire du fournisseur sur le dossier pour l'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}).";
                 app(NotificationService::class)->notifyUser(
                     $candidature->appelOffre->responsableMarche->user->id,
-                    $message
+                    $message,
+                    \App\Models\Notification::AUDIENCE_PRM
                 );
             }
         }

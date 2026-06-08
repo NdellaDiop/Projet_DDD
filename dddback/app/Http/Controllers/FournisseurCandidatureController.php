@@ -59,7 +59,8 @@ class FournisseurCandidatureController extends Controller
                 $this->notificationService->sendCandidatureReceivedEmail($responsable, $candidature);
                 $this->notificationService->notifyUser(
                     $responsable->id,
-                    "Nouveau dossier / soumission enregistré pour l'appel d'offres « {$candidature->appelOffre->titre} »."
+                    "Nouveau dossier / soumission enregistré pour l'appel d'offres « {$candidature->appelOffre->titre} ».",
+                    \App\Models\Notification::AUDIENCE_PRM
                 );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email candidature reçue: " . $e->getMessage());

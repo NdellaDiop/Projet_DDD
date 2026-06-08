@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Document;
 use App\Models\Fournisseur;
 use App\Models\LogActivite;
-use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 class FournisseurValidationService
@@ -170,14 +169,6 @@ class FournisseurValidationService
 
     private function notifierAdminsAutoValidation(Fournisseur $fournisseur, string $source): void
     {
-        $adminIds = User::whereHas('role', function ($q) {
-            $q->where('name', 'ADMIN');
-        })->pluck('id');
-
-        if ($adminIds->isEmpty()) {
-            return;
-        }
-
         $labels = [
             'inscription' => 'inscription',
             'upload_document' => 'dépôt de pièce',
@@ -188,9 +179,7 @@ class FournisseurValidationService
         $message = "Compte fournisseur validé automatiquement : « {$fournisseur->nom_entreprise} » "
             ."(#{$fournisseur->id}, via {$libelleSource}). Vous pouvez toujours rejeter le compte si nécessaire.";
 
-        foreach ($adminIds as $id) {
-            $this->notificationService->notifyUser((int) $id, $message);
-        }
+        $this->notificationService->notifyAdmins($message);
     }
 
     private function journaliser(string $action, string $details): void

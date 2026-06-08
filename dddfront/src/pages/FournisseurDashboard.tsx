@@ -117,6 +117,7 @@ interface Suggestion {
 interface InAppNotification {
   id: number;
   message: string;
+  audience?: string;
   is_read: boolean | 0 | 1;
   created_at: string;
 }
@@ -140,6 +141,22 @@ function unwrapList<T>(payload: unknown): T[] {
 
 function isNotificationUnread(n: InAppNotification): boolean {
   return n.is_read === false || n.is_read === 0 || !n.is_read;
+}
+
+/** Notifications réservées aux admins ou PRM — ne doivent pas apparaître côté fournisseur. */
+function isFournisseurRelevantNotification(n: InAppNotification): boolean {
+  if (n.audience === "admin" || n.audience === "prm") return false;
+
+  const blockedPhrases = [
+    "Nouveau dossier fournisseur à valider",
+    "validé automatiquement",
+    "Vérifiez les pièces légales avant validation",
+    "vous a été assigné",
+    "Nouveau dossier / soumission enregistré",
+    "Nouveau commentaire du fournisseur sur le dossier",
+  ];
+
+  return !blockedPhrases.some((phrase) => n.message.includes(phrase));
 }
 
 export default function FournisseurDashboard() {
@@ -214,7 +231,9 @@ export default function FournisseurDashboard() {
         results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<{ data: T }>).value.data : null;
 
       const notificationsPayload = pick<InAppNotification[] | { data?: InAppNotification[] }>(3);
-      setPortalNotifications(unwrapList<InAppNotification>(notificationsPayload));
+      setPortalNotifications(
+        unwrapList<InAppNotification>(notificationsPayload).filter(isFournisseurRelevantNotification)
+      );
 
       const avisPayload = pick<{
         data?: AvisOuvertResume[];
@@ -668,8 +687,10 @@ export default function FournisseurDashboard() {
     }
   };
 
+  const fournisseurNotifications = portalNotifications.filter(isFournisseurRelevantNotification);
+
   const stats = {
-    notifs_non_lues: portalNotifications.filter(isNotificationUnread).length,
+    notifs_non_lues: fournisseurNotifications.filter(isNotificationUnread).length,
     avis_ouverts_total: avisPublishedTotal,
     documents_total: documents.length,
     mes_achats_total: mesAchats.length,
@@ -954,9 +975,9 @@ export default function FournisseurDashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
-                {portalNotifications.filter(isNotificationUnread).length > 0 ? (
+                {fournisseurNotifications.filter(isNotificationUnread).length > 0 ? (
                   <div className="space-y-3">
-                    {portalNotifications
+                    {fournisseurNotifications
                       .filter(isNotificationUnread)
                       .slice(0, 5)
                       .map((n) => (
@@ -1033,11 +1054,11 @@ export default function FournisseurDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {portalNotifications.length === 0 ? (
+                  {fournisseurNotifications.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Aucune notification pour le moment.</p>
                   ) : (
                     <ul className="divide-y rounded-lg border bg-white">
-                      {portalNotifications.map((n) => (
+                      {fournisseurNotifications.map((n) => (
                         <li
                           key={n.id}
                           className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:justify-between ${isNotificationUnread(n) ? "bg-amber-50/50" : ""}`}

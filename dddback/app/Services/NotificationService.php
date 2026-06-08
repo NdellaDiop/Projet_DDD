@@ -53,12 +53,30 @@ class NotificationService
         Mail::to($fournisseurUser->email)->send(new CandidatureRejected($candidature));
     }
 
-    public function notifyUser(int $userId, string $message): void
-    {
+    public function notifyUser(
+        int $userId,
+        string $message,
+        string $audience = Notification::AUDIENCE_USER
+    ): void {
         Notification::create([
             'user_id' => $userId,
             'message' => $message,
+            'audience' => $audience,
             'is_read' => false,
         ]);
+    }
+
+    /**
+     * Notifie tous les comptes administrateurs (audience admin).
+     */
+    public function notifyAdmins(string $message): void
+    {
+        $adminIds = User::whereHas('role', function ($q) {
+            $q->where('name', 'ADMIN');
+        })->pluck('id');
+
+        foreach ($adminIds as $id) {
+            $this->notifyUser((int) $id, $message, Notification::AUDIENCE_ADMIN);
+        }
     }
 }

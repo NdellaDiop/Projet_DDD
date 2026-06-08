@@ -355,7 +355,8 @@ class AppelOffreController extends Controller
                 );
                 $this->notificationService->notifyUser(
                     $appelOffre->responsableMarche->user->id,
-                    "L'avis d'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}) vous a été assigné."
+                    "L'avis d'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}) vous a été assigné.",
+                    \App\Models\Notification::AUDIENCE_PRM
                 );
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email assignation AO: " . $e->getMessage());

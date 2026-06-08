@@ -21,7 +21,18 @@ class NotificationController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $notifications = $user->notifications()->latest()->get(); // Les notifications de l'utilisateur actuel
+        $notifications = $user->notifications()->latest()->get();
+
+        if ($user->isFournisseur()) {
+            $notifications = $notifications
+                ->filter(fn (Notification $notification) => $notification->isVisibleToFournisseur())
+                ->values();
+        } elseif ($user->isResponsableMarche()) {
+            $notifications = $notifications
+                ->filter(fn (Notification $notification) => $notification->audience !== Notification::AUDIENCE_ADMIN)
+                ->values();
+        }
+
         return response()->json($notifications);
     }
 
