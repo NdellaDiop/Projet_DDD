@@ -586,14 +586,6 @@ export default function ResponsableDashboard() {
           });
           return;
         }
-        if (raw > 50_000_000) {
-          toast({
-            title: "Montant trop élevé",
-            description: "Le montant maximum autorisé est 50 000 000 FCFA.",
-            variant: "destructive",
-          });
-          return;
-        }
       }
       if (!newTender.mode_passation.trim() || !newTender.type_marche) {
         toast({
@@ -670,8 +662,16 @@ export default function ResponsableDashboard() {
     }
   };
 
-  const handlePublish = async (id: number) => {
+  const handlePublish = async (id: number, titre?: string) => {
     if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Confirmer la publication de ${label} ?\n\nL'avis sera visible par les fournisseurs. Vérifiez les pièces et les modalités de dépôt.`
+      )
+    ) {
+      return;
+    }
     try {
       await api.post(`/api/appels-offres/${id}/publish`);
       toast({ title: "Publié", description: "L'appel d'offres est maintenant visible." });
@@ -719,8 +719,16 @@ export default function ResponsableDashboard() {
     }
   };
 
-  const handleClose = async (id: number) => {
+  const handleClose = async (id: number, titre?: string) => {
     if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Confirmer la clôture de ${label} ?\n\nLe dépôt des plis ne sera plus ouvert.`
+      )
+    ) {
+      return;
+    }
     try {
       await api.post(`/api/appels-offres/${id}/close`);
       toast({ title: "Clôturé", description: "L'appel d'offres est clôturé." });
@@ -1526,7 +1534,7 @@ export default function ResponsableDashboard() {
                                             size="sm"
                                             className="h-8 bg-blue-600 hover:bg-blue-700"
                                             disabled={(ao.pieces_ao_manquantes?.length ?? 0) > 0}
-                                            onClick={() => handlePublish(ao.id)}
+                                            onClick={() => handlePublish(ao.id, ao.titre)}
                                             title={
                                               (ao.pieces_ao_manquantes?.length ?? 0) > 0
                                                 ? `Ajoutez : ${(ao.pieces_ao_manquantes ?? [])
@@ -1539,7 +1547,7 @@ export default function ResponsableDashboard() {
                                           </Button>
                                         )}
                                         {ao.statut === 'published' && (
-                                            <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id)} title="Clôturer">
+                                            <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id, ao.titre)} title="Clôturer">
                                                 <Archive className="w-3 h-3 mr-1" /> Clôturer
                                             </Button>
                                         )}
@@ -1839,14 +1847,12 @@ export default function ResponsableDashboard() {
                         id="prm_cahier_prix_xof"
                         type="number"
                         min={1}
-                        max={50000000}
                         step={1}
                         value={newTender.cahier_prix_xof}
                         onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
                         placeholder="Ex: 25000"
                         required
                       />
-                      <p className="text-xs text-muted-foreground">Maximum : 50 000 000 FCFA.</p>
                     </div>
                   )}
                 </div>

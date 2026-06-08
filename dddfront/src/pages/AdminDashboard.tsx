@@ -56,6 +56,8 @@ import {
   Download,
   FileClock,
   Award,
+  RotateCcw,
+  Undo2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -1064,14 +1066,6 @@ const AdminDashboard: React.FC = () => {
           });
           return;
         }
-        if (raw > 50_000_000) {
-          toast({
-            title: "Montant trop élevé",
-            description: "Le montant maximum autorisé est 50 000 000 FCFA.",
-            variant: "destructive",
-          });
-          return;
-        }
       }
       if (!newTender.mode_passation.trim() || !newTender.type_marche) {
         toast({
@@ -1149,8 +1143,16 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handlePublish = async (id: number) => {
+  const handlePublish = async (id: number, titre?: string) => {
     if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Confirmer la publication de ${label} ?\n\nL'avis sera visible par les fournisseurs. Vérifiez les pièces jointes et les modalités de dépôt avant de continuer.`
+      )
+    ) {
+      return;
+    }
     try {
       await api.post(`/api/appels-offres/${id}/publish`);
       toast({ title: "Publié", description: "L'appel d'offres est maintenant visible." });
@@ -1202,14 +1204,68 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleClose = async (id: number) => {
+  const handleClose = async (id: number, titre?: string) => {
     if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Confirmer la clôture de ${label} ?\n\nLe dépôt des plis ne sera plus ouvert. Vous pourrez réouvrir l'appel d'offres plus tard si nécessaire.`
+      )
+    ) {
+      return;
+    }
     try {
       await api.post(`/api/appels-offres/${id}/close`);
       toast({ title: "Clôturé", description: "L'appel d'offres est clôturé ; le dépôt des plis n'est plus ouvert." });
       loadMesAppelsOffres();
     } catch (error) {
       toast({ title: "Erreur", description: "Impossible de clôturer.", variant: "destructive" });
+    }
+  };
+
+  const handleReopen = async (id: number, titre?: string) => {
+    if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Réouvrir ${label} ?\n\nL'appel d'offres repassera au statut « publié » (ouvert).`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.post(`/api/appels-offres/${id}/reopen`);
+      toast({ title: "Réouvert", description: "L'appel d'offres est de nouveau publié." });
+      loadMesAppelsOffres();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de réouvrir cet appel d'offres."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUnpublish = async (id: number, titre?: string) => {
+    if (!api) return;
+    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    if (
+      !confirm(
+        `Repasser ${label} en brouillon ?\n\nIl ne sera plus visible publiquement jusqu'à une nouvelle publication.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.post(`/api/appels-offres/${id}/unpublish`);
+      toast({ title: "Brouillon", description: "L'appel d'offres n'est plus publié." });
+      loadMesAppelsOffres();
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de repasser en brouillon."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -1378,13 +1434,28 @@ const AdminDashboard: React.FC = () => {
 
   const handleAssignAO = async () => {
     if (!api || !selectedAOForAssign || !selectedResponsableId) return;
+
+    const prm = responsables.find((r) => r.id === selectedResponsableId);
+    const prmLabel = prm?.user?.name ?? `PRM #${selectedResponsableId}`;
+    const isChange = Boolean(
+      selectedAOForAssign.responsable_marche_id &&
+        selectedAOForAssign.responsable_marche_id !== selectedResponsableId
+    );
+    const confirmMsg = isChange
+      ? `Confirmer le changement de PRM pour « ${selectedAOForAssign.titre} » ?\n\nNouveau responsable : ${prmLabel}`
+      : `Confirmer l'assignation de « ${selectedAOForAssign.titre} » à ${prmLabel} ?`;
+
+    if (!confirm(confirmMsg)) return;
+
     try {
       await api.post(`/api/appels-offres/${selectedAOForAssign.id}/assign`, {
         responsable_marche_id: selectedResponsableId
       });
       toast({ 
         title: "Succès", 
-        description: "L'appel d'offres a été assigné au responsable." 
+        description: isChange
+          ? "Le PRM assigné a été modifié."
+          : "L'appel d'offres a été assigné au responsable." 
       });
       setIsAssignAOOpen(false);
       setSelectedAOForAssign(null);
@@ -2289,12 +2360,21 @@ const AdminDashboard: React.FC = () => {
                           </TableCell>
                           {/* Dépôt en présentiel : pas de colonne candidatures */}
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              {!ao.responsable_marche_id && (
-                                <Button size="sm" variant="outline" className="h-8 border border-primary text-primary hover:bg-primary/10" onClick={() => handleOpenAssignModal(ao)} title="Assigner à une personne responsable du marché (PRM)">
-                                  <User className="w-3 h-3 mr-1" /> Assigner
-                                </Button>
-                              )}
+                            <div className="flex justify-end gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border border-primary text-primary hover:bg-primary/10"
+                                onClick={() => handleOpenAssignModal(ao)}
+                                title={
+                                  ao.responsable_marche_id
+                                    ? "Changer la personne responsable du marché (PRM)"
+                                    : "Assigner à une personne responsable du marché (PRM)"
+                                }
+                              >
+                                <User className="w-3 h-3 mr-1" />{" "}
+                                {ao.responsable_marche_id ? "Changer PRM" : "Assigner"}
+                              </Button>
                               {(ao.statut === "draft" || ao.statut === "published") && (
                                 <Button
                                   size="sm"
@@ -2320,7 +2400,7 @@ const AdminDashboard: React.FC = () => {
                                   size="sm"
                                   className="h-8 bg-blue-600 hover:bg-blue-700"
                                   disabled={(ao.pieces_ao_manquantes?.length ?? 0) > 0}
-                                  onClick={() => handlePublish(ao.id)}
+                                  onClick={() => handlePublish(ao.id, ao.titre)}
                                   title={
                                     (ao.pieces_ao_manquantes?.length ?? 0) > 0
                                       ? `Ajoutez : ${(ao.pieces_ao_manquantes ?? [])
@@ -2333,8 +2413,30 @@ const AdminDashboard: React.FC = () => {
                                 </Button>
                               )}
                               {ao.statut === 'published' && (
-                                <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id)} title="Clôturer">
-                                  <Archive className="w-3 h-3 mr-1" /> Clôturer
+                                <>
+                                  <Button size="sm" variant="secondary" className="h-8 border border-slate-200" onClick={() => handleClose(ao.id, ao.titre)} title="Clôturer">
+                                    <Archive className="w-3 h-3 mr-1" /> Clôturer
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 border-amber-200 text-amber-800 hover:bg-amber-50"
+                                    onClick={() => handleUnpublish(ao.id, ao.titre)}
+                                    title="Repasser en brouillon"
+                                  >
+                                    <Undo2 className="w-3 h-3 mr-1" /> Brouillon
+                                  </Button>
+                                </>
+                              )}
+                              {ao.statut === 'closed' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 border-green-200 text-green-800 hover:bg-green-50"
+                                  onClick={() => handleReopen(ao.id, ao.titre)}
+                                  title="Réouvrir l'appel d'offres"
+                                >
+                                  <RotateCcw className="w-3 h-3 mr-1" /> Réouvrir
                                 </Button>
                               )}
                               {/* Dépôt en présentiel : pas de candidatures en ligne */}
@@ -3036,14 +3138,12 @@ const AdminDashboard: React.FC = () => {
                     id="cahier_prix_xof"
                     type="number"
                     min={1}
-                    max={50000000}
                     step={1}
                     value={newTender.cahier_prix_xof}
                     onChange={(e) => setNewTender({ ...newTender, cahier_prix_xof: e.target.value })}
                     placeholder="Ex: 25000"
                     required
                   />
-                  <p className="text-xs text-muted-foreground">Maximum : 50 000 000 FCFA.</p>
                 </div>
               )}
             </div>
@@ -3632,7 +3732,16 @@ const AdminDashboard: React.FC = () => {
       }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Assigner un Appel d'Offre</DialogTitle>
+            <DialogTitle>
+              {selectedAOForAssign?.responsable_marche_id
+                ? "Changer le PRM assigné"
+                : "Assigner un Appel d'Offre"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAOForAssign?.responsable_marche_id
+                ? "Sélectionnez un autre responsable de marché pour cet appel d'offres."
+                : "Choisissez la personne responsable du marché (PRM) en charge de cet appel d'offres."}
+            </DialogDescription>
           </DialogHeader>
           {selectedAOForAssign && (
             <div className="space-y-4 py-4">
@@ -3668,9 +3777,12 @@ const AdminDashboard: React.FC = () => {
                 <Button variant="outline" onClick={() => setIsAssignAOOpen(false)}>Annuler</Button>
                 <Button 
                   onClick={handleAssignAO} 
-                  disabled={!selectedResponsableId}
+                  disabled={
+                    !selectedResponsableId ||
+                    selectedResponsableId === selectedAOForAssign.responsable_marche_id
+                  }
                 >
-                  Assigner
+                  {selectedAOForAssign.responsable_marche_id ? "Confirmer le changement" : "Assigner"}
                 </Button>
               </DialogFooter>
             </div>

@@ -62,7 +62,7 @@ class StoreAppelOffreRequest extends FormRequest
             'responsable_marche_id' => $isAdmin ? 'nullable|exists:responsables_marche,id' : 'required|exists:responsables_marche,id',
             'statut' => 'required|in:draft,published,closed,archived',
             'cahier_paiement_requis' => 'sometimes|boolean',
-            'cahier_prix_xof' => ['nullable', 'integer', 'min:1', 'max:50000000', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],
+            'cahier_prix_xof' => ['nullable', 'integer', 'min:1', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],
         ];
     }
 

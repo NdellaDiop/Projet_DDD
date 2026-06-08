@@ -171,6 +171,48 @@ class AppelOffreController extends Controller
         return new AppelOffreResource($appelOffre);
     }
 
+    /**
+     * Réouvre un appel d'offres clôturé (admin uniquement).
+     */
+    public function reopen(Request $request, AppelOffre $appelOffre)
+    {
+        if (! auth()->user()?->isAdmin()) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        if ($appelOffre->statut !== AppelOffre::STATUS_CLOSED) {
+            return response()->json([
+                'message' => 'Seul un appel d\'offres clôturé peut être réouvert.',
+            ], 422);
+        }
+
+        $appelOffre = $this->appelOffreService->reopenAppelOffre($appelOffre);
+        $this->log('reopen_appel_offre', "Réouverture AO #{$appelOffre->id}");
+
+        return new AppelOffreResource($appelOffre);
+    }
+
+    /**
+     * Repasse un appel d'offres publié en brouillon (admin uniquement).
+     */
+    public function unpublish(Request $request, AppelOffre $appelOffre)
+    {
+        if (! auth()->user()?->isAdmin()) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        if ($appelOffre->statut !== AppelOffre::STATUS_PUBLISHED) {
+            return response()->json([
+                'message' => 'Seul un appel d\'offres publié peut repasser en brouillon.',
+            ], 422);
+        }
+
+        $appelOffre = $this->appelOffreService->unpublishAppelOffre($appelOffre);
+        $this->log('unpublish_appel_offre', "Retour brouillon AO #{$appelOffre->id}");
+
+        return new AppelOffreResource($appelOffre);
+    }
+
     public function destroy(AppelOffre $appelOffre)
     {
         $this->appelOffreService->deleteAppelOffre($appelOffre);

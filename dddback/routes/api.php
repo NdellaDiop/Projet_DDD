@@ -87,8 +87,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('responsable/profile', [ResponsableCandidatureController::class, 'updateProfile']);
     });
 
-    // Assignation d'AO (Admin uniquement)
+    // Assignation / retours arrière statut AO (Admin uniquement)
     Route::post('appels-offres/{appel_offre}/assign', [AppelOffreController::class, 'assign'])->middleware('role:ADMIN');
+    Route::post('appels-offres/{appel_offre}/reopen', [AppelOffreController::class, 'reopen'])->middleware('role:ADMIN');
+    Route::post('appels-offres/{appel_offre}/unpublish', [AppelOffreController::class, 'unpublish'])->middleware('role:ADMIN');
 
     // CANDIDATURES
     Route::post('appels-offres/{appel_offre}/candidatures', [CandidatureController::class, 'store'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);

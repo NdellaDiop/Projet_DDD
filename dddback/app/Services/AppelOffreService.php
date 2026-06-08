@@ -139,4 +139,20 @@ class AppelOffreService
 
         return $appelOffre;
     }
+
+    /** Réouvre un AO clôturé (admin — retour en arrière). */
+    public function reopenAppelOffre(AppelOffre $appelOffre): AppelOffre
+    {
+        $appelOffre->update(['statut' => AppelOffre::STATUS_PUBLISHED]);
+
+        return $appelOffre->fresh();
+    }
+
+    /** Repasse un AO publié en brouillon (admin — retour en arrière). */
+    public function unpublishAppelOffre(AppelOffre $appelOffre): AppelOffre
+    {
+        $appelOffre->update(['statut' => AppelOffre::STATUS_DRAFT]);
+
+        return $appelOffre->fresh();
+    }
 }

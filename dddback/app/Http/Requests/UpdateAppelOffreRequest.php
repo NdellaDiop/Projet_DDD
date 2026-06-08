@@ -69,7 +69,7 @@ class UpdateAppelOffreRequest extends FormRequest
             'date_publication' => 'sometimes|required|date',
             'date_limite_depot' => 'sometimes|required|date|after:date_publication',
             'cahier_paiement_requis' => 'sometimes|boolean',
-            'cahier_prix_xof' => ['nullable', 'integer', 'min:1', 'max:50000000', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],
+            'cahier_prix_xof' => ['nullable', 'integer', 'min:1', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],
         ];
     }
 }
