@@ -429,7 +429,13 @@ const AppelOffreDetails = () => {
 
   const daysLeft = calculateDaysLeft(appelOffre.date_limite_depot);
   const isClosed = daysLeft === 0 || appelOffre.statut === 'closed';
-  const dashboardBackHref = isAdmin ? "/admin" : isResponsableMarche ? "/responsable/dashboard" : "/appels-offres";
+  const dashboardBackHref = isAdmin
+    ? "/admin"
+    : isResponsableMarche
+      ? "/responsable/dashboard"
+      : isFournisseur
+        ? "/fournisseur/dashboard"
+        : "/appels-offres";
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
