@@ -90,15 +90,22 @@ class AdminResponsableController extends Controller
             'departement' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
+            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $telephone = SenegalPhoneNumber::normalize($request->telephone);
 
         // Mise à jour User
-        $user->update([
+        $userData = [
             'name' => $request->name,
             'email' => $request->email,
-        ]);
+        ];
+
+        if ($request->filled('password')) {
+            $userData['password'] = Hash::make($request->password);
+        }
+
+        $user->update($userData);
 
         // Mise à jour Responsable
         $responsable->update([

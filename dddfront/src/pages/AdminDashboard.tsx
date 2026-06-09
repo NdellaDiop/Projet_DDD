@@ -201,6 +201,21 @@ interface Fournisseur {
   pieces_obligatoires_presentes?: string[];
   pieces_obligatoires_manquantes?: string[];
   dossier_complet?: boolean;
+  compte_actif?: boolean;
+}
+
+interface ContactMessage {
+  id: number;
+  nom: string | null;
+  email: string;
+  sujet: string;
+  message: string;
+  statut: "nouveau" | "lu" | "archive";
+  created_at: string;
+  user?: {
+    name: string;
+    email: string;
+  };
 }
 
 interface ResponsableMarche {
@@ -299,6 +314,8 @@ interface EditingResponsable {
   departement: string;
   fonction: string;
   telephone: string;
+  password: string;
+  password_confirmation: string;
 }
 
 interface CommentItem {
@@ -415,6 +432,32 @@ const AdminDashboard: React.FC = () => {
     return fallback;
   };
 
+  const getApiErrorDetails = (
+    error: unknown,
+    fallback: string
+  ): { message: string; libellesManquantes?: string[] } => {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error
+    ) {
+      const data = (error as {
+        response?: { data?: { message?: string; libelles_manquantes?: string[] } };
+      }).response?.data;
+
+      if (data) {
+        return {
+          message: typeof data.message === "string" ? data.message : fallback,
+          libellesManquantes: Array.isArray(data.libelles_manquantes)
+            ? data.libelles_manquantes
+            : undefined,
+        };
+      }
+    }
+
+    return { message: getErrorMessage(error, fallback) };
+  };
+
   // États principaux
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -427,6 +470,7 @@ const AdminDashboard: React.FC = () => {
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [responsables, setResponsables] = useState<ResponsableMarche[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const lastGlobalFetchRef = useRef(0);
   const lastAppelsFetchRef = useRef(0);
@@ -510,6 +554,7 @@ const AdminDashboard: React.FC = () => {
         api.get('/api/admin/dashboard-stats'),
         api.get('/api/admin/suggestions'),
         api.get('/api/admin/recent-activities'),
+        api.get('/api/admin/contact'),
       ]);
 
       if (results[0].status === 'fulfilled') {
@@ -531,6 +576,11 @@ const AdminDashboard: React.FC = () => {
       if (results[2].status === 'fulfilled') {
         const payload = results[2].value.data;
         setRecentActivities(Array.isArray(payload) ? payload : []);
+      }
+
+      if (results[3].status === 'fulfilled') {
+        const payload = results[3].value.data;
+        setContactMessages(Array.isArray(payload) ? payload : []);
       }
     } catch (error) {
       console.error("Erreur chargement global:", error);
@@ -723,10 +773,18 @@ const AdminDashboard: React.FC = () => {
       actif: { variant: "default", label: "Actif" },
       en_attente: { variant: "secondary", label: "En attente" },
       rejete: { variant: "destructive", label: "Rejeté" },
+      suspendu: { variant: "outline", label: "Suspendu" },
     };
 
     const config = variants[statut] || { variant: "outline" as const, label: statut };
     return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
+
+  const getFournisseurStatutBadge = (fournisseur: Fournisseur) => {
+    if (fournisseur.statut === "actif" && fournisseur.compte_actif === false) {
+      return getStatutBadge("suspendu");
+    }
+    return getStatutBadge(fournisseur.statut);
   };
 
   const formatDate = (dateString: string) => {
@@ -801,6 +859,8 @@ const AdminDashboard: React.FC = () => {
       departement: responsable.departement,
       fonction: responsable.fonction,
       telephone: responsable.telephone,
+      password: "",
+      password_confirmation: "",
     });
     setIsEditResponsableOpen(true);
   };
@@ -825,13 +885,28 @@ const AdminDashboard: React.FC = () => {
     try {
       if (!api) throw new Error("API non disponible");
       
-      await api.put(`${API_BASE_URL}/api/admin/responsables/${editingResponsable.id}`, {
+      const payload: Record<string, string> = {
         name: editingResponsable.name,
         email: editingResponsable.email,
         departement: editingResponsable.departement,
         fonction: editingResponsable.fonction,
         telephone: normalizedPhone,
-      });
+      };
+
+      if (editingResponsable.password.trim()) {
+        if (editingResponsable.password !== editingResponsable.password_confirmation) {
+          toast({
+            title: "Mot de passe",
+            description: "La confirmation ne correspond pas au nouveau mot de passe.",
+            variant: "destructive",
+          });
+          return;
+        }
+        payload.password = editingResponsable.password;
+        payload.password_confirmation = editingResponsable.password_confirmation;
+      }
+
+      await api.put(`${API_BASE_URL}/api/admin/responsables/${editingResponsable.id}`, payload);
 
       toast({ title: "Succès", description: "Personne responsable du marché (PRM) mise à jour." });
       setIsEditResponsableOpen(false);
@@ -865,18 +940,102 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Succès", description: "Fournisseur validé." });
       fetchDashboardData();
     } catch (error: unknown) {
-      toast({ title: "Erreur", description: "Impossible de valider.", variant: "destructive" });
+      const { message, libellesManquantes } = getApiErrorDetails(
+        error,
+        "Impossible de valider ce fournisseur."
+      );
+      toast({
+        title: "Validation impossible",
+        description: libellesManquantes?.length
+          ? `${message} Pièces manquantes : ${libellesManquantes.join(", ")}.`
+          : message,
+        variant: "destructive",
+      });
     }
   };
 
   const handleRejectFournisseur = async (fournisseurId: number) => {
+    if (!confirm("Confirmer le rejet de ce compte fournisseur ?")) return;
     try {
       if (!api) throw new Error("API client non disponible.");
       await api.post(`${API_BASE_URL}/api/admin/fournisseurs/${fournisseurId}/reject`);
       toast({ title: "Succès", description: "Fournisseur rejeté.", variant: "destructive" });
       fetchDashboardData();
     } catch (error: unknown) {
-      toast({ title: "Erreur", description: "Impossible de rejeter.", variant: "destructive" });
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de rejeter."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSuspendFournisseur = async (fournisseurId: number) => {
+    if (!confirm("Suspendre ce compte fournisseur ? Il ne pourra plus se connecter.")) return;
+    try {
+      if (!api) throw new Error("API client non disponible.");
+      await api.post(`${API_BASE_URL}/api/admin/fournisseurs/${fournisseurId}/suspend`);
+      toast({ title: "Compte suspendu", description: "Le fournisseur ne peut plus se connecter." });
+      fetchDashboardData();
+      setIsViewFournisseurOpen(false);
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de suspendre ce compte."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReactivateFournisseur = async (fournisseurId: number) => {
+    if (!confirm("Réactiver ou remettre en examen ce compte fournisseur ?")) return;
+    try {
+      if (!api) throw new Error("API client non disponible.");
+      const res = await api.post(`${API_BASE_URL}/api/admin/fournisseurs/${fournisseurId}/reactivate`);
+      toast({
+        title: "Succès",
+        description: typeof res.data?.message === "string" ? res.data.message : "Compte mis à jour.",
+      });
+      fetchDashboardData();
+      setIsViewFournisseurOpen(false);
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de réactiver ce compte."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleMarkContactRead = async (messageId: number) => {
+    if (!api) return;
+    try {
+      await api.put(`/api/admin/contact/${messageId}/read`);
+      setContactMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, statut: "lu" } : m))
+      );
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de marquer le message comme lu."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleArchiveContact = async (messageId: number) => {
+    if (!api) return;
+    try {
+      await api.put(`/api/admin/contact/${messageId}/archive`);
+      setContactMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, statut: "archive" } : m))
+      );
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible d'archiver le message."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -1781,6 +1940,20 @@ const AdminDashboard: React.FC = () => {
           </Button>
 
           <Button
+            variant={activeTab === "contact" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "contact" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+            onClick={() => setActiveTab("contact")}
+          >
+            <Mail className="w-4 h-4 mr-3" />
+            Messages contact
+            {contactMessages.filter((m) => m.statut === "nouveau").length > 0 && (
+              <Badge variant="secondary" className="ml-auto">
+                {contactMessages.filter((m) => m.statut === "nouveau").length}
+              </Badge>
+            )}
+          </Button>
+
+          <Button
             variant={activeTab === "gestion-ao" ? "default" : "ghost"}
             className={`w-full justify-start ${activeTab === "gestion-ao" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => {
@@ -1820,6 +1993,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'fournisseurs' && "Annuaire Fournisseurs"}
                 {activeTab === 'responsables' && "Équipe PRM"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
+                {activeTab === 'contact' && "Messages contact"}
                 {activeTab === 'gestion-ao' && "Gestion Appels d'Offres"}
                 {activeTab === 'audit' && "Historique des modifications"}
               </h1>
@@ -1829,6 +2003,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
                 {activeTab === 'responsables' && "Administrez les comptes des PRM"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
+                {activeTab === 'contact' && "Messages reçus via le formulaire de contact du portail"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres"}
                 {activeTab === 'audit' && "Trace des AO, fournisseurs, candidatures, PRM, comptes, documents et paiements cahier"}
               </p>
@@ -1964,8 +2139,13 @@ const AdminDashboard: React.FC = () => {
                               <Button
                                 size="sm"
                                 className="bg-green-600 hover:bg-green-700 h-8 px-2"
-                                onClick={() => handleValidateFournisseur(fournisseur.id)}
-                                title="Valider"
+                                disabled={fournisseur.dossier_complet === false}
+                                onClick={() => void handleValidateFournisseur(fournisseur.id)}
+                                title={
+                                  fournisseur.dossier_complet === false
+                                    ? "Dossier incomplet"
+                                    : "Valider"
+                                }
                               >
                                 <UserCheck className="w-4 h-4" />
                               </Button>
@@ -2151,7 +2331,7 @@ const AdminDashboard: React.FC = () => {
                               <div className="text-muted-foreground text-xs">{f.telephone}</div>
                             </div>
                           </TableCell>
-                          <TableCell>{getStatutBadge(f.statut)}</TableCell>
+                          <TableCell>{getFournisseurStatutBadge(f)}</TableCell>
                           {/* Dépôt en présentiel : pas de colonne candidatures */}
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => handleViewFournisseur(f)}>
@@ -2247,6 +2427,72 @@ const AdminDashboard: React.FC = () => {
 
 
         {/* 5. SUGGESTIONS */}
+        {activeTab === "contact" && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-primary" />
+                  Messages contact
+                </CardTitle>
+                <CardDescription>
+                  Formulaire public du portail — répondez directement à l&apos;adresse e-mail de l&apos;expéditeur.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {contactMessages
+                  .filter((m) => m.statut !== "archive")
+                  .map((message) => (
+                    <div
+                      key={message.id}
+                      className={`rounded-lg border p-4 shadow-sm ${
+                        message.statut === "nouveau" ? "bg-amber-50/50 border-amber-200" : "bg-white"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                        <div>
+                          <h4 className="font-semibold text-slate-900">{message.sujet}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {message.nom || message.user?.name || "Visiteur"} —{" "}
+                            <a href={`mailto:${message.email}`} className="text-primary hover:underline">
+                              {message.email}
+                            </a>
+                            {" · "}
+                            {new Date(message.created_at).toLocaleString("fr-FR")}
+                          </p>
+                        </div>
+                        <Badge variant={message.statut === "nouveau" ? "default" : "outline"}>
+                          {message.statut === "nouveau" ? "Nouveau" : "Lu"}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-md border">
+                        {message.message}
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {message.statut === "nouveau" && (
+                          <Button size="sm" variant="secondary" onClick={() => void handleMarkContactRead(message.id)}>
+                            Marquer lu
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => void handleArchiveContact(message.id)}>
+                          Archiver
+                        </Button>
+                        <Button size="sm" asChild>
+                          <a href={`mailto:${message.email}?subject=Re: ${encodeURIComponent(message.sujet)}`}>
+                            Répondre
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                {contactMessages.filter((m) => m.statut !== "archive").length === 0 && (
+                  <p className="text-center py-12 text-muted-foreground">Aucun message contact à afficher.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {activeTab === "suggestions" && (
             <div className="space-y-6 animate-in fade-in duration-500">
                 <Card className="border-none shadow-sm">
@@ -2622,7 +2868,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
               </div>
 
-              {/* Ligne 3 : Fonction (seul sur la dernière ligne ou avec un autre champ futur) */}
+              {/* Ligne 3 : Fonction */}
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Fonction</Label>
@@ -2632,7 +2878,33 @@ const AdminDashboard: React.FC = () => {
                       required
                     />
                   </div>
-                  {/* Espace vide ou autre champ si nécessaire */}
+              </div>
+
+              <div className="rounded-lg border border-dashed border-slate-200 p-4 space-y-3">
+                <p className="text-sm font-medium text-slate-800">Réinitialiser le mot de passe (optionnel)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Nouveau mot de passe</Label>
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      value={editingResponsable.password}
+                      onChange={(e) => setEditingResponsable({ ...editingResponsable, password: e.target.value })}
+                      placeholder="Laisser vide pour ne pas changer"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Confirmation</Label>
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      value={editingResponsable.password_confirmation}
+                      onChange={(e) =>
+                        setEditingResponsable({ ...editingResponsable, password_confirmation: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
               </div>
 
               <DialogFooter>
@@ -2673,7 +2945,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">Statut</h4>
-                  <div className="mt-1">{getStatutBadge(selectedFournisseur.statut)}</div>
+                  <div className="mt-1">{getFournisseurStatutBadge(selectedFournisseur)}</div>
                 </div>
                 <div>
                   <h4 className="font-semibold text-sm text-muted-foreground">Date d'inscription</h4>
@@ -2761,15 +3033,35 @@ const AdminDashboard: React.FC = () => {
               <div className="border-t pt-4">
                  <h4 className="font-semibold mb-2 text-sm">Actions rapides</h4>
                  <div className="flex flex-wrap gap-2">
-                    {selectedFournisseur.statut === 'en_attente' && (
+                    {selectedFournisseur.statut === "en_attente" && (
                         <>
-                            <Button size="sm" onClick={() => { handleValidateFournisseur(selectedFournisseur.id); setIsViewFournisseurOpen(false); }}>
+                            <Button
+                              size="sm"
+                              disabled={selectedFournisseur.dossier_complet === false}
+                              title={
+                                selectedFournisseur.dossier_complet === false
+                                  ? "Dossier incomplet — vérifiez les pièces manquantes ci-dessus"
+                                  : "Valider le compte"
+                              }
+                              onClick={() => void handleValidateFournisseur(selectedFournisseur.id)}
+                            >
                                 Valider le compte
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => { handleRejectFournisseur(selectedFournisseur.id); setIsViewFournisseurOpen(false); }}>
+                            <Button size="sm" variant="destructive" onClick={() => void handleRejectFournisseur(selectedFournisseur.id)}>
                                 Rejeter
                             </Button>
                         </>
+                    )}
+                    {selectedFournisseur.statut === "actif" && selectedFournisseur.compte_actif !== false && (
+                      <Button size="sm" variant="outline" onClick={() => void handleSuspendFournisseur(selectedFournisseur.id)}>
+                        Suspendre le compte
+                      </Button>
+                    )}
+                    {(selectedFournisseur.statut === "rejete" ||
+                      (selectedFournisseur.statut === "actif" && selectedFournisseur.compte_actif === false)) && (
+                      <Button size="sm" variant="secondary" onClick={() => void handleReactivateFournisseur(selectedFournisseur.id)}>
+                        {selectedFournisseur.statut === "rejete" ? "Remettre en examen" : "Réactiver le compte"}
+                      </Button>
                     )}
                      <Button variant="outline" size="sm" onClick={() => setIsViewFournisseurOpen(false)}>Fermer</Button>
                  </div>

@@ -236,6 +236,7 @@ class AdminDashboardController extends Controller
             'pieces_obligatoires_presentes' => $obligatoiresPresentes,
             'pieces_obligatoires_manquantes' => $manquantes,
             'dossier_complet' => empty($manquantes),
+            'compte_actif' => (bool) optional($f->user)->is_active,
         ];
     }
 
@@ -451,6 +452,95 @@ class AdminDashboardController extends Controller
         }
 
         return response()->json(['message' => 'Utilisateur associé introuvable pour ce fournisseur.'], 404);
+    }
+
+    /**
+     * Suspend un compte fournisseur actif (blocage de connexion, statut inchangé).
+     */
+    public function suspendFournisseur(Fournisseur $fournisseur)
+    {
+        if (! $fournisseur->user) {
+            return response()->json(['message' => 'Utilisateur associé introuvable pour ce fournisseur.'], 404);
+        }
+
+        if ($fournisseur->statut !== 'actif') {
+            return response()->json(['message' => 'Seuls les fournisseurs au statut actif peuvent être suspendus.'], 422);
+        }
+
+        if (! $fournisseur->user->is_active) {
+            return response()->json(['message' => 'Ce compte est déjà suspendu.'], 422);
+        }
+
+        $fournisseur->user->is_active = false;
+        $fournisseur->user->save();
+
+        $this->log('suspend_fournisseur', "Suspension fournisseur #{$fournisseur->id}");
+
+        try {
+            app(NotificationService::class)->notifyUser(
+                $fournisseur->user->id,
+                'Votre compte fournisseur a été temporairement suspendu. Contactez le service des marchés pour plus d\'informations.'
+            );
+        } catch (\Exception $e) {
+            // ignore
+        }
+
+        return response()->json(['message' => 'Compte fournisseur suspendu avec succès.']);
+    }
+
+    /**
+     * Réactive un compte suspendu ou remet en examen un dossier rejeté.
+     */
+    public function reactivateFournisseur(Fournisseur $fournisseur, FournisseurValidationService $validation)
+    {
+        if (! $fournisseur->user) {
+            return response()->json(['message' => 'Utilisateur associé introuvable pour ce fournisseur.'], 404);
+        }
+
+        if ($fournisseur->statut === 'actif' && ! $fournisseur->user->is_active) {
+            $fournisseur->user->is_active = true;
+            $fournisseur->user->save();
+
+            $this->log('reactivate_fournisseur', "Réactivation compte suspendu #{$fournisseur->id}");
+
+            try {
+                app(NotificationService::class)->notifyUser(
+                    $fournisseur->user->id,
+                    'Votre compte fournisseur a été réactivé. Vous pouvez vous reconnecter.'
+                );
+            } catch (\Exception $e) {
+                // ignore
+            }
+
+            return response()->json(['message' => 'Compte fournisseur réactivé avec succès.']);
+        }
+
+        if ($fournisseur->statut === 'rejete') {
+            $fournisseur->statut = 'en_attente';
+            $fournisseur->user->is_active = false;
+            $fournisseur->user->save();
+            $fournisseur->save();
+
+            $this->log('reactivate_fournisseur', "Remise en examen fournisseur rejeté #{$fournisseur->id}");
+
+            $autoValidated = $validation->tenterAutoValidation($fournisseur->fresh(), 'admin_reactivation');
+            if ($autoValidated && ($autoValidated['validated'] ?? false)) {
+                return response()->json(['message' => 'Dossier remis en examen et validé automatiquement (pièces complètes).']);
+            }
+
+            try {
+                app(NotificationService::class)->notifyUser(
+                    $fournisseur->user->id,
+                    'Votre dossier fournisseur est à nouveau en cours d\'examen par l\'administrateur.'
+                );
+            } catch (\Exception $e) {
+                // ignore
+            }
+
+            return response()->json(['message' => 'Fournisseur remis en attente de validation.']);
+        }
+
+        return response()->json(['message' => 'Aucune réactivation possible pour ce statut.'], 422);
     }
 
     private function log(string $action, string $details): void

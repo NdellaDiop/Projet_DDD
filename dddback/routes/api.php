@@ -145,6 +145,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('recent-activities', [AdminDashboardController::class, 'getRecentActivities']);
         Route::post('fournisseurs/{fournisseur}/validate', [AdminDashboardController::class, 'validateFournisseur']);
         Route::post('fournisseurs/{fournisseur}/reject', [AdminDashboardController::class, 'rejectFournisseur']);
+        Route::post('fournisseurs/{fournisseur}/suspend', [AdminDashboardController::class, 'suspendFournisseur']);
+        Route::post('fournisseurs/{fournisseur}/reactivate', [AdminDashboardController::class, 'reactivateFournisseur']);
         
         // Gestion des suggestions
         Route::get('suggestions', [SuggestionController::class, 'indexAdmin']);
