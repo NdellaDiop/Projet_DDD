@@ -181,7 +181,7 @@ interface AppelOffre {
     name: string;
     email?: string | null;
     fonction?: string | null;
-    departement?: string | null;
+    direction?: string | null;
   } | null;
 }
 
@@ -221,7 +221,7 @@ interface ContactMessage {
 interface ResponsableMarche {
   id: number;
   user_id: number;
-  departement: string;
+  direction: string;
   fonction: string;
   telephone: string;
   user?: {
@@ -311,7 +311,7 @@ interface EditingResponsable {
   id: number;
   name: string;
   email: string;
-  departement: string;
+  direction: string;
   fonction: string;
   telephone: string;
   password: string;
@@ -352,7 +352,7 @@ const AdminDashboard: React.FC = () => {
     name: "",
     email: "",
     password: "",
-    departement: "",
+    direction: "",
     fonction: "",
     telephone: "",
   });
@@ -818,7 +818,7 @@ const AdminDashboard: React.FC = () => {
         name: newResponsable.name,
         email: newResponsable.email,
         password: newResponsable.password,
-        departement: newResponsable.departement,
+        direction: newResponsable.direction,
         fonction: newResponsable.fonction,
         telephone: normalizedPhone,
       });
@@ -826,7 +826,7 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Succès", description: "Personne responsable du marché (PRM) créée avec succès." });
       
       setIsCreateResponsableOpen(false);
-      setNewResponsable({ name: "", email: "", password: "", departement: "", fonction: "", telephone: "" });
+      setNewResponsable({ name: "", email: "", password: "", direction: "", fonction: "", telephone: "" });
       fetchDashboardData();
     } catch (error: unknown) {
       console.error("Erreur création PRM:", error);
@@ -856,7 +856,7 @@ const AdminDashboard: React.FC = () => {
       id: responsable.id,
       name: responsable.user?.name || "",
       email: responsable.user?.email || "",
-      departement: responsable.departement,
+      direction: responsable.direction,
       fonction: responsable.fonction,
       telephone: responsable.telephone,
       password: "",
@@ -888,7 +888,7 @@ const AdminDashboard: React.FC = () => {
       const payload: Record<string, string> = {
         name: editingResponsable.name,
         email: editingResponsable.email,
-        departement: editingResponsable.departement,
+        direction: editingResponsable.direction,
         fonction: editingResponsable.fonction,
         telephone: normalizedPhone,
       };
@@ -1685,7 +1685,7 @@ const AdminDashboard: React.FC = () => {
             { header: 'ID', key: 'id' },
             { header: 'Nom', key: 'user.name' },
             { header: 'Email', key: 'user.email' },
-            { header: 'Direction', key: 'departement' },
+            { header: 'Direction', key: 'direction' },
             { header: 'Fonction', key: 'fonction' },
             { header: 'Téléphone', key: 'telephone' },
             { header: 'Appels d\'Offres', key: 'nombre_appels_offres' },
@@ -2394,7 +2394,7 @@ const AdminDashboard: React.FC = () => {
                              <div className="grid grid-cols-2 gap-2 text-sm">
                                  <div className="flex flex-col">
                                      <span className="text-xs text-muted-foreground">Direction</span>
-                                     <span className="font-medium">{r.departement}</span>
+                                     <span className="font-medium">{r.direction}</span>
                                  </div>
                                  <div className="flex flex-col">
                                      <span className="text-xs text-muted-foreground">Téléphone</span>
@@ -2782,11 +2782,11 @@ const AdminDashboard: React.FC = () => {
             {/* Ligne 3 : Direction et Mot de passe */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="departement">Direction</Label>
+                  <Label htmlFor="direction">Direction</Label>
                   <Input
-                    id="departement"
-                    value={newResponsable.departement}
-                    onChange={(e) => setNewResponsable({ ...newResponsable, departement: e.target.value })}
+                    id="direction"
+                    value={newResponsable.direction}
+                    onChange={(e) => setNewResponsable({ ...newResponsable, direction: e.target.value })}
                     required
                   />
                 </div>
@@ -2861,8 +2861,8 @@ const AdminDashboard: React.FC = () => {
                   <div className="grid gap-2">
                     <Label>Direction</Label>
                     <Input
-                      value={editingResponsable.departement}
-                      onChange={(e) => setEditingResponsable({ ...editingResponsable, departement: e.target.value })}
+                      value={editingResponsable.direction}
+                      onChange={(e) => setEditingResponsable({ ...editingResponsable, direction: e.target.value })}
                       required
                     />
                   </div>
@@ -3218,10 +3218,10 @@ const AdminDashboard: React.FC = () => {
                           {selectedAppelOffre.responsable.fonction}
                         </p>
                       )}
-                      {selectedAppelOffre.responsable.departement && (
+                      {selectedAppelOffre.responsable.direction && (
                         <p className="sm:col-span-2">
                           <span className="text-xs text-muted-foreground">Direction : </span>
-                          {selectedAppelOffre.responsable.departement}
+                          {selectedAppelOffre.responsable.direction}
                         </p>
                       )}
                     </div>
@@ -4055,7 +4055,7 @@ const AdminDashboard: React.FC = () => {
                   <SelectContent>
                     {Array.isArray(responsables) && responsables.map((r) => (
                       <SelectItem key={r.id} value={r.id.toString()}>
-                        {r.user?.name || `PRM #${r.id}`} - {r.departement}
+                        {r.user?.name || `PRM #${r.id}`} - {r.direction}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -4128,10 +4128,10 @@ const AdminDashboard: React.FC = () => {
                     <span className="text-slate-800">{authUser.telephone}</span>
                   </div>
                 )}
-                {(authUser as any)?.departement && (
+                {(authUser as any)?.direction && (
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-slate-500">Direction</span>
-                    <span className="text-slate-800">{String((authUser as any).departement)}</span>
+                    <span className="text-slate-800">{String((authUser as any).direction)}</span>
                   </div>
                 )}
                 {(authUser as any)?.fonction && (

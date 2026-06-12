@@ -134,7 +134,7 @@ dddback/
 
 ### ResponsableMarche
 - Lié à un User
-- Département, fonction, téléphone
+- Direction, fonction, téléphone
 - Gère les appels d'offres
 
 ### Fournisseur

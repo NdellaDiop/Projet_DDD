@@ -60,7 +60,8 @@ const FIELD_LABELS: Record<string, string> = {
   rccm: 'RCCM',
   telephone: 'Téléphone',
   email_contact: 'Email contact',
-  departement: 'Direction',
+  direction: 'Direction',
+  departement: 'Direction', // entrées d'audit antérieures au renommage
   fonction: 'Fonction',
   nom_fichier: 'Nom du fichier',
   type_fichier: 'Type de fichier',

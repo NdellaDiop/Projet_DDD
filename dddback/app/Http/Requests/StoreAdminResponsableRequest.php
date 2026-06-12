@@ -26,7 +26,7 @@ class StoreAdminResponsableRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8',
-            'departement' => 'nullable|string|max:255',
+            'direction' => 'nullable|string|max:255',
             'fonction' => 'nullable|string|max:255',
         ];
     }

@@ -19,7 +19,7 @@ class AdminResponsableController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => ['required', Rules\Password::defaults()],
-            'departement' => 'required|string|max:255',
+            'direction' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
         ]);
@@ -42,7 +42,7 @@ class AdminResponsableController extends Controller
         // 2. Créer le ResponsableMarche
         $responsable = ResponsableMarche::create([
             'user_id' => $user->id,
-            'departement' => $request->departement,
+            'direction' => $request->direction,
             'fonction' => $request->fonction,
             'telephone' => $telephone,
         ]);
@@ -87,7 +87,7 @@ class AdminResponsableController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id, // On ignore l'email actuel du user
-            'departement' => 'required|string|max:255',
+            'direction' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
@@ -109,7 +109,7 @@ class AdminResponsableController extends Controller
 
         // Mise à jour Responsable
         $responsable->update([
-            'departement' => $request->departement,
+            'direction' => $request->direction,
             'fonction' => $request->fonction,
             'telephone' => $telephone,
         ]);

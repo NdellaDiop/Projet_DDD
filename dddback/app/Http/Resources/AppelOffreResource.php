@@ -96,7 +96,7 @@ class AppelOffreResource extends JsonResource
                     'user_id' => $this->responsableMarche->user_id,
                     'name' => $user?->name,
                     'email' => $user?->email,
-                    'departement' => $this->responsableMarche->departement,
+                    'direction' => $this->responsableMarche->direction,
                     'fonction' => $this->responsableMarche->fonction,
                     'user' => $user ? [
                         'id' => $user->id,

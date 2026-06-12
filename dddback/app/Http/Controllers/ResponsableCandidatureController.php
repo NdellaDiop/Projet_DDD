@@ -77,13 +77,13 @@ class ResponsableCandidatureController extends Controller
         }
 
         $validated = $request->validate([
-            'departement' => 'required|string|max:255',
+            'direction' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'telephone' => ['required', 'string', 'max:30', new SenegalPhoneNumber()],
         ]);
 
         $responsable->update([
-            'departement' => $validated['departement'],
+            'direction' => $validated['direction'],
             'fonction' => $validated['fonction'],
             'telephone' => SenegalPhoneNumber::normalize($validated['telephone']),
         ]);

@@ -15,7 +15,7 @@ class ResponsableMarche extends Model
 
     protected $fillable = [
         'user_id',
-        'departement',
+        'direction',
         'fonction',
         'telephone',
         'photo_profil',

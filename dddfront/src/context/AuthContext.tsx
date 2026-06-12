@@ -19,7 +19,7 @@ interface User {
   role_id?: number;
   is_active?: boolean;
   telephone?: string | null;
-  departement?: string | null;
+  direction?: string | null;
   fonction?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -343,6 +343,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: unknown) {
       console.error('Erreur de déconnexion:', getApiErrorMessage(error));
       localStorage.removeItem('access_token');
+
       delete api.defaults.headers.common['Authorization'];
       setToken(null);
       setUser(null);

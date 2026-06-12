@@ -143,7 +143,7 @@ class AdminDashboardController extends Controller
                     'name' => $ao->responsableMarche->user ? $ao->responsableMarche->user->name : 'Responsable inconnu',
                     'email' => $ao->responsableMarche->user?->email,
                     'fonction' => $ao->responsableMarche->fonction,
-                    'departement' => $ao->responsableMarche->departement,
+                    'direction' => $ao->responsableMarche->direction,
                 ]
                 : null,
         ];
@@ -254,7 +254,7 @@ class AdminDashboardController extends Controller
         // Recherche
         if ($search) {
             $query->where(function($q) use ($search) {
-                $q->where('departement', 'LIKE', "%{$search}%")
+                $q->where('direction', 'LIKE', "%{$search}%")
                   ->orWhere('fonction', 'LIKE', "%{$search}%")
                   ->orWhere('telephone', 'LIKE', "%{$search}%")
                   ->orWhereHas('user', function($uq) use ($search) {
@@ -286,7 +286,7 @@ class AdminDashboardController extends Controller
                 return [
                     'id' => $r->id,
                     'user_id' => $r->user_id,
-                    'departement' => $r->departement,
+                    'direction' => $r->direction,
                     'fonction' => $r->fonction,
                     'telephone' => $r->telephone,
                     'user' => [

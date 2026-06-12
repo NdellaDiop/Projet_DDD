@@ -29,7 +29,7 @@ class UpdateAdminResponsableRequest extends FormRequest
             'name' => 'sometimes|required|string|max:255',
             'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($userId)],
             'password' => 'nullable|string|min:8',
-            'departement' => 'nullable|string|max:255',
+            'direction' => 'nullable|string|max:255',
             'fonction' => 'nullable|string|max:255',
         ];
     }

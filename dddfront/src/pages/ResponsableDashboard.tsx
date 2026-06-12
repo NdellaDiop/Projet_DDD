@@ -132,7 +132,7 @@ interface CommentItem {
 }
 
 interface ResponsableProfile {
-  departement?: string;
+  direction?: string;
   fonction?: string;
   telephone?: string;
 }
@@ -233,7 +233,7 @@ export default function ResponsableDashboard() {
   const [profile, setProfile] = useState<ResponsableProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
-    departement: "",
+    direction: "",
     fonction: "",
     telephone: "",
   });
@@ -406,7 +406,7 @@ export default function ResponsableDashboard() {
       const profileRes = await api.get("/api/responsable/profile");
       setProfile(profileRes.data);
       setProfileForm({
-        departement: profileRes.data.departement || "",
+        direction: profileRes.data.direction || "",
         fonction: profileRes.data.fonction || "",
         telephone: profileRes.data.telephone || "",
       });
@@ -942,7 +942,7 @@ export default function ResponsableDashboard() {
     if (!api) return;
     
     // Validation côté client
-    if (!profileForm.departement || !profileForm.fonction || !profileForm.telephone) {
+    if (!profileForm.direction || !profileForm.fonction || !profileForm.telephone) {
       toast({
         title: "Erreur",
         description: "Veuillez remplir tous les champs obligatoires",
@@ -968,7 +968,7 @@ export default function ResponsableDashboard() {
     
     try {
       const payload = {
-        departement: profileForm.departement.trim(),
+        direction: profileForm.direction.trim(),
         fonction: profileForm.fonction.trim(),
         telephone: normalizedPhone,
       };
@@ -982,7 +982,7 @@ export default function ResponsableDashboard() {
         const profileRes = await api.get("/api/responsable/profile");
         setProfile(profileRes.data);
         setProfileForm({
-          departement: profileRes.data.departement || "",
+          direction: profileRes.data.direction || "",
           fonction: profileRes.data.fonction || "",
           telephone: profileRes.data.telephone || "",
         });
@@ -1008,7 +1008,7 @@ export default function ResponsableDashboard() {
         const errors = responseData.errors;
         const errorList = Object.entries(errors)
           .map(([field, messages]: [string, string[]]) => {
-            const fieldName = field === 'departement' ? 'Direction' :
+            const fieldName = field === 'direction' ? 'Direction' :
                             field === 'fonction' ? 'Fonction' :
                             field === 'telephone' ? 'Téléphone' :
                             field;
@@ -2689,8 +2689,8 @@ export default function ResponsableDashboard() {
                     <div className="grid gap-2">
                       <Label>Direction</Label>
                       <Input
-                        value={profileForm.departement}
-                        onChange={(e) => setProfileForm({ ...profileForm, departement: e.target.value })}
+                        value={profileForm.direction}
+                        onChange={(e) => setProfileForm({ ...profileForm, direction: e.target.value })}
                         required
                       />
                     </div>
