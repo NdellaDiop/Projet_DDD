@@ -589,23 +589,27 @@ const AppelOffreDetails = () => {
                                 {appelOffre.documents && appelOffre.documents.length > 0 ? (
                                     <div className="grid gap-3">
                                         {trierDocumentsAo(appelOffre.documents).map((doc) => (
-                                            <div key={doc.id} className="flex flex-col gap-3 p-3 border rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors sm:flex-row sm:items-center sm:justify-between">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="bg-white p-2 rounded border shrink-0">
+                                            <div
+                                              key={doc.id}
+                                              className="grid grid-cols-1 gap-3 rounded-lg border bg-slate-50 p-3 transition-colors hover:bg-slate-100 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4"
+                                            >
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="shrink-0 rounded border bg-white p-2">
                                                         <FileText className="h-5 w-5 text-slate-400" />
                                                     </div>
-                                                    <div className="flex flex-col min-w-0">
-                                                      <span className="font-medium text-slate-700 truncate">{doc.nom_fichier}</span>
+                                                    <div className="flex min-w-0 flex-col">
+                                                      <span className="break-words font-medium text-slate-700">{doc.nom_fichier}</span>
                                                       <span className="text-xs text-muted-foreground">{aoDocCategoryLabel[doc.categorie] ?? doc.categorie}</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:justify-end">
                                                   {doc.download_url ? (
                                                     <>
                                                       {fichierEstPdf(doc.nom_fichier) && (
                                                         <Button
                                                           variant="outline"
                                                           size="sm"
+                                                          className="w-full whitespace-nowrap sm:w-auto"
                                                           onClick={() => void ouvrirPdfEnLigne(doc)}
                                                         >
                                                           <BookOpen className="h-4 w-4 mr-2" />
@@ -615,6 +619,7 @@ const AppelOffreDetails = () => {
                                                       <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        className="w-full whitespace-nowrap sm:w-auto"
                                                         onClick={() =>
                                                           downloadAoDocument({
                                                             id: doc.id,
@@ -630,7 +635,7 @@ const AppelOffreDetails = () => {
                                                   ) : doc.blocage_paiement_cahier ? (
                                                     <>
                                                       {!isAuthenticated ? (
-                                                        <Button size="sm" variant="secondary" onClick={() => navigate("/connexion")}>
+                                                        <Button size="sm" variant="secondary" className="w-full whitespace-nowrap sm:w-auto" onClick={() => navigate("/connexion")}>
                                                           Se connecter pour payer
                                                         </Button>
                                                       ) : isFournisseur ? (
@@ -639,6 +644,7 @@ const AppelOffreDetails = () => {
                                                             <Button
                                                               size="sm"
                                                               variant="default"
+                                                              className="w-full whitespace-nowrap sm:w-auto"
                                                               onClick={() =>
                                                                 navigate(`/paiement/cahier?ao=${appelOffre.id}`)
                                                               }
@@ -660,7 +666,7 @@ const AppelOffreDetails = () => {
                                                       )}
                                                     </>
                                                   ) : (
-                                                    <Button size="sm" variant="secondary" onClick={() => navigate("/connexion")}>
+                                                    <Button size="sm" variant="secondary" className="w-full whitespace-nowrap sm:w-auto" onClick={() => navigate("/connexion")}>
                                                       Se connecter pour télécharger
                                                     </Button>
                                                   )}
