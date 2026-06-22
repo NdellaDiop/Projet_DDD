@@ -33,20 +33,17 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/80">
       {/* Pleine largeur « container » (sans max-w-5xl) pour limiter les bandes blanches vides sur grand écran */}
-      <div className="container flex min-h-[3rem] items-center justify-between gap-2 py-1.5 md:min-h-[3.25rem] md:gap-3 md:py-2">
+      <div className="container flex min-h-[3.25rem] items-center justify-between gap-2 py-2 md:min-h-[3.75rem] md:gap-3 md:py-2.5">
         {/* Marque : logo + libellé sur une ligne (à partir de sm) */}
         <Link
           to="/"
-          className="group flex shrink-0 items-center gap-2.5 sm:gap-3.5"
+          className="group flex shrink-0 items-center"
         >
           <img
             src={BRAND_LOGO_PATH}
             alt="Dakar Dem Dikk — portail des marchés publics"
             className={BRAND_LOGO_CLASS_HEADER}
           />
-          <span className="hidden max-w-[11rem] border-l border-border/70 pl-2.5 text-left text-[11px] font-semibold leading-snug text-foreground sm:inline sm:max-w-[13rem] sm:pl-3 md:text-xs">
-            Portail des marchés publics
-          </span>
         </Link>
 
         {/* Desktop : liens centrés pour équilibrer l’espace entre marque et actions */}
