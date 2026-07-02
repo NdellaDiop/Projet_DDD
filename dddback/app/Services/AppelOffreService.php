@@ -113,11 +113,19 @@ class AppelOffreService
     }
 
     /** Réouvre un AO clôturé (admin — retour en arrière). */
-    public function reopenAppelOffre(AppelOffre $appelOffre): AppelOffre
+    public function reopenAppelOffre(AppelOffre $appelOffre, ?string $newDateLimiteDepot = null): AppelOffre
     {
-        $appelOffre->update(['statut' => AppelOffre::STATUS_PUBLISHED]);
+        $updates = ['statut' => AppelOffre::STATUS_PUBLISHED];
+        if ($newDateLimiteDepot !== null) {
+            $updates['date_limite_depot'] = $newDateLimiteDepot;
+        }
+
+        $appelOffre->update($updates);
 
         $message = "L'appel d'offres « {$appelOffre->titre} » (réf. {$appelOffre->reference}) a été réouvert. Le dépôt des plis est à nouveau ouvert selon les modalités indiquées dans l'avis.";
+        if ($newDateLimiteDepot !== null) {
+            $message .= ' Une nouvelle date limite de dépôt a été fixée.';
+        }
 
         $this->notifierFournisseursConcernes($appelOffre, $message);
 

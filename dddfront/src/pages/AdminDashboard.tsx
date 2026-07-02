@@ -81,6 +81,7 @@ import {
 } from "@/lib/legalDocuments";
 import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
 import { TYPE_MARCHE_OPTIONS, type TypeMarche } from "@/lib/appelOffreCategorisation";
+import { dateLimiteDepotDepassee, demanderNouvelleDateLimite } from "@/lib/reopenAppelOffre";
 import {
   AO_PIECE_LABELS,
   buildAppelOffreCreateFormData,
@@ -1382,18 +1383,29 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleReopen = async (id: number, titre?: string) => {
+  const handleReopen = async (ao: { id: number; titre?: string; date_limite_depot?: string }) => {
     if (!api) return;
-    const label = titre ? `« ${titre} »` : "cet appel d'offres";
+    const label = ao.titre ? `« ${ao.titre} »` : "cet appel d'offres";
     if (
       !confirm(
-        `Réouvrir ${label} ?\n\nL'appel d'offres repassera au statut « publié » (ouvert).`
+        `Réouvrir ${label} ?\n\nL'appel d'offres repassera au statut « publié » (ouvert).` +
+          (dateLimiteDepotDepassee(ao.date_limite_depot)
+            ? "\n\nLa date limite actuelle est dépassée : vous devrez en indiquer une nouvelle."
+            : "")
       )
     ) {
       return;
     }
+
+    const body: { date_limite_depot?: string } = {};
+    if (dateLimiteDepotDepassee(ao.date_limite_depot)) {
+      const nouvelleDate = demanderNouvelleDateLimite(ao.titre);
+      if (!nouvelleDate) return;
+      body.date_limite_depot = nouvelleDate;
+    }
+
     try {
-      await api.post(`/api/appels-offres/${id}/reopen`);
+      await api.post(`/api/appels-offres/${ao.id}/reopen`, body);
       toast({ title: "Réouvert", description: "L'appel d'offres est de nouveau publié." });
       loadMesAppelsOffres();
     } catch (error) {
@@ -2679,7 +2691,7 @@ const AdminDashboard: React.FC = () => {
                                   size="sm"
                                   variant="outline"
                                   className="h-8 border-green-200 text-green-800 hover:bg-green-50"
-                                  onClick={() => handleReopen(ao.id, ao.titre)}
+                                  onClick={() => handleReopen(ao)}
                                   title="Réouvrir l'appel d'offres"
                                 >
                                   <RotateCcw className="w-3 h-3 mr-1" /> Réouvrir

@@ -184,7 +184,21 @@ class AppelOffreController extends Controller
             ], 422);
         }
 
-        $appelOffre = $this->appelOffreService->reopenAppelOffre($appelOffre);
+        $data = $request->validate([
+            'date_limite_depot' => 'nullable|date|after:now',
+        ]);
+
+        if ($appelOffre->dateLimiteDepotDepassee() && empty($data['date_limite_depot'])) {
+            return response()->json([
+                'message' => 'La date limite de dépôt est dépassée. Indiquez une nouvelle date limite pour réouvrir cet appel d\'offres.',
+                'requires_new_date_limite' => true,
+            ], 422);
+        }
+
+        $appelOffre = $this->appelOffreService->reopenAppelOffre(
+            $appelOffre,
+            $data['date_limite_depot'] ?? null
+        );
         $this->log('reopen_appel_offre', "Réouverture AO #{$appelOffre->id}");
 
         return new AppelOffreResource($appelOffre);
