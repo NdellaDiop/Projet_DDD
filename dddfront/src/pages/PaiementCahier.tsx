@@ -20,6 +20,7 @@ interface PreviewPayload {
   deja_acquis: boolean;
   paiement_wave_active: boolean;
   paiement_orange_money_active: boolean;
+  paiement_orange_money_api?: boolean;
   cahier_simulation_active: boolean;
   fournisseur?: {
     nom?: string | null;
@@ -99,7 +100,13 @@ const PaiementCahier = () => {
         if (data.paiement_wave_active) dispo.push("wave");
         if (data.paiement_orange_money_active) dispo.push("orange_money");
         if (data.cahier_simulation_active) dispo.push("simulation");
-        if (dispo.length > 0) setMoyen(dispo[0]);
+        if (dispo.length > 0) {
+          const preferOrange =
+            data.paiement_orange_money_active &&
+            data.cahier_simulation_active &&
+            data.paiement_orange_money_api === false;
+          setMoyen(preferOrange ? "orange_money" : dispo[0]);
+        }
       } catch (e: unknown) {
         const msg =
           typeof e === "object" && e !== null && "response" in e
@@ -158,12 +165,18 @@ const PaiementCahier = () => {
       return;
     }
 
-    if (moyen === "simulation") {
+    const orangeViaSimulation =
+      moyen === "orange_money" &&
+      preview.cahier_simulation_active &&
+      preview.paiement_orange_money_api === false;
+
+    if (moyen === "simulation" || orangeViaSimulation) {
       try {
         setInitiating(true);
+        const demoUi = moyen === "orange_money" ? "orange_money" : "wave";
         const res = await api.post(`/api/appels-offres/${preview.appel_offre.id}/cahier/paiement/initier`, {
           provider: "simulation",
-          demo_ui: "wave",
+          demo_ui: demoUi,
         });
         if (res.data?.deja_acquis) {
           redirectMesAchats(preview.appel_offre.id);

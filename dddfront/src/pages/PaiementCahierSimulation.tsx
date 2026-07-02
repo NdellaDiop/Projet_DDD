@@ -17,6 +17,7 @@ interface PreviewPayload {
   montant_xof: number;
   achat_id: number;
   statut: string;
+  demo_ui?: DemoUi | null;
   appel_offre: {
     id: number;
     titre: string;
@@ -68,7 +69,12 @@ const PaiementCahierSimulation = () => {
         const res = await api.get("/api/paiements/cahier/simulation/preview", {
           params: { t: token },
         });
-        setPreview(res.data as PreviewPayload);
+        const data = res.data as PreviewPayload;
+        setPreview(data);
+        if (data.demo_ui === "orange_money" || data.demo_ui === "wave") {
+          setMoyen(data.demo_ui);
+          setStep("infos");
+        }
       } catch (e: unknown) {
         const msg =
           typeof e === "object" && e !== null && "response" in e

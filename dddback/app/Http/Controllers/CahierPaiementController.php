@@ -63,7 +63,8 @@ class CahierPaiementController extends Controller
             'deja_acquis' => $deja,
             'achat_statut' => $achatEnCours?->statut,
             'paiement_wave_active' => (bool) config('paiement.wave.enabled'),
-            'paiement_orange_money_active' => (bool) config('paiement.orange_money.enabled'),
+            'paiement_orange_money_active' => (bool) config('paiement.orange_money_ui_enabled'),
+            'paiement_orange_money_api' => (bool) config('paiement.orange_money_api_enabled'),
             'cahier_simulation_active' => (bool) config('paiement.simulation_enabled'),
             'fournisseur' => [
                 'nom' => $user->name,

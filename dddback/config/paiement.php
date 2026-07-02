@@ -15,7 +15,7 @@ return [
      * - Si `CAHIER_PAIEMENT_SIMULATION` est défini dans `.env`, il prime (true/false).
      * - Sinon : activé par défaut en `APP_ENV=local` ou `development` ; désactivé en production.
      */
-    'simulation_enabled' => (static function (): bool {
+    'simulation_enabled' => $simulationEnabled = (static function (): bool {
         $raw = env('CAHIER_PAIEMENT_SIMULATION');
         if ($raw !== null && $raw !== '') {
             return filter_var($raw, FILTER_VALIDATE_BOOLEAN);
@@ -23,6 +23,15 @@ return [
 
         return in_array((string) env('APP_ENV', 'production'), ['local', 'development'], true);
     })(),
+
+    /** API Orange Money réelle (sans simulation). */
+    'orange_money_api_enabled' => $orangeMoneyApiEnabled = filter_var(
+        env('ORANGE_MONEY_WEBPAY_ENABLED', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /** Orange Money affiché à l’UI (API WebPay ou parcours simulé pour démo / soutenance). */
+    'orange_money_ui_enabled' => $orangeMoneyApiEnabled || $simulationEnabled,
 
     'wave' => [
         'enabled' => env('WAVE_CHECKOUT_ENABLED', false),
@@ -43,7 +52,7 @@ return [
     | et le chemin JSON vers l’URL de redirection dans la réponse.
     */
     'orange_money' => [
-        'enabled' => env('ORANGE_MONEY_WEBPAY_ENABLED', false),
+        'enabled' => $orangeMoneyApiEnabled,
         'init_url' => env('ORANGE_MONEY_INIT_URL'),
         'method' => strtoupper(env('ORANGE_MONEY_INIT_METHOD', 'POST')),
         'headers' => [
