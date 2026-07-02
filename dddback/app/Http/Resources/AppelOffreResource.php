@@ -44,6 +44,7 @@ class AppelOffreResource extends JsonResource
             ],
             'cahier_paiement_requis' => (bool) ($this->cahier_paiement_requis ?? false),
             'cahier_prix_xof' => $this->when(isset($this->cahier_prix_xof), (int) ($this->cahier_prix_xof ?? 0)),
+            'acquisition_cahier_autorisee' => $this->acquisitionCahierAutorisee(),
             'paiement_wave_active' => (bool) config('paiement.wave.enabled'),
             'paiement_orange_money_active' => (bool) config('paiement.orange_money.enabled'),
             'cahier_simulation_active' => (bool) config('paiement.simulation_enabled'),
@@ -71,6 +72,7 @@ class AppelOffreResource extends JsonResource
                     $blocagePaiement = $doc->categorie === 'CAHIER_DES_CHARGES'
                         && (bool) ($this->cahier_paiement_requis ?? false)
                         && (int) ($this->cahier_prix_xof ?? 0) > 0
+                        && $this->acquisitionCahierAutorisee()
                         && !$canDownload;
 
                     return [

@@ -61,6 +61,30 @@ class AppelOffre extends Model
     }
 
     /**
+     * La date limite de dépôt des plis est dépassée (après la fin du jour calendaire).
+     */
+    public function dateLimiteDepotDepassee(): bool
+    {
+        if (! $this->date_limite_depot) {
+            return false;
+        }
+
+        return now()->isAfter($this->date_limite_depot->copy()->endOfDay());
+    }
+
+    /**
+     * Un fournisseur peut encore initier l'achat du cahier des charges (marché publié, échéance non dépassée).
+     */
+    public function acquisitionCahierAutorisee(): bool
+    {
+        if ($this->statut !== self::STATUS_PUBLISHED) {
+            return false;
+        }
+
+        return ! $this->dateLimiteDepotDepassee();
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function sourceFinancementLabels(): array

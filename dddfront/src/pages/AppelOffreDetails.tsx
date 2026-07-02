@@ -665,6 +665,13 @@ const AppelOffreDetails = () => {
                                                         <span className="text-xs text-muted-foreground">Réservé aux fournisseurs</span>
                                                       )}
                                                     </>
+                                                  ) : isClosed &&
+                                                    doc.categorie === "CAHIER_DES_CHARGES" &&
+                                                    appelOffre.cahier_paiement_requis &&
+                                                    (appelOffre.cahier_prix_xof ?? 0) > 0 ? (
+                                                    <span className="text-xs text-muted-foreground max-w-[220px] text-right">
+                                                      Date limite dépassée — l&apos;acquisition du cahier n&apos;est plus possible.
+                                                    </span>
                                                   ) : (
                                                     <Button size="sm" variant="secondary" className="w-full whitespace-nowrap sm:w-auto" onClick={() => navigate("/connexion")}>
                                                       Se connecter pour télécharger

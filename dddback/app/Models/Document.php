@@ -132,11 +132,17 @@ class Document extends Model
                 return true;
             }
 
-            return CahierAccesAchat::query()
+            $aDejaPaye = CahierAccesAchat::query()
                 ->where('user_id', $user->id)
                 ->where('appel_offre_id', $ao->id)
                 ->where('statut', CahierAccesAchat::STATUT_COMPLETED)
                 ->exists();
+
+            if ($aDejaPaye) {
+                return true;
+            }
+
+            return $ao->acquisitionCahierAutorisee();
         }
 
         return true;

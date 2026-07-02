@@ -28,19 +28,21 @@ class CahierPaiementController extends Controller
             return response()->json(['message' => 'Réservé aux comptes fournisseur.'], 403);
         }
 
-        if (! in_array($appelOffre->statut, [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED], true)) {
-            return response()->json(['message' => 'Marché non disponible.'], 404);
-        }
-
-        if (! $appelOffre->cahier_paiement_requis || (int) ($appelOffre->cahier_prix_xof ?? 0) <= 0) {
-            return response()->json(['message' => 'Aucun paiement requis pour le cahier des charges de ce marché.'], 422);
-        }
-
         $deja = CahierAccesAchat::query()
             ->where('user_id', $user->id)
             ->where('appel_offre_id', $appelOffre->id)
             ->where('statut', CahierAccesAchat::STATUT_COMPLETED)
             ->exists();
+
+        if (! $deja && ! $appelOffre->acquisitionCahierAutorisee()) {
+            return response()->json([
+                'message' => 'La date limite de dépôt des plis est dépassée ou le marché n\'est plus ouvert : l\'acquisition du cahier des charges n\'est plus possible.',
+            ], 422);
+        }
+
+        if (! $appelOffre->cahier_paiement_requis || (int) ($appelOffre->cahier_prix_xof ?? 0) <= 0) {
+            return response()->json(['message' => 'Aucun paiement requis pour le cahier des charges de ce marché.'], 422);
+        }
 
         $achatEnCours = CahierAccesAchat::query()
             ->where('user_id', $user->id)
@@ -81,8 +83,10 @@ class CahierPaiementController extends Controller
             return response()->json(['message' => 'Réservé aux comptes fournisseur.'], 403);
         }
 
-        if (! in_array($appelOffre->statut, [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED], true)) {
-            return response()->json(['message' => 'Marché non disponible.'], 404);
+        if (! $appelOffre->acquisitionCahierAutorisee()) {
+            return response()->json([
+                'message' => 'La date limite de dépôt des plis est dépassée ou le marché n\'est plus ouvert : l\'acquisition du cahier des charges n\'est plus possible.',
+            ], 422);
         }
 
         if (! $appelOffre->cahier_paiement_requis || (int) ($appelOffre->cahier_prix_xof ?? 0) <= 0) {

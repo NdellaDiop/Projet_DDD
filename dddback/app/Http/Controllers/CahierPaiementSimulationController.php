@@ -100,6 +100,13 @@ class CahierPaiementSimulationController extends Controller
             ]);
         }
 
+        $achat->loadMissing('appelOffre');
+        if ($achat->appelOffre && ! $achat->appelOffre->acquisitionCahierAutorisee()) {
+            return response()->json([
+                'message' => 'La date limite de dépôt des plis est dépassée : l\'acquisition du cahier des charges n\'est plus possible.',
+            ], 422);
+        }
+
         $ref = 'SIMULATION-'.$achat->id.'-'.now()->timestamp;
         $this->cahierPaiement->marquerCommePaye($achat, $ref);
 
