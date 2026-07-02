@@ -67,6 +67,7 @@ interface AppelOffre {
   paiement_orange_money_active?: boolean;
   /** Vrai si le back autorise le flux PAYER simulé (CAHIER_PAIEMENT_SIMULATION) */
   cahier_simulation_active?: boolean;
+  acquisition_cahier_autorisee?: boolean;
   responsable?: {
     name?: string;
     email?: string;
@@ -99,6 +100,20 @@ function formatDateLimiteFicheAvis(iso: string): string {
   });
   const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   return `${jourSemaine} ${datePart} — ${heure}`;
+}
+
+function isCahierPayant(ao: AppelOffre): boolean {
+  return Boolean(ao.cahier_paiement_requis && (ao.cahier_prix_xof ?? 0) > 0);
+}
+
+function messageCahierIndisponible(ao: AppelOffre, marcheCloture: boolean): string {
+  if (ao.statut === "closed") {
+    return "Appel d'offres clôturé — le cahier des charges n'est plus disponible.";
+  }
+  if (marcheCloture || ao.acquisition_cahier_autorisee === false) {
+    return "Date limite de dépôt dépassée — l'acquisition du cahier n'est plus possible.";
+  }
+  return "Le cahier des charges n'est pas accessible avec votre compte.";
 }
 
 const AppelOffreDetails = () => {
@@ -665,17 +680,26 @@ const AppelOffreDetails = () => {
                                                         <span className="text-xs text-muted-foreground">Réservé aux fournisseurs</span>
                                                       )}
                                                     </>
-                                                  ) : isClosed &&
-                                                    doc.categorie === "CAHIER_DES_CHARGES" &&
-                                                    appelOffre.cahier_paiement_requis &&
-                                                    (appelOffre.cahier_prix_xof ?? 0) > 0 ? (
-                                                    <span className="text-xs text-muted-foreground max-w-[220px] text-right">
-                                                      Date limite dépassée — l&apos;acquisition du cahier n&apos;est plus possible.
-                                                    </span>
-                                                  ) : (
+                                                  ) : doc.categorie === "CAHIER_DES_CHARGES" && isCahierPayant(appelOffre) ? (
+                                                    !isAuthenticated ? (
+                                                      <Button size="sm" variant="secondary" className="w-full whitespace-nowrap sm:w-auto" onClick={() => navigate("/connexion")}>
+                                                        Se connecter pour payer
+                                                      </Button>
+                                                    ) : isFournisseur ? (
+                                                      <span className="text-xs text-muted-foreground max-w-[240px] md:text-right">
+                                                        {messageCahierIndisponible(appelOffre, isClosed)}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-xs text-muted-foreground">Réservé aux fournisseurs</span>
+                                                    )
+                                                  ) : !isAuthenticated ? (
                                                     <Button size="sm" variant="secondary" className="w-full whitespace-nowrap sm:w-auto" onClick={() => navigate("/connexion")}>
                                                       Se connecter pour télécharger
                                                     </Button>
+                                                  ) : (
+                                                    <span className="text-xs text-muted-foreground max-w-[240px] md:text-right">
+                                                      Téléchargement non autorisé pour ce document.
+                                                    </span>
                                                   )}
                                                   {canManageAoDocs && (
                                                     <Button
