@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowLeftRight, Copy, ExternalLink, QrCode } from "lucide-re
 import { PaiementCahierLayout } from "@/components/paiement/PaiementCahierLayout";
 import { OrangeMoneyLogo, WaveLogo } from "@/components/paiement/PaymentMethodLogos";
 
-type PaymentProvider = "wave" | "orange_money" | "simulation";
+type PaymentProvider = "wave" | "orange_money";
 type Step = "method" | "infos" | "payment";
 
 interface PreviewPayload {
@@ -32,7 +32,6 @@ interface PreviewPayload {
 const PROVIDER_LABELS: Record<PaymentProvider, string> = {
   wave: "Wave",
   orange_money: "Orange Money",
-  simulation: "Simulation (démo)",
 };
 
 const PaiementCahier = () => {
@@ -68,7 +67,6 @@ const PaiementCahier = () => {
     const list: PaymentProvider[] = [];
     if (preview.paiement_wave_active) list.push("wave");
     if (preview.paiement_orange_money_active) list.push("orange_money");
-    if (preview.cahier_simulation_active) list.push("simulation");
     return list;
   }, [preview]);
 
@@ -99,7 +97,6 @@ const PaiementCahier = () => {
         const dispo: PaymentProvider[] = [];
         if (data.paiement_wave_active) dispo.push("wave");
         if (data.paiement_orange_money_active) dispo.push("orange_money");
-        if (data.cahier_simulation_active) dispo.push("simulation");
         if (dispo.length > 0) {
           const preferOrange =
             data.paiement_orange_money_active &&
@@ -170,10 +167,10 @@ const PaiementCahier = () => {
       preview.cahier_simulation_active &&
       preview.paiement_orange_money_api === false;
 
-    if (moyen === "simulation" || orangeViaSimulation) {
+    if (orangeViaSimulation) {
       try {
         setInitiating(true);
-        const demoUi = moyen === "orange_money" ? "orange_money" : "wave";
+        const demoUi = "orange_money";
         const res = await api.post(`/api/appels-offres/${preview.appel_offre.id}/cahier/paiement/initier`, {
           provider: "simulation",
           demo_ui: demoUi,
@@ -355,20 +352,6 @@ const PaiementCahier = () => {
                         <p className="text-xs font-medium text-slate-700">Wave</p>
                       </button>
                     )}
-                    {preview.cahier_simulation_active && (
-                      <button
-                        type="button"
-                        onClick={() => setMoyen("simulation")}
-                        className={`rounded-2xl border bg-white p-4 text-center shadow-sm hover:shadow-md transition ${
-                          moyen === "simulation" ? "border-teal-600 ring-2 ring-teal-100" : "border-slate-200"
-                        }`}
-                      >
-                        <div className="mx-auto mb-2 h-12 w-12 rounded-xl bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                          Démo
-                        </div>
-                        <p className="text-xs font-medium text-slate-600">Simulation</p>
-                      </button>
-                    )}
                   </div>
                   <Button
                     type="button"
@@ -412,12 +395,10 @@ const PaiementCahier = () => {
                       <Label>Email (optionnel)</Label>
                       <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="example@domain.com" />
                     </div>
-                    {moyen !== "simulation" && (
-                      <p className="text-xs text-muted-foreground">
-                        Ces informations facilitent le suivi. Le règlement s&apos;effectue sur la plateforme{" "}
-                        {titreMoyen} via le lien ou le QR code à l&apos;étape suivante.
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Ces informations facilitent le suivi. Le règlement s&apos;effectue sur la plateforme{" "}
+                      {titreMoyen} via le lien ou le QR code à l&apos;étape suivante.
+                    </p>
                   </div>
 
                   <Button
@@ -426,7 +407,7 @@ const PaiementCahier = () => {
                     disabled={!canGoPayment || initiating}
                     onClick={() => void lancerPaiement()}
                   >
-                    {initiating ? "Préparation…" : moyen === "simulation" ? "Continuer (démo)" : "Obtenir le lien de paiement"}
+                    {initiating ? "Préparation…" : "Obtenir le lien de paiement"}
                   </Button>
                 </>
               )}
