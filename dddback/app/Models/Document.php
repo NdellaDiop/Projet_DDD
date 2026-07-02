@@ -142,7 +142,9 @@ class Document extends Model
                 return true;
             }
 
-            return $ao->acquisitionCahierAutorisee();
+            // Cahier payant : téléchargement uniquement après achat complété
+            // (acquisitionCahierAutorisee() = droit de payer, pas de télécharger gratis).
+            return false;
         }
 
         return true;
