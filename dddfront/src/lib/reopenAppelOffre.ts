@@ -8,25 +8,31 @@ export function dateLimiteDepotDepassee(iso: string | undefined | null): boolean
   return Date.now() > fin.getTime();
 }
 
-/** Demande une nouvelle échéance si l'ancienne est dépassée (réouverture AO). */
-export function demanderNouvelleDateLimite(titre?: string): string | null {
-  const suggestion = new Date();
-  suggestion.setDate(suggestion.getDate() + 7);
-  suggestion.setHours(17, 0, 0, 0);
-  const defaut = suggestion.toISOString().slice(0, 16);
+/** Valeur par défaut pour input datetime-local (+7 jours, 17h). */
+export function defaultNouvelleDateLimiteLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  d.setHours(17, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-  const saisie = window.prompt(
-    `La date limite est dépassée pour ${titre ? `« ${titre} »` : "cet appel d'offres"}.\n\n` +
-      "Saisissez la nouvelle date et heure limite (format AAAA-MM-JJTHH:MM) :",
-    defaut
-  );
-  if (!saisie?.trim()) return null;
-
-  const parsed = new Date(saisie.trim());
+/** datetime-local → ISO pour l'API Laravel. */
+export function parseDatetimeLocalToIso(value: string): string | null {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
-    window.alert("Date invalide ou déjà passée.");
     return null;
   }
-
   return parsed.toISOString();
+}
+
+export type ReopenAoTarget = {
+  id: number;
+  titre?: string;
+  date_limite_depot?: string;
+};
+
+export function reopenRequiresNewDate(ao: ReopenAoTarget): boolean {
+  return dateLimiteDepotDepassee(ao.date_limite_depot);
 }

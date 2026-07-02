@@ -63,7 +63,8 @@ import {
 } from "@/lib/legalDocuments";
 import { SOURCE_FINANCEMENT_OPTIONS, type SourceFinancement } from "@/lib/appelOffreFinancement";
 import { TYPE_MARCHE_OPTIONS, type TypeMarche } from "@/lib/appelOffreCategorisation";
-import { dateLimiteDepotDepassee, demanderNouvelleDateLimite } from "@/lib/reopenAppelOffre";
+import { type ReopenAoTarget } from "@/lib/reopenAppelOffre";
+import { ReopenAppelOffreDialog } from "@/components/appel-offre/ReopenAppelOffreDialog";
 import {
   AO_PIECE_LABELS,
   buildAppelOffreCreateFormData,
@@ -190,6 +191,9 @@ export default function ResponsableDashboard() {
 
   // État pour la création
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [reopenDialogAo, setReopenDialogAo] = useState<ReopenAoTarget | null>(null);
+  const [reopenSubmitting, setReopenSubmitting] = useState(false);
+  const [reopenForceDate, setReopenForceDate] = useState(false);
   const [newTender, setNewTender] = useState({
     reference: "",
     source_financement: "etat" as SourceFinancement,
@@ -740,37 +744,43 @@ export default function ResponsableDashboard() {
     }
   };
 
-  const handleReopen = async (ao: { id: number; titre?: string; date_limite_depot?: string }) => {
-    if (!api) return;
-    const label = ao.titre ? `« ${ao.titre} »` : "cet appel d'offres";
-    if (
-      !confirm(
-        `Réouvrir ${label} ?\n\nL'appel d'offres repassera au statut « publié » (ouvert).` +
-          (dateLimiteDepotDepassee(ao.date_limite_depot)
-            ? "\n\nLa date limite actuelle est dépassée : vous devrez en indiquer une nouvelle."
-            : "")
-      )
-    ) {
-      return;
-    }
+  const handleReopen = (ao: ReopenAoTarget) => {
+    setReopenForceDate(false);
+    setReopenDialogAo(ao);
+  };
 
-    const body: { date_limite_depot?: string } = {};
-    if (dateLimiteDepotDepassee(ao.date_limite_depot)) {
-      const nouvelleDate = demanderNouvelleDateLimite(ao.titre);
-      if (!nouvelleDate) return;
-      body.date_limite_depot = nouvelleDate;
-    }
-
+  const submitReopen = async (dateLimiteDepot?: string) => {
+    if (!api || !reopenDialogAo) return;
+    setReopenSubmitting(true);
     try {
-      await api.post(`/api/appels-offres/${ao.id}/reopen`, body);
+      const body = dateLimiteDepot ? { date_limite_depot: dateLimiteDepot } : {};
+      await api.post(`/api/appels-offres/${reopenDialogAo.id}/reopen`, body);
       toast({ title: "Réouvert", description: "L'appel d'offres est de nouveau publié." });
+      setReopenDialogAo(null);
+      setReopenForceDate(false);
       loadData();
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: getErrorMessage(error, "Impossible de réouvrir cet appel d'offres."),
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      const payload =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { message?: string; requires_new_date_limite?: boolean } } })
+              .response?.data
+          : undefined;
+      if (payload?.requires_new_date_limite) {
+        setReopenForceDate(true);
+        toast({
+          title: "Nouvelle date limite requise",
+          description: payload.message ?? "Indiquez une nouvelle échéance pour réouvrir ce marché.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erreur",
+          description: getErrorMessage(error, "Impossible de réouvrir cet appel d'offres."),
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setReopenSubmitting(false);
     }
   };
 
@@ -2777,6 +2787,20 @@ export default function ResponsableDashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ReopenAppelOffreDialog
+        ao={reopenDialogAo}
+        open={reopenDialogAo !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReopenDialogAo(null);
+            setReopenForceDate(false);
+          }
+        }}
+        onConfirm={submitReopen}
+        submitting={reopenSubmitting}
+        forceDateRequired={reopenForceDate}
+      />
     </div>
   );
 }
