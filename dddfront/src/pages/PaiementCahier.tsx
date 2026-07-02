@@ -94,9 +94,6 @@ const PaiementCahier = () => {
         const res = await api.get(`/api/appels-offres/${aoId}/cahier/paiement/preview`);
         const data = res.data as PreviewPayload;
         setPreview(data);
-        setName(data.fournisseur?.nom ?? user?.name ?? "");
-        setEmail(data.fournisseur?.email ?? user?.email ?? "");
-        setPhone(data.fournisseur?.telephone ?? user?.telephone ?? "");
 
         const dispo: PaymentProvider[] = [];
         if (data.paiement_wave_active) dispo.push("wave");
@@ -113,7 +110,7 @@ const PaiementCahier = () => {
         setLoading(false);
       }
     })();
-  }, [api, aoId, isAuthenticated, isFournisseur, isReady, navigate, user?.email, user?.name, user?.telephone]);
+  }, [api, aoId, isAuthenticated, isFournisseur, isReady, navigate]);
 
   /** Détection automatique du paiement (sans bouton « J'ai payé ») — style Odoo. */
   useEffect(() => {
@@ -364,7 +361,12 @@ const PaiementCahier = () => {
                     type="button"
                     className="w-full h-12 text-base font-semibold bg-teal-600 hover:bg-teal-700"
                     disabled={!canGoInfos}
-                    onClick={() => setStep("infos")}
+                    onClick={() => {
+                      setName("");
+                      setEmail("");
+                      setPhone("");
+                      setStep("infos");
+                    }}
                   >
                     Continuer
                   </Button>

@@ -248,7 +248,12 @@ const PaiementCahierSimulation = () => {
                           type="button"
                           className="w-full h-12 text-base font-semibold bg-teal-600 hover:bg-teal-700"
                           disabled={!canGoInfos}
-                          onClick={() => setStep("infos")}
+                          onClick={() => {
+                            setWavePhone("");
+                            setWaveName("");
+                            setWaveEmail("");
+                            setStep("infos");
+                          }}
                         >
                           Continuer
                         </Button>
