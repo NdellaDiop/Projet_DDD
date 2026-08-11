@@ -1,256 +1,280 @@
-# Portail des appels d’offres — Projet DDD (Dakar Dem Dikk)
+# Dem Dikk — Portail des marchés publics
 
-Documentation **globale** du dépôt : backend API (`dddback`), interface web (`dddfront`). Elle sert de base pour une **modélisation** (domaine, cas d’usage, diagrammes) et pour la rédaction d’un **mémoire de stage**.
+Application web de gestion et de consultation des **appels d'offres** pour **Dakar Dem Dikk** (Projet DDD).
 
----
+- **Production** : [https://pmp.demdikk.sn](https://pmp.demdikk.sn)
+- **Dépôt** : monorepo `dddback/` (API Laravel) + `dddfront/` (SPA React)
 
-## 1. Vision métier
-
-Application web permettant à un **organisme public** (contexte type **Dakar Dem Dikk**) de :
-
-- **Publier** des **appels d’offres** (avis, cahier des charges, annexes) ;
-- Indiquer les **modalités de dépôt physique** des plis (lieu, horaires, contact du service des marchés) ;
-- Laisser les **fournisseurs** consulter les marchés, **télécharger** les pièces (dont le **cahier des charges**, payant ou gratuit selon le marché), préparer leur dossier **hors ligne** et **déposer les plis en présentiel** ;
-- Confier la gestion opérationnelle à des **personnes responsables des marchés (PRM)** et à des **administrateurs**.
-
-Le portail **ne remplace pas** la procédure juridique complète des marchés publics : il **informe**, **trace** certains échanges (documents, notifications, historiques utiles) et **facilite** l’accès aux pièces et au guichet.
+Le portail **informe**, **trace** les échanges (documents, notifications, audit) et **facilite** l'accès aux pièces et au guichet. Le **dépôt des plis reste physique** au siège, selon les modalités indiquées sur chaque avis.
 
 ---
 
-## 2. Architecture logicielle du dépôt
+## Sommaire
 
-| Couche | Dossier | Rôle |
-|--------|---------|------|
-| **API REST** | `dddback/` | Laravel 10, PHP ≥ 8.1, authentification **Laravel Sanctum**, logique HTTP, règles d’accès, persistance (Eloquent). |
-| **Client SPA** | `dddfront/` | React 18, **Vite 5**, **TypeScript**, UI **shadcn/ui** + **Tailwind**, appels API via **Axios**. |
-
-Les deux projets se déploient **séparément** (souvent : API sur un sous-domaine ou chemin `/api`, front sur un hébergement statique ou derrière Nginx). La variable d’environnement front `VITE_API_BASE_URL` (ou équivalent dans `src/lib/utils`) pointe vers l’URL de l’API.
-
-> **Note « DDD »** : le nom de dossier *DDD* évoque une démarche **Domain-Driven Design**. L’implémentation actuelle suit surtout une **architecture en couches classique Laravel** (contrôleurs, modèles, services, policies), **sans** séparer strictement domaine / infrastructure (pas de couche « Domain » isolée en PHP). Pour le mémoire, vous pouvez **reconstruire** une vision DDD (contextes, agrégats) **à partir** des concepts métier et des modèles ci-dessous.
-
----
-
-## 3. Acteurs et rôles
-
-Les comptes utilisateurs sont des `users` reliés à un `roles` (`ADMIN`, `RESPONSABLE_MARCHE`, `FOURNISSEUR`).
-
-| Rôle | Profil métier | Points clés dans l’app |
-|------|----------------|-------------------------|
-| **ADMIN** | Administrateur SI / marchés | Tableaux de bord globaux, gestion des PRM, validation des fournisseurs, audit, assignation d’AO à un PRM, création d’AO. |
-| **RESPONSABLE_MARCHE** | PRM | Création / publication / clôture des AO dont il est responsable, consultation des candidatures reçues (si flux activé), ajout de documents sur les AO, modalités de dépôt. |
-| **FOURNISSEUR** | Entreprise candidate | Inscription, dépôt des **documents légaux**, consultation des AO publiés, paiement du **cahier** si requis, téléchargements, notifications, assistant conversationnel (option IA). |
-
-Les **visiteurs non connectés** peuvent consulter la liste des AO publiés et une partie des informations ; le téléchargement du **cahier payant** ou certaines pièces nécessite un compte fournisseur et parfois un paiement.
+1. [Stack technique](#stack-technique)
+2. [Structure du dépôt](#structure-du-dépôt)
+3. [Rôles et espaces](#rôles-et-espaces)
+4. [Fonctionnalités principales](#fonctionnalités-principales)
+5. [Installation locale](#installation-locale)
+6. [Configuration](#configuration)
+7. [Déploiement production](#déploiement-production)
+8. [Routes frontend](#routes-frontend)
+9. [API REST (aperçu)](#api-rest-aperçu)
+10. [Documentation complémentaire](#documentation-complémentaire)
 
 ---
 
-## 4. Concepts métier principaux (pour modélisation)
+## Stack technique
 
-### 4.1 Appel d'offres (`AppelOffre`)
-
-**Cycle de vie** (`statut`) : `draft` → `published` → `closed` ; éventuellement `archived`.
-
-**Données métier notables** :
-
-- **Référence**, **titre**, **description**, **source de financement** (`fonds_propres`, `etat`, `financement_exterieure`) ;
-- **Dates** : publication, limite de dépôt ;
-- **Modalités de soumission physique** (`modalites_soumission_physique`) : texte libre saisi par PRM / admin, affiché sur la fiche publique (pas d’adresse codée en dur) ;
-- **Cahier payant** : `cahier_paiement_requis`, `cahier_prix_xof` (FCFA) ;
-- **Lien** : `responsable_marche_id` (peut être null si AO créé par l’admin sans assignation immédiate).
-
-**Règles métier (extraits)** : publication refusée si documents obligatoires manquants, si cahier payant sans prix, ou si **modalités de dépôt physique** vides (selon implémentation actuelle).
-
-### 4.2 Document (`Document`)
-
-Fichiers liés soit à un **appel d'offres** (avis, cahier, règlement, annexe), soit à un **utilisateur** (documents légaux fournisseur), soit à une **candidature**. Catégories typées (ex. `AVIS_APPEL_OFFRES`, `CAHIER_DES_CHARGES`, etc.).
-
-**Téléchargement côté fournisseur** : règles dans le modèle `Document` (ex. cahier payant seulement après enregistrement d’un **achat** complété — voir `CahierAccesAchat`).
-
-### 4.3 Paiement du cahier des charges
-
-- Entité **`CahierAccesAchat`** : trace l’**intention d’achat** / le **statut** (ex. payé) par `user` et `appel_offre`.
-- **Prestataires** : **Wave** (Checkout), **Orange Money** (intégration HTTP générique), **simulation** (démo sans vrai débit) — configuration dans `config/paiement.php` et variables d’environnement.
-- **Webhooks** : finalisation côté serveur (`webhooks/wave/cahier`, `webhooks/orange-money/cahier`).
-
-### 4.4 Candidature (`Candidature`)
-
-Lien **fournisseur** ↔ **appel d’offres**, avec statut, date de soumission, montant proposé optionnel, documents rattachés, **commentaires** (`CandidatureComment`).
-
-**Paramètre portail** : `CANDIDATURE_EN_LIGNE` (`config/portail.php`) — si `false`, la **création** de candidature par le fournisseur via l’API est refusée (dépôt **physique** prioritaire) ; l’interface fournisseur l’explicite. Des écrans back-office peuvent toutefois lister d’éventuelles entrées (historique, saisie manuelle, tests).
-
-### 4.5 Fournisseur (`Fournisseur`)
-
-Données entreprise (raison sociale, contacts, pièces légales NINEA / RCCM / quitus, références professionnelles, etc.), statut de validation par l’admin.
-
-### 4.6 Responsable des marchés (`ResponsableMarche`)
-
-Extension métier liée à un `User` : département, fonction, téléphone, lien avec les AO.
-
-### 4.7 Notifications et communication
-
-- **`Notification`** : messages in-app (lecture / non lue).
-- **`ContactMessage`** : formulaire contact public.
-- **`Suggestion`** : boîte à idées utilisateurs.
-- **Emails** : réinitialisation mot de passe, événements métier selon `NotificationService`.
-
-### 4.8 Traçabilité
-
-- **`LogActivite`** : actions métier (création AO, etc.).
-- **`AuditLog`** : journalisation consultable par l’admin (route `admin/audit-logs`).
-
-### 4.9 Assistant IA fournisseur
-
-- **`FournisseurChatController`** + services **`Ai/`** (client OpenAI configurable, réponses FAQ locales `FournisseurFaqResponder`) : questions contextuelles, rate limiting.
+| Couche | Technologies |
+|--------|----------------|
+| **Backend** | PHP 8.1+, Laravel 10, Laravel Sanctum, MySQL |
+| **Frontend** | React 18, TypeScript, Vite 5, Tailwind CSS, shadcn/ui, Axios |
+| **Auth** | Bearer token (Sanctum) |
+| **Paiement cahier** | Wave, Orange Money, mode simulation (démo) |
+| **Emails** | SMTP Laravel (notifications, contact, mot de passe oublié) |
 
 ---
 
-## 5. Tables de base de données (aperçu)
+## Structure du dépôt
 
-Principales tables (voir `dddback/database/migrations/`) :
-
-- `users`, `roles`, `password_reset_tokens`, `personal_access_tokens`
-- `responsables_marche`, `fournisseurs`
-- `appels_offres`
-- `documents`
-- `candidatures`, `candidature_comments`
-- `notifications`
-- `logs_activites`, `audit_logs`
-- `suggestions`, `contact_messages`
-- `cahier_acces_achats`
-
----
-
-## 6. API REST (résumé)
-
-Fichier source : `dddback/routes/api.php`.
-
-- **Public** : `GET /api/appels-offres`, `GET /api/appels-offres/{id}`, auth (`login`, `register`), mot de passe oublié, `POST /api/contact`, webhooks paiement.
-- **Authentifié (Sanctum)** : CRUD partiel selon rôle — AO (création / mise à jour / publish / close), documents, candidatures, notifications, profils PRM / fournisseur, admin (stats, utilisateurs, audit), paiement cahier, chat fournisseur.
-
-Une liste détaillée des endpoints figure aussi dans `dddback/README.md`.
+```
+DDD/
+├── dddback/          # API REST Laravel
+│   ├── app/
+│   │   ├── Http/Controllers/
+│   │   ├── Models/
+│   │   ├── Policies/
+│   │   └── Services/
+│   ├── config/
+│   ├── database/migrations/
+│   └── routes/api.php
+├── dddfront/         # Interface React (build → dist/)
+│   └── src/
+│       ├── pages/
+│       ├── components/
+│       └── context/AuthContext.tsx
+└── README.md         # Ce fichier
+```
 
 ---
 
-## 7. Interface web — routes principales
+## Rôles et espaces
 
-Fichier : `dddfront/src/App.tsx`.
+| Rôle | Code | Tableau de bord | Accès principal |
+|------|------|-----------------|-----------------|
+| **Administrateur** | `ADMIN` | `/admin` | Tous les AO, PRM, fournisseurs, audit, assignation PRM, attribution marché |
+| **Responsable marché (PRM)** | `RESPONSABLE_MARCHE` | `/responsable/dashboard` | Ses AO (+ création), publication, clôture, réouverture |
+| **Fournisseur** | `FOURNISSEUR` | `/fournisseur/dashboard` | Consultation AO, documents légaux, achat cahier, notifications |
+| **Visiteur** | — | Pages publiques | Liste et fiches AO, formulaire contact |
 
-| Chemin | Page |
-|--------|------|
-| `/` | Accueil |
-| `/appels-offres` | Liste des marchés |
-| `/appels-offres/:id` | Détail d’un AO (fiche avis, fichiers, modalités de dépôt, paiement cahier) |
-| `/connexion`, `/inscription`, `/mot-de-passe-oublie`, `/reset-password` | Authentification |
-| `/comment-ca-marche`, `/contact` | Informations |
-| `/admin` | Tableau de bord administrateur |
-| `/responsable/dashboard` | Tableau de bord PRM (admin peut aussi y accéder selon garde front) |
-| `/fournisseur/dashboard` | Espace fournisseur |
-| `/paiement/cahier/simulation` | Paiement simulé (si activé côté API) |
+> **À venir** : rôle **Gestionnaire** (vue globale sur les AO, sans gestion des comptes).
 
 ---
 
-## 8. Configuration importante (backend)
+## Fonctionnalités principales
 
-Fichiers dans `dddback/config/` et variables `.env` (voir `.env.example`) :
+### Public
 
-| Domaine | Fichier / variables |
-|---------|---------------------|
-| Base de données | `DB_*` |
-| Sanctum / URL app | `APP_URL`, sessions |
-| Portail | `CANDIDATURE_EN_LIGNE` → `config/portail.php` |
-| Paiement cahier | `FRONTEND_URL`, `CAHIER_PAIEMENT_SIMULATION`, clés Wave / Orange Money, webhooks |
-| Assistant IA | clés provider (ex. OpenAI), configuration dans `config/` dédiée si présente |
+- Liste et fiche des appels d'offres publiés / clôturés
+- Téléchargement des pièces jointes (avis, cahier selon règles d'accès)
+- Formulaire **Contact** (`/contact`)
+- Page **Comment ça marche**
 
-Le front utilise typiquement une URL d’API absolue pour Axios (`API_BASE_URL` / `VITE_*`).
+### Fournisseur
 
-### 8.1 Paiement cahier — mode simulation (soutenance)
+- Inscription avec dépôt des **pièces légales** (NINEA, RCCM, quitus, etc.)
+- Validation du compte par l'administrateur (ou auto-validation si activée)
+- **Mes documents**, **Mes achats** (cahiers payés), **Notifications & avis**
+- Paiement du cahier des charges (Wave / Orange Money / simulation)
+- Boîte à idées, assistant conversationnel (IA configurable)
 
-Sans clés **Wave** ni **Orange Money**, vous pouvez tout de même montrer le **parcours complet** (bouton paiement → page « PAYER » simulée → téléchargement du cahier) :
+### PRM
 
-1. Dans `dddback/.env`, **`FRONTEND_URL`** doit être l’URL du front Vite (par défaut dans ce projet : port **8080**, cf. `dddfront/vite.config.ts`).
-2. **`CAHIER_PAIEMENT_SIMULATION=true`** dans `.env`, **ou** laisser `APP_ENV=local` : la simulation est alors **activée par défaut** si la variable n’est pas renseignée (`config/paiement.php`).
-3. Après modification du `.env` : `php artisan config:clear` (ou `php artisan config:cache` sur serveur une fois les valeurs figées).
+- Création d'AO (brouillon → publication → clôture → réouverture)
+- Modalités de dépôt des plis en présentiel
+- Consultation de l'annuaire fournisseurs (pièces légales au guichet)
+- Vue **Fiche** sur chaque AO
 
-### 8.2 Déploiement — vue d’ensemble
+### Administrateur
 
-- **Backend** : PHP + Laravel sur un serveur (ou conteneur) ; exposer `public/` comme racine web ou avec **PHP-FPM + Nginx** ; variables `.env` de production (`APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, base `DB_*`, `FRONTEND_URL`, paiements).
-- **Frontend** : `npm run build` dans `dddfront/` ; servir le dossier **`dist/`** en statique (Nginx, CDN, S3, etc.).
-- **CORS / cookies** : si domaines différents pour API et front, ajuster **Sanctum** (`SANCTUM_STATEFUL_DOMAINS`, `SESSION_DOMAIN`) selon votre hébergement.
-- **HTTPS** : obligatoire en production pour les paiements réels et les cookies sécurisés.
+- **Vue d'ensemble** : statistiques, fournisseurs en attente, activités récentes
+- **Appels d'offres** : vue globale, assignation / changement de PRM, clôture, réouverture, retour brouillon
+- **Fournisseurs** : validation (avec contrôle dossier complet), rejet, **suspension**, **réactivation**, remise en examen
+- **PRM** : création, modification, **réinitialisation mot de passe**
+- **Messages contact** : lire, marquer lu, archiver, répondre par e-mail
+- **Suggestions**, **Historique audit**, **Attribution** du marché (AO clôturés)
+- Export Excel / PDF sur plusieurs listes
+
+### Notifications
+
+- Messages in-app filtrés par rôle (`audience` : user / admin / prm)
+- Exemples fournisseur : validation compte, clôture / réouverture AO, commentaires sur dossier
+- Les alertes admin (validation dossiers tiers) ne s'affichent **pas** côté fournisseur
 
 ---
 
-## 9. Installation et exécution locale
+## Installation locale
 
-### Backend (`dddback`)
+### Prérequis
+
+- PHP ≥ 8.1, Composer, MySQL
+- Node.js ≥ 18, npm
+
+### 1. Backend
 
 ```bash
 cd dddback
 composer install
-cp .env.example .env   # puis éditer DB_*, APP_URL, etc.
+cp .env.example .env
+# Éditer .env : DB_*, APP_URL=http://127.0.0.1:8000, FRONTEND_URL=http://127.0.0.1:8080
 php artisan key:generate
 php artisan migrate
-php artisan serve        # http://127.0.0.1:8000
+php artisan db:seed   # rôles + compte admin de démo (dev uniquement)
+php artisan serve     # http://127.0.0.1:8000
 ```
 
-### Frontend (`dddfront`)
+### 2. Frontend
 
 ```bash
 cd dddfront
 npm install
-# Configurer l’URL de l’API (variable Vite selon le projet)
-npm run dev              # dans ce dépôt : http://127.0.0.1:8080 (voir vite.config.ts)
+# Créer .env avec :
+# VITE_API_BASE_URL=http://127.0.0.1:8000
+npm run dev           # http://127.0.0.1:8080 (voir vite.config.ts)
 ```
 
-Build production :
+### 3. Vérification rapide
+
+1. Ouvrir `http://127.0.0.1:8080`
+2. Se connecter avec le compte admin créé par le seeder (voir `database/seeders/UserSeeder.php`)
+3. Consulter `/appels-offres` sans connexion
+
+---
+
+## Configuration
+
+### Backend (`dddback/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `APP_URL` | URL publique de l'API |
+| `FRONTEND_URL` | URL du front (retours paiement, liens) |
+| `DB_*` | Connexion MySQL |
+| `CANDIDATURE_EN_LIGNE` | `false` = dépôt physique uniquement (défaut) |
+| `FOURNISSEUR_AUTO_VALIDATION` | Validation auto si dossier légal complet |
+| `CAHIER_PAIEMENT_SIMULATION` | Paiement simulé sans Wave/OM |
+| `WAVE_*` / `ORANGE_MONEY_*` | Paiement réel du cahier |
+| `MAIL_*` | Envoi d'e-mails |
+| `MAIL_CONTACT_ADDRESS` | Destinataire des messages du formulaire contact |
+| `OPENAI_API_KEY` | Assistant IA fournisseur (optionnel) |
+| `CORS_ALLOWED_ORIGINS` | Origines autorisées (front en prod) |
+
+Après modification : `php artisan config:cache` (production).
+
+### Frontend (`dddfront/.env`)
+
+```env
+VITE_API_BASE_URL=https://votre-api.example.com
+```
+
+Build : `npm run build` → fichiers dans `dddfront/dist/`.
+
+---
+
+## Déploiement production
+
+Exemple de workflow (serveur Linux, code dans `/var/www/ddd`) :
 
 ```bash
-cd dddfront && npm run build   # sortie dans dist/
+cd /var/www/ddd
+git pull origin main
+
+cd dddback
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+
+cd ../dddfront
+npm ci
+npm run build
 ```
 
----
-
-## 10. Pistes pour la modélisation (mémoire)
-
-### 10.1 Contextes délimités (bounded contexts) possibles
-
-- **Publication des marchés** : AO, documents officiels, workflow brouillon → publié → clôturé, modalités de dépôt.
-- **Accès aux pièces** : droits de téléchargement, **achat du cahier**, intégration paiement.
-- **Relation acheteur–fournisseurs** : inscription / validation fournisseur, documents légaux.
-- **Soumission / instruction des offres** : selon votre périmètre — soit **uniquement présentiel** (hors système), soit extension **candidature en ligne** si activée.
-- **Notifications et réclamations** : notifications, contact, suggestions.
-- **Gouvernance** : audit, logs d’activité, administration des comptes.
-
-### 10.2 Langage ubiquitaire (exemples)
-
-| Terme | Sens dans ce projet |
-|-------|---------------------|
-| Appel d'offres | Marché consultatif publié avec pièces jointes et dates limites. |
-| Cahier des charges | Document téléchargeable ; peut être payant et débloqué après paiement. |
-| Dépôt des plis | Action **physique** au siège ; modalités décrites dans `modalites_soumission_physique`. |
-| PRM | Responsable désigné pour un AO. |
-| Candidature | Enregistrement optionnel **en ligne** si la fonctionnalité est activée ; sinon parcours présentiel uniquement. |
-
-### 10.3 Diagrammes utiles pour un mémoire
-
-- Diagramme de **cas d’utilisation** par acteur (visiteur, fournisseur, PRM, admin).
-- Diagramme de **classes** ou **modèle de données** dérivé des migrations.
-- **Séquence** : paiement du cahier → webhook → téléchargement.
-- **Machine à états** : cycle de vie de `AppelOffre`.
+- Servir `dddfront/dist/` via Nginx (ou équivalent)
+- Pointer l'API vers `dddback/public/`
+- **HTTPS** obligatoire en production
+- Ajuster `CORS_ALLOWED_ORIGINS` et `VITE_API_BASE_URL` pour le domaine prod
 
 ---
 
-## 11. Documentation complémentaire
+## Routes frontend
 
-- `dddback/README.md` — détail API, modèles, installation backend.
-- `dddfront/README.md` — si présent : stack front et scripts.
+| Chemin | Description |
+|--------|-------------|
+| `/` | Accueil |
+| `/appels-offres` | Liste des marchés |
+| `/appels-offres/:id` | Fiche AO (avis, fichiers, modalités dépôt) |
+| `/connexion`, `/inscription` | Authentification |
+| `/mot-de-passe-oublie`, `/reset-password` | Mot de passe oublié |
+| `/contact` | Formulaire contact public |
+| `/comment-ca-marche` | Guide utilisateur |
+| `/admin` | Dashboard administrateur |
+| `/responsable/dashboard` | Dashboard PRM |
+| `/fournisseur/dashboard` | Espace fournisseur |
+| `/paiement/cahier` | Paiement cahier (fournisseur) |
+| `/paiement/cahier/simulation` | Paiement simulé (démo) |
 
 ---
 
-## 12. Licence et contexte académique
+## API REST (aperçu)
 
-Projet réalisé dans un cadre de **stage / mémoire** autour de la gestion des marchés publics et du portail d’information des appels d’offres. Adapter la formulation juridique et institutionnelle du mémoire aux sources officielles en vigueur (code des marchés publics, guides ARMP, etc.).
+Fichier source : `dddback/routes/api.php`
+
+**Public**
+
+- `GET /api/appels-offres`, `GET /api/appels-offres/{id}`
+- `POST /api/login`, `POST /api/register`, `POST /api/contact`
+- Webhooks : `/api/webhooks/wave/cahier`, `/api/webhooks/orange-money/cahier`
+
+**Authentifié (Bearer token)**
+
+- Fournisseur : profil, documents légaux, mes achats, paiement cahier, suggestions
+- PRM / Admin : CRUD AO, publish, close, reopen (PRM sur ses AO ; admin global)
+- Admin : `/api/admin/*` (stats, fournisseurs, PRM, contact, audit, validate/suspend/reactivate)
+
+Liste détaillée : voir [`dddback/README.md`](dddback/README.md).
 
 ---
 
-*Dernière mise à jour du README : structure du dépôt et concepts alignés sur le code à la date de rédaction.*
+## Modèle de données (résumé)
+
+Principales entités :
+
+- `User`, `Role`, `Fournisseur`, `ResponsableMarche`
+- `AppelOffre`, `Document`, `Candidature`, `CahierAccesAchat`
+- `Notification`, `ContactMessage`, `Suggestion`
+- `LogActivite`, `AuditLog`
+
+Cycle de vie AO : `draft` → `published` → `closed` (réouverture possible → `published`).
+
+---
+
+## Documentation complémentaire
+
+| Fichier | Contenu |
+|---------|---------|
+| [`dddback/README.md`](dddback/README.md) | API, modèles, installation backend |
+| [`dddfront/README.md`](dddfront/README.md) | Stack front, variables Vite |
+
+---
+
+## Contexte académique
+
+Projet réalisé dans le cadre d'un **stage / mémoire** sur la digitalisation des marchés publics. Adapter toute formulation juridique aux textes officiels en vigueur (code des marchés publics, guides ARMP, etc.).
+
+---
+
+## Licence
+
+Usage interne / académique — voir le dépôt GitHub du projet pour l'historique des contributions.

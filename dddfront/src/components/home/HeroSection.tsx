@@ -1,48 +1,23 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Search, Shield } from "lucide-react";
 import { HERO_BACKGROUND_IMAGE } from "@/lib/branding";
 
 const HeroSection = () => {
-  const [photoLoaded, setPhotoLoaded] = useState(false);
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const showPhoto = photoLoaded && !photoFailed;
-
   return (
-    <section className="relative overflow-hidden">
-      {/* Fond de secours (dégradé actuel si la photo est absente) */}
-      <div className="absolute inset-0 gradient-hero" aria-hidden="true" />
-
-      {/* Photo bus floutée pour laisser le texte lisible */}
-      {!photoFailed && (
-        <div
-          className={`absolute inset-0 overflow-hidden transition-opacity duration-700 ${
-            showPhoto ? "opacity-100" : "opacity-0"
-          }`}
-          aria-hidden="true"
-        >
-          <img
-            src={HERO_BACKGROUND_IMAGE}
-            alt=""
-            className="absolute inset-0 h-full w-full scale-105 object-cover object-center blur-sm"
-            onLoad={() => setPhotoLoaded(true)}
-            onError={() => setPhotoFailed(true)}
-          />
-        </div>
-      )}
-
-      {/* Voile coloré par-dessus la photo */}
+    <section className="relative overflow-hidden bg-slate-900">
+      {/* Photo dès le premier paint (CSS) — plus de flash vert en attendant le JS */}
       <div
-        className={`absolute inset-0 transition-colors duration-700 ${
-          showPhoto
-            ? "bg-gradient-to-br from-slate-900/50 via-primary/60 to-primary/45"
-            : "bg-transparent"
-        }`}
+        className="absolute inset-0 scale-105 bg-cover bg-center bg-no-repeat blur-sm"
+        style={{ backgroundImage: `url(${HERO_BACKGROUND_IMAGE})` }}
         aria-hidden="true"
       />
 
-      {/* Motif décoratif léger */}
+      <div
+        className="absolute inset-0 bg-gradient-to-br from-slate-900/50 via-primary/60 to-primary/45"
+        aria-hidden="true"
+      />
+
       <div className="absolute inset-0 opacity-10" aria-hidden="true">
         <div className="absolute top-20 left-10 h-72 w-72 rounded-full bg-white blur-3xl" />
         <div className="absolute bottom-20 right-10 h-96 w-96 rounded-full bg-accent blur-3xl" />

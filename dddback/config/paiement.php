@@ -53,18 +53,15 @@ return [
     */
     'orange_money' => [
         'enabled' => $orangeMoneyApiEnabled,
-        'init_url' => env('ORANGE_MONEY_INIT_URL'),
-        'method' => strtoupper(env('ORANGE_MONEY_INIT_METHOD', 'POST')),
-        'headers' => [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ],
-        'auth' => [
-            'type' => env('ORANGE_MONEY_AUTH_TYPE', 'bearer'),
-            'token' => env('ORANGE_MONEY_API_TOKEN'),
-        ],
-        /** Clé du champ contenant l’URL de paiement dans le JSON (ex: payment_url, pay_url) */
-        'response_payment_url_key' => env('ORANGE_MONEY_RESPONSE_URL_KEY', 'payment_url'),
+        /** Sandbox : https://api.orange.com/orange-money-webpay/dev/v1/webpayment */
+        'init_url' => env('ORANGE_MONEY_INIT_URL', 'https://api.orange.com/orange-money-webpay/dev/v1/webpayment'),
+        'token_url' => env('ORANGE_MONEY_TOKEN_URL', 'https://api.orange.com/oauth/v3/token'),
+        'client_id' => env('ORANGE_MONEY_CLIENT_ID'),
+        'client_secret' => env('ORANGE_MONEY_CLIENT_SECRET'),
+        /** Si vide : on réutilise le client_id (souvent suffisant en TEST). */
+        'merchant_key' => env('ORANGE_MONEY_MERCHANT_KEY'),
+        /** Devise API Orange WebPay (OUV = XOF sur le hub Orange). */
+        'currency' => env('ORANGE_MONEY_CURRENCY', 'OUV'),
         'webhook_secret' => env('ORANGE_MONEY_WEBHOOK_SECRET'),
     ],
 ];

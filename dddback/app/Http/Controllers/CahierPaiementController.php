@@ -188,15 +188,18 @@ class CahierPaiementController extends Controller
                     ], 503);
                 }
 
-                $url = app(OrangeMoneyPaymentClient::class)->createPaymentUrl($achat, $appelOffre);
+                $session = app(OrangeMoneyPaymentClient::class)->createCheckout($achat, $appelOffre);
+                if (! empty($session['pay_token'])) {
+                    $achat->update(['reference_externe' => $session['pay_token']]);
+                }
 
                 return response()->json([
                     'message' => 'Redirection vers Orange Money.',
-                    'payment_url' => $url,
+                    'payment_url' => $session['payment_url'],
                     'achat_id' => $achat->id,
                     'montant_xof' => $achat->montant_xof,
                     'provider' => $achat->provider,
-                    'statut' => $achat->statut,
+                    'statut' => $achat->fresh()->statut,
                 ], 201);
             }
         } catch (RuntimeException $e) {

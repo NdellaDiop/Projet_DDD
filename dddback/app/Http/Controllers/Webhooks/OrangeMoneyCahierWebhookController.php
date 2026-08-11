@@ -10,9 +10,8 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Webhook générique : à adapter au contrat Orange (champ d’ID commande, statut).
- * Par défaut on attend : Authorization: Bearer {ORANGE_MONEY_WEBHOOK_SECRET}
- * et un JSON { "order_id": <id cahier_acces_achats>, "status": "paid" | "success" }.
+ * Notification Orange Money WebPay (notif_url).
+ * Corps typique : status=SUCCESS, order_id, pay_token / notif_token.
  */
 class OrangeMoneyCahierWebhookController extends Controller
 {
@@ -23,43 +22,54 @@ class OrangeMoneyCahierWebhookController extends Controller
     public function handle(Request $request): Response
     {
         $secret = config('paiement.orange_money.webhook_secret');
-        if (empty($secret)) {
-            return response('Non configuré', 503);
+        $auth = (string) $request->header('Authorization', '');
+        if (is_string($secret) && $secret !== '' && $auth !== '') {
+            $expected = 'Bearer '.$secret;
+            if (! hash_equals($expected, $auth)) {
+                return response('Non autorisé', 401);
+            }
         }
 
-        $auth = $request->header('Authorization', '');
-        $expected = 'Bearer '.$secret;
-        if (! hash_equals($expected, $auth)) {
-            return response('Non autorisé', 401);
-        }
-
-        $json = $request->json()->all();
-        $orderId = $json['order_id'] ?? $json['merchant_order_id'] ?? null;
-        $status = $json['status'] ?? $json['payment_status'] ?? null;
-
-        if ($orderId === null) {
-            Log::warning('Webhook Orange Money sans order_id', $json);
-
-            return response('OK', 200);
-        }
-
-        $ok = in_array((string) $status, ['paid', 'success', 'completed', 'SUCCESS', 'PAID'], true);
+        $json = $request->all();
+        $status = $json['status'] ?? $json['payment_status'] ?? $json['txnstatus'] ?? null;
+        $ok = in_array(strtoupper((string) $status), ['PAID', 'SUCCESS', 'COMPLETED', 'SUCCESSFUL'], true);
         if (! $ok) {
+            Log::info('Webhook Orange Money ignoré (statut non payé)', ['status' => $status]);
+
             return response('OK', 200);
         }
 
-        $achat = CahierAccesAchat::query()
-            ->where('id', (int) $orderId)
-            ->where('provider', CahierAccesAchat::PROVIDER_ORANGE_MONEY)
-            ->first();
+        $orderRaw = $json['order_id'] ?? $json['merchant_order_id'] ?? $json['reference'] ?? null;
+        $payToken = $json['pay_token'] ?? $json['notif_token'] ?? $json['txnid'] ?? null;
+
+        $achat = null;
+        if (is_string($payToken) && $payToken !== '') {
+            $achat = CahierAccesAchat::query()
+                ->where('provider', CahierAccesAchat::PROVIDER_ORANGE_MONEY)
+                ->where('reference_externe', $payToken)
+                ->first();
+        }
+
+        if (! $achat && $orderRaw !== null) {
+            $id = (int) preg_replace('/\D+/', '', (string) $orderRaw);
+            if ($id > 0) {
+                $achat = CahierAccesAchat::query()
+                    ->where('id', $id)
+                    ->where('provider', CahierAccesAchat::PROVIDER_ORANGE_MONEY)
+                    ->first();
+            }
+        }
 
         if (! $achat) {
-            Log::warning('Webhook Orange : achat introuvable', ['order_id' => $orderId]);
+            Log::warning('Webhook Orange : achat introuvable', $json);
 
             return response('OK', 200);
         }
 
-        $this->cahierPaiement->marquerCommePaye($achat, $json['transaction_id'] ?? $achat->reference_externe);
+        $this->cahierPaiement->marquerCommePaye(
+            $achat,
+            is_string($payToken) && $payToken !== '' ? $payToken : ($achat->reference_externe ?? (string) $achat->id)
+        );
 
         return response('OK', 200);
     }
