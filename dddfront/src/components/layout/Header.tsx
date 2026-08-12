@@ -16,6 +16,7 @@ const Header = () => {
 
   const getDashboardLink = () => {
     if (user?.role?.name === "ADMIN" || roleId === 1) return "/admin";
+    if (user?.role?.name === "GESTIONNAIRE" || roleId === 4) return "/gestionnaire/dashboard";
     if (user?.role?.name === "FOURNISSEUR" || roleId === 3) return "/fournisseur/dashboard";
     if (user?.role?.name === "RESPONSABLE_MARCHE" || roleId === 2) return "/responsable/dashboard";
     return "/appels-offres";

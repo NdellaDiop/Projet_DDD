@@ -18,7 +18,7 @@ class FournisseurDirectoryController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user || (!$user->isAdmin() && !$user->isResponsableMarche())) {
+        if (! $user || ! $user->canManageAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -31,7 +31,7 @@ class FournisseurDirectoryController extends Controller
         $query = Fournisseur::query()
             ->with('user')
             ->where(function ($q) use ($statut, $user) {
-                if ($user->isAdmin() && $statut === 'tous') {
+                if ($user->canManageAllAppelsOffres() && $statut === 'tous') {
                     return; // pas de filtre statut côté admin si demandé
                 }
                 $q->where('statut', $statut ?: 'actif');

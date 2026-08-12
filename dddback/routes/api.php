@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 // Importez tous les contrôleurs nécessaires
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminResponsableController;
+use App\Http\Controllers\AdminGestionnaireController;
 use App\Http\Controllers\AdminAffectationController;
 use App\Http\Controllers\AppelOffreController;
 use App\Http\Controllers\AdminLogController;
@@ -63,8 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('notifications', NotificationController::class)->only(['index','show','update','destroy']);
     Route::put('update-password', [AuthController::class, 'updatePassword']);
 
-    // APPELS D'OFFRES (RESPONSABLE + ADMIN)
-    Route::middleware('role:RESPONSABLE_MARCHE,ADMIN')->group(function () {
+    // APPELS D'OFFRES (PRM + GESTIONNAIRE + ADMIN)
+    Route::middleware('role:RESPONSABLE_MARCHE,GESTIONNAIRE,ADMIN')->group(function () {
         Route::get('responsable/dashboard-advanced-stats', [AdminDashboardController::class, 'getResponsableAdvancedStats']);
         Route::post('appels-offres', [AppelOffreController::class, 'store']);
         Route::post('appels-offres/with-documents', [AppelOffreController::class, 'storeWithDocuments']);
@@ -109,8 +110,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('candidatures/{candidature}', [CandidatureController::class, 'update'])->middleware(['role:FOURNISSEUR', 'candidature.enabled']);
     Route::get('candidatures', [CandidatureController::class, 'index'])->middleware('candidature.enabled');
     Route::get('candidatures/{candidature}', [CandidatureController::class, 'show'])->middleware('candidature.enabled');
-    Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware(['role:RESPONSABLE_MARCHE,ADMIN', 'candidature.enabled']);
-    Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware(['role:RESPONSABLE_MARCHE,ADMIN', 'candidature.enabled']);
+    Route::post('candidatures/{candidature}/accept', [CandidatureController::class, 'accept'])->middleware(['role:RESPONSABLE_MARCHE,GESTIONNAIRE,ADMIN', 'candidature.enabled']);
+    Route::post('candidatures/{candidature}/reject', [CandidatureController::class, 'reject'])->middleware(['role:RESPONSABLE_MARCHE,GESTIONNAIRE,ADMIN', 'candidature.enabled']);
     
     // COMMENTAIRES SUR CANDIDATURES
     Route::get('candidatures/{candidature}/comments', [CandidatureCommentController::class, 'index'])->middleware('candidature.enabled');
@@ -137,6 +138,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('responsables', [AdminResponsableController::class, 'store']);
         Route::delete('responsables/{id}', [AdminResponsableController::class, 'destroy']);
         Route::put('responsables/{id}', [AdminResponsableController::class, 'update']);
+        Route::get('gestionnaires', [AdminGestionnaireController::class, 'index']);
+        Route::post('gestionnaires', [AdminGestionnaireController::class, 'store']);
+        Route::put('gestionnaires/{gestionnaire}', [AdminGestionnaireController::class, 'update']);
+        Route::delete('gestionnaires/{gestionnaire}', [AdminGestionnaireController::class, 'destroy']);
         Route::get('dashboard-stats', [AdminDashboardController::class, 'getDashboardStats']);
         Route::get('dashboard-advanced-stats', [AdminDashboardController::class, 'getAdvancedStats']);
         Route::get('appels-offres-dashboard', [AdminDashboardController::class, 'getAppelsOffres']);

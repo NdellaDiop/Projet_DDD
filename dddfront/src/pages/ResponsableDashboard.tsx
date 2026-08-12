@@ -98,6 +98,7 @@ interface AppelOffre {
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
   candidatures_count?: number;
+  responsable_marche?: { id: number; user?: { name?: string } } | null;
   pieces_ao_manquantes?: string[];
   pieces_ao_completes?: boolean;
 }
@@ -143,6 +144,8 @@ type DashboardFilterValue = string | number | boolean;
 
 function roleDisplayLabel(roleName?: string): string {
   switch (roleName) {
+    case "GESTIONNAIRE":
+      return "Gestionnaire";
     case "RESPONSABLE_MARCHE":
       return "Personne responsable du marché (PRM)";
     case "ADMIN":
@@ -155,7 +158,7 @@ function roleDisplayLabel(roleName?: string): string {
 }
 
 export default function ResponsableDashboard() {
-  const { api, user, logout } = useAuth();
+  const { api, user, logout, isGestionnaire } = useAuth();
   // Dépôt en présentiel : on ne doit pas exposer le module "candidatures" au PRM.
   const afficherCandidatures = false;
   const navigate = useNavigate();
@@ -406,6 +409,10 @@ export default function ResponsableDashboard() {
 
   const loadProfile = useCallback(async () => {
     if (!api) return;
+    if (isGestionnaire) {
+      setLoadingProfile(false);
+      return;
+    }
     try {
       setLoadingProfile(true);
       const profileRes = await api.get("/api/responsable/profile");
@@ -420,7 +427,7 @@ export default function ResponsableDashboard() {
     } finally {
       setLoadingProfile(false);
     }
-  }, [api]);
+  }, [api, isGestionnaire]);
 
   const loadAppelsOffres = useCallback(
     async (options?: { fetchAll?: boolean }) => {
@@ -1089,8 +1096,8 @@ export default function ResponsableDashboard() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-100">
       <DashboardNavbar
-        title="Espace PRM"
-        onOpenProfile={() => {
+        title={isGestionnaire ? "Espace Gestionnaire" : "Espace PRM"}
+        onOpenProfile={isGestionnaire ? undefined : () => {
           setAccountTab("profile");
           setIsAccountOpen(true);
         }}
@@ -1186,7 +1193,7 @@ export default function ResponsableDashboard() {
               </h1>
               <p className="text-slate-500 mt-1">
                 {activeTab === 'overview' && "Un aperçu rapide de vos activités et actions prioritaires."}
-                {activeTab === 'appels-offres' && "Créez, publiez et gérez vos appels d'offres."}
+                {activeTab === 'appels-offres' && (isGestionnaire ? "Créez, publiez et gérez l'ensemble des appels d'offres." : "Créez, publiez et gérez vos appels d'offres.")}
                 {activeTab === 'fournisseurs' && "Consultez les dossiers légaux des fournisseurs lors du dépôt des plis au siège."}
                 {activeTab === 'statistiques' && "Analysez les performances de vos marchés."}
               </p>
@@ -1514,6 +1521,9 @@ export default function ResponsableDashboard() {
                                 <TableRow>
                                   <TableHead className="font-semibold">Référence</TableHead>
                                   <TableHead className="font-semibold">Titre</TableHead>
+                                  {isGestionnaire && (
+                                    <TableHead className="font-semibold">PRM assigné</TableHead>
+                                  )}
                                   <TableHead className="font-semibold">Date Limite</TableHead>
                                   <TableHead className="font-semibold">Statut</TableHead>
                                   {/* Dépôt en présentiel : pas de colonne candidatures */}
@@ -1537,6 +1547,11 @@ export default function ResponsableDashboard() {
                                   <TableRow key={ao.id} className="hover:bg-slate-50/50">
                                     <TableCell className="font-mono text-xs font-medium text-slate-600">{ao.reference}</TableCell>
                                     <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
+                                    {isGestionnaire && (
+                                      <TableCell className="text-sm text-slate-600">
+                                        {ao.responsable_marche?.user?.name ?? "— Non assigné —"}
+                                      </TableCell>
+                                    )}
                                     <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
                                     <TableCell>
                                       <div className="flex flex-col gap-1 items-start">

@@ -42,6 +42,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isGestionnaire: boolean;
   isResponsableMarche: boolean;
   isFournisseur: boolean;
   login: (email: string, password: string) => Promise<User>;
@@ -147,6 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Calculer les rôles basés sur user
   const isAdmin = user?.role?.name === 'ADMIN' || user?.role_id === 1;
+  const isGestionnaire = user?.role?.name === 'GESTIONNAIRE';
   const isResponsableMarche = user?.role?.name === 'RESPONSABLE_MARCHE';
   const isFournisseur = user?.role?.name === 'FOURNISSEUR';
 
@@ -359,6 +361,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     token,
     isAuthenticated,
     isAdmin,
+    isGestionnaire,
     isResponsableMarche,
     isFournisseur,
     login,

@@ -58,6 +58,7 @@ import {
   Award,
   RotateCcw,
   Undo2,
+  Shield,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { API_BASE_URL } from "@/lib/utils";
@@ -233,6 +234,14 @@ interface ResponsableMarche {
   nombre_appels_offres?: number;
 }
 
+interface GestionnaireUser {
+  id: number;
+  name: string;
+  email: string;
+  is_active?: boolean;
+  created_at?: string;
+}
+
 interface RecentActivity {
   id: number;
   action: string;
@@ -343,6 +352,9 @@ const AdminDashboard: React.FC = () => {
   // Dépôt en présentiel : ne pas exposer le module "candidatures" sur le dashboard admin.
   const afficherCandidatures = false;
   const [isCreateResponsableOpen, setIsCreateResponsableOpen] = useState(false);
+  const [isCreateGestionnaireOpen, setIsCreateGestionnaireOpen] = useState(false);
+  const [isEditGestionnaireOpen, setIsEditGestionnaireOpen] = useState(false);
+  const [editingGestionnaire, setEditingGestionnaire] = useState<GestionnaireUser | null>(null);
   const [isEditResponsableOpen, setIsEditResponsableOpen] = useState(false);
   const [editingResponsable, setEditingResponsable] = useState<EditingResponsable | null>(null);
   const [isViewFournisseurOpen, setIsViewFournisseurOpen] = useState(false);
@@ -357,6 +369,17 @@ const AdminDashboard: React.FC = () => {
     direction: "",
     fonction: "",
     telephone: "",
+  });
+  const [newGestionnaire, setNewGestionnaire] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+  const [editGestionnaireForm, setEditGestionnaireForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    password_confirmation: "",
   });
   const [selectedAppelOffre, setSelectedAppelOffre] = useState<AppelOffre | null>(null);
   const [isViewAppelOffreOpen, setIsViewAppelOffreOpen] = useState(false);
@@ -474,6 +497,7 @@ const AdminDashboard: React.FC = () => {
   const [appelsOffres, setAppelsOffres] = useState<AppelOffre[]>([]);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [responsables, setResponsables] = useState<ResponsableMarche[]>([]);
+  const [gestionnaires, setGestionnaires] = useState<GestionnaireUser[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
@@ -481,6 +505,7 @@ const AdminDashboard: React.FC = () => {
   const lastAppelsFetchRef = useRef(0);
   const lastFournisseursFetchRef = useRef(0);
   const lastResponsablesFetchRef = useRef(0);
+  const lastGestionnairesFetchRef = useRef(0);
 
   // États de filtres et recherche
   const [searchTerm, setSearchTerm] = useState("");
@@ -511,6 +536,12 @@ const AdminDashboard: React.FC = () => {
       perPage: 15,
     },
     responsables: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      perPage: 15,
+    },
+    gestionnaires: {
       currentPage: 1,
       totalPages: 1,
       totalItems: 0,
@@ -682,15 +713,44 @@ const AdminDashboard: React.FC = () => {
     }
   }, [api, isReady, isAuthenticated, token, pagination.responsables.perPage, pagination.responsables.currentPage, debouncedSearchTerm, updatePaginationState]);
 
+  const fetchGestionnaires = useCallback(async () => {
+    const hasToken = Boolean(token || localStorage.getItem('access_token'));
+    if (!api || !isReady || !isAuthenticated || !hasToken) return;
+    const now = Date.now();
+    if (now - lastGestionnairesFetchRef.current < 800) return;
+    lastGestionnairesFetchRef.current = now;
+    try {
+      const params: Record<string, DashboardFilterValue> = {
+        per_page: pagination.gestionnaires.perPage,
+        page: pagination.gestionnaires.currentPage,
+        search: debouncedSearchTerm,
+      };
+
+      const response = await api.get('/api/admin/gestionnaires', { params });
+
+      if (response.data.data) {
+        setGestionnaires(response.data.data);
+        updatePaginationState('gestionnaires', response.data);
+      } else {
+        const data = Array.isArray(response.data) ? response.data : [];
+        setGestionnaires(data);
+        setPagination(prev => ({ ...prev, gestionnaires: { ...prev.gestionnaires, totalItems: data.length, totalPages: 1 } }));
+      }
+    } catch (error) {
+      console.error("Erreur chargement gestionnaires:", error);
+    }
+  }, [api, isReady, isAuthenticated, token, pagination.gestionnaires.perPage, pagination.gestionnaires.currentPage, debouncedSearchTerm, updatePaginationState]);
+
   // Wrapper de compatibilité pour recharger toutes les données
   const fetchDashboardData = useCallback(async () => {
       await Promise.all([
           fetchGlobalData(),
           fetchAppelsOffres(),
           fetchFournisseurs(),
-          fetchResponsables()
+          fetchResponsables(),
+          fetchGestionnaires(),
       ]);
-  }, [fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables]);
+  }, [fetchGlobalData, fetchAppelsOffres, fetchFournisseurs, fetchResponsables, fetchGestionnaires]);
 
   const loadOverviewData = useCallback(async () => {
     if (!api || !isReady || !isAuthenticated) return;
@@ -738,6 +798,10 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
       if (isMounted && isReady && isAuthenticated && (token || localStorage.getItem('access_token'))) fetchResponsables();
   }, [fetchResponsables, isMounted, isReady, isAuthenticated, token]);
+
+  useEffect(() => {
+      if (isMounted && isReady && isAuthenticated && (token || localStorage.getItem('access_token'))) fetchGestionnaires();
+  }, [fetchGestionnaires, isMounted, isReady, isAuthenticated, token]);
 
   // Effet pour rendre l'overlay transparent pour la modale "Voir Dossier"
   useEffect(() => {
@@ -852,6 +916,82 @@ const AdminDashboard: React.FC = () => {
       toast({ title: "Succès", description: "Personne responsable du marché (PRM) supprimée." });
       fetchDashboardData();
     } catch (error: unknown) {
+      toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
+    }
+  };
+
+  const handleCreateGestionnaire = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (!api) throw new Error("API non disponible");
+
+      await api.post(`${API_BASE_URL}/api/admin/gestionnaires`, {
+        name: newGestionnaire.name,
+        email: newGestionnaire.email,
+        password: newGestionnaire.password,
+      });
+
+      toast({ title: "Succès", description: "Compte gestionnaire créé avec succès." });
+      setIsCreateGestionnaireOpen(false);
+      setNewGestionnaire({ name: "", email: "", password: "" });
+      fetchGestionnaires();
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Erreur lors de la création."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditGestionnaireClick = (gestionnaire: GestionnaireUser) => {
+    setEditingGestionnaire(gestionnaire);
+    setEditGestionnaireForm({
+      name: gestionnaire.name,
+      email: gestionnaire.email,
+      password: "",
+      password_confirmation: "",
+    });
+    setIsEditGestionnaireOpen(true);
+  };
+
+  const handleUpdateGestionnaire = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGestionnaire || !api) return;
+
+    try {
+      const payload: Record<string, string> = {
+        name: editGestionnaireForm.name,
+        email: editGestionnaireForm.email,
+      };
+      if (editGestionnaireForm.password) {
+        payload.password = editGestionnaireForm.password;
+        payload.password_confirmation = editGestionnaireForm.password_confirmation;
+      }
+
+      await api.put(`${API_BASE_URL}/api/admin/gestionnaires/${editingGestionnaire.id}`, payload);
+      toast({ title: "Succès", description: "Gestionnaire mis à jour." });
+      setIsEditGestionnaireOpen(false);
+      setEditingGestionnaire(null);
+      fetchGestionnaires();
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Erreur lors de la mise à jour."),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteGestionnaire = async (id: number) => {
+    if (!confirm("Supprimer ce compte gestionnaire ?")) return;
+
+    try {
+      if (!api) throw new Error("API non disponible");
+      await api.delete(`${API_BASE_URL}/api/admin/gestionnaires/${id}`);
+      toast({ title: "Succès", description: "Gestionnaire supprimé." });
+      fetchGestionnaires();
+    } catch {
       toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
     }
   };
@@ -1953,6 +2093,15 @@ const AdminDashboard: React.FC = () => {
           </Button>
 
           <Button
+            variant={activeTab === "gestionnaires" ? "default" : "ghost"}
+            className={`w-full justify-start ${activeTab === "gestionnaires" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
+            onClick={() => setActiveTab("gestionnaires")}
+          >
+            <Shield className="w-4 h-4 mr-3" />
+            Gestionnaires
+          </Button>
+
+          <Button
             variant={activeTab === "suggestions" ? "default" : "ghost"}
             className={`w-full justify-start ${activeTab === "suggestions" ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90" : "text-slate-600 hover:bg-slate-100"}`}
             onClick={() => setActiveTab("suggestions")}
@@ -2014,6 +2163,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'appels-offres' && "Gestion des Appels d'Offres"}
                 {activeTab === 'fournisseurs' && "Annuaire Fournisseurs"}
                 {activeTab === 'responsables' && "Équipe PRM"}
+                {activeTab === 'gestionnaires' && "Comptes gestionnaires"}
                 {activeTab === 'suggestions' && "Boîte à idées"}
                 {activeTab === 'contact' && "Messages contact"}
                 {activeTab === 'gestion-ao' && "Gestion Appels d'Offres"}
@@ -2024,6 +2174,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'appels-offres' && "Suivez et gérez tous les appels d'offres de la plateforme"}
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
                 {activeTab === 'responsables' && "Administrez les comptes des PRM"}
+                {activeTab === 'gestionnaires' && "Créez des comptes gestionnaires (vue globale sur les AO, sans gestion des fournisseurs)"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
                 {activeTab === 'contact' && "Messages reçus via le formulaire de contact du portail"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres"}
@@ -2037,6 +2188,12 @@ const AdminDashboard: React.FC = () => {
                   <Button onClick={() => setIsCreateResponsableOpen(true)}>
                     <PlusCircle className="w-4 h-4 mr-2" />
                     Nouveau PRM
+                  </Button>
+              )}
+              {activeTab === 'gestionnaires' && (
+                  <Button onClick={() => setIsCreateGestionnaireOpen(true)}>
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    Nouveau gestionnaire
                   </Button>
               )}
                {activeTab === 'fournisseurs' && (
@@ -2443,6 +2600,50 @@ const AdminDashboard: React.FC = () => {
                   onPerPageChange={(perPage) => handlePerPageChange('responsables', perPage)}
                 />
              </div>
+          </div>
+        )}
+
+        {/* 4b. GESTIONNAIRES */}
+        {activeTab === "gestionnaires" && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {gestionnaires.map((g) => (
+                <Card key={g.id} className="hover:shadow-md transition-shadow border-slate-200">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-400 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                        {g.name?.charAt(0) || "G"}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800">{g.name}</h3>
+                        <p className="text-xs text-muted-foreground break-all">{g.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditGestionnaireClick(g)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => handleDeleteGestionnaire(g.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="mt-2">
+                    <Badge variant={g.is_active === false ? "outline" : "secondary"}>
+                      {g.is_active === false ? "Inactif" : "Actif"}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <DataTablePagination
+              currentPage={pagination.gestionnaires.currentPage}
+              totalPages={pagination.gestionnaires.totalPages}
+              totalItems={pagination.gestionnaires.totalItems}
+              perPage={pagination.gestionnaires.perPage}
+              onPageChange={(page) => handlePageChange('gestionnaires', page)}
+              onPerPageChange={(perPage) => handlePerPageChange('gestionnaires', perPage)}
+            />
           </div>
         )}
 
@@ -2931,6 +3132,110 @@ const AdminDashboard: React.FC = () => {
 
               <DialogFooter>
                 <Button type="submit">Enregistrer les modifications</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Création Gestionnaire */}
+      <Dialog open={isCreateGestionnaireOpen} onOpenChange={setIsCreateGestionnaireOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Ajouter un gestionnaire</DialogTitle>
+            <DialogDescription>
+              Accès à tous les appels d&apos;offres (création, publication, clôture) sans gestion des comptes fournisseurs.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateGestionnaire} className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="gestionnaire-name">Nom complet</Label>
+              <Input
+                id="gestionnaire-name"
+                value={newGestionnaire.name}
+                onChange={(e) => setNewGestionnaire({ ...newGestionnaire, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="gestionnaire-email">Email</Label>
+              <Input
+                id="gestionnaire-email"
+                type="email"
+                value={newGestionnaire.email}
+                onChange={(e) => setNewGestionnaire({ ...newGestionnaire, email: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="gestionnaire-password">Mot de passe</Label>
+              <Input
+                id="gestionnaire-password"
+                type="password"
+                autoComplete="new-password"
+                value={newGestionnaire.password}
+                onChange={(e) => setNewGestionnaire({ ...newGestionnaire, password: e.target.value })}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit">Créer le gestionnaire</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Modification Gestionnaire */}
+      <Dialog open={isEditGestionnaireOpen} onOpenChange={setIsEditGestionnaireOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Modifier le gestionnaire</DialogTitle>
+          </DialogHeader>
+          {editingGestionnaire && (
+            <form onSubmit={handleUpdateGestionnaire} className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Nom complet</Label>
+                <Input
+                  value={editGestionnaireForm.name}
+                  onChange={(e) => setEditGestionnaireForm({ ...editGestionnaireForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={editGestionnaireForm.email}
+                  onChange={(e) => setEditGestionnaireForm({ ...editGestionnaireForm, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="rounded-lg border border-dashed border-slate-200 p-4 space-y-3">
+                <p className="text-sm font-medium text-slate-800">Réinitialiser le mot de passe (optionnel)</p>
+                <div className="grid gap-2">
+                  <Label>Nouveau mot de passe</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={editGestionnaireForm.password}
+                    onChange={(e) => setEditGestionnaireForm({ ...editGestionnaireForm, password: e.target.value })}
+                    placeholder="Laisser vide pour ne pas changer"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Confirmation</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={editGestionnaireForm.password_confirmation}
+                    onChange={(e) =>
+                      setEditGestionnaireForm({ ...editGestionnaireForm, password_confirmation: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit">Enregistrer</Button>
               </DialogFooter>
             </form>
           )}

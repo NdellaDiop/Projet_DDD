@@ -41,7 +41,7 @@ class CandidatureCommentController extends Controller
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
-        } elseif (!$user->isAdmin()) {
+        } elseif (! $user->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -78,7 +78,7 @@ class CandidatureCommentController extends Controller
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
-        } elseif (!$user->isAdmin()) {
+        } elseif (! $user->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -98,7 +98,7 @@ class CandidatureCommentController extends Controller
 
         // Notifier l'autre partie
         $candidature->load(['fournisseur.user', 'appelOffre.responsableMarche.user']);
-        if ($user->isResponsableMarche() || $user->isAdmin()) {
+        if ($user->isResponsableMarche() || $user->canManageAllAppelsOffres()) {
             // Le responsable ou l'admin commente, notifier le fournisseur
             if ($candidature->fournisseur && $candidature->fournisseur->user && $candidature->appelOffre) {
                 $appelOffre = $candidature->appelOffre;
@@ -158,7 +158,7 @@ class CandidatureCommentController extends Controller
             if ($appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);
             }
-        } elseif (!$user->isAdmin()) {
+        } elseif (! $user->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -180,7 +180,7 @@ class CandidatureCommentController extends Controller
         }
 
         // Seul l'auteur peut modifier son commentaire
-        if ($comment->user_id !== $user->id && !$user->isAdmin()) {
+        if ($comment->user_id !== $user->id && ! $user->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
@@ -212,7 +212,7 @@ class CandidatureCommentController extends Controller
         }
 
         // Seul l'auteur ou un admin peut supprimer
-        if ($comment->user_id !== $user->id && !$user->isAdmin()) {
+        if ($comment->user_id !== $user->id && ! $user->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 

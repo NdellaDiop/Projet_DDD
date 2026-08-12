@@ -18,8 +18,7 @@ class StoreAppelOffreRequest extends FormRequest
         /** @var User $user */
         $user = Auth::user();
 
-        // Seuls les ADMINS et RESPONSABLES_MARCHE peuvent créer des appels d'offres
-        return $user && ($user->role->name === 'ADMIN' || $user->role->name === 'RESPONSABLE_MARCHE');
+        return $user && $user->canManageAppelsOffres();
     }
 
     /**
@@ -30,7 +29,7 @@ class StoreAppelOffreRequest extends FormRequest
     public function rules(): array
     {
         $user = Auth::user();
-        $isAdmin = $user && $user->role->name === 'ADMIN';
+        $canAssignPrm = $user && $user->canManageAllAppelsOffres();
         
         return [
             'titre' => 'required|string|max:255',
@@ -59,7 +58,7 @@ class StoreAppelOffreRequest extends FormRequest
             'modalites_soumission_physique' => 'nullable|string|max:20000',
             'date_publication' => 'nullable|date',
             'date_limite_depot' => 'required|date|after_or_equal:now',
-            'responsable_marche_id' => $isAdmin ? 'nullable|exists:responsables_marche,id' : 'required|exists:responsables_marche,id',
+            'responsable_marche_id' => $canAssignPrm ? 'nullable|exists:responsables_marche,id' : 'required|exists:responsables_marche,id',
             'statut' => 'required|in:draft,published,closed,archived',
             'cahier_paiement_requis' => 'sometimes|boolean',
             'cahier_prix_xof' => ['nullable', 'integer', 'min:1', Rule::requiredIf(fn () => $this->boolean('cahier_paiement_requis'))],

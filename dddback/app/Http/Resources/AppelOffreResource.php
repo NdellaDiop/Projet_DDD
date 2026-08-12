@@ -55,11 +55,11 @@ class AppelOffreResource extends JsonResource
             'updated_at' => $this->updated_at,
             'candidatures_count' => $this->whenCounted('candidatures'),
             'pieces_ao_manquantes' => $this->when(
-                auth()->check() && in_array(auth()->user()?->role?->name, ['ADMIN', 'RESPONSABLE_MARCHE'], true),
+                auth()->check() && auth()->user()?->canManageAppelsOffres(),
                 fn () => $this->piecesAoManquantes()
             ),
             'pieces_ao_completes' => $this->when(
-                auth()->check() && in_array(auth()->user()?->role?->name, ['ADMIN', 'RESPONSABLE_MARCHE'], true),
+                auth()->check() && auth()->user()?->canManageAppelsOffres(),
                 fn () => $this->piecesAoCompletes()
             ),
             'documents' => $this->whenLoaded('documents', function () use ($request) {

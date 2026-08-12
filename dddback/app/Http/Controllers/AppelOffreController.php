@@ -72,7 +72,10 @@ class AppelOffreController extends Controller
         $user = auth('sanctum')->user();
         
         // Si non connecté OU connecté mais pas admin/responsable du marché
-        $isPublicOrSimpleUser = !$user || ($user->role->name !== 'ADMIN' && ($user->role->name !== 'RESPONSABLE_MARCHE' || $appelOffre->responsable_marche_id !== $user->responsableMarche?->id));
+        $isPublicOrSimpleUser = ! $user || (
+            ! $user->canManageAllAppelsOffres()
+            && ($user->role->name !== 'RESPONSABLE_MARCHE' || $appelOffre->responsable_marche_id !== $user->responsableMarche?->id)
+        );
 
         if ($isPublicOrSimpleUser) {
             if (!in_array($appelOffre->statut, [AppelOffre::STATUS_PUBLISHED, AppelOffre::STATUS_CLOSED])) {
@@ -250,8 +253,8 @@ class AppelOffreController extends Controller
         
         $query = AppelOffre::query();
         
-        // Si c'est l'admin, il voit tout (y compris les AO non assignés)
-        if ($user->role->name === 'ADMIN') {
+        // Admin et gestionnaire : vue globale sur tous les AO
+        if ($user->canManageAllAppelsOffres()) {
             $query->with([
                 'responsableMarche.user',
                 'documents' => fn ($q) => $q
@@ -316,8 +319,8 @@ class AppelOffreController extends Controller
         $perPage = $request->get('per_page', 15);
         $statut = $request->get('statut', '');
         
-        // Vérification que c'est bien son appel d'offres (ou admin)
-        if ($user->role->name !== 'ADMIN') {
+        // Vérification que c'est bien son appel d'offres (ou admin / gestionnaire)
+        if (! $user->canManageAllAppelsOffres()) {
             $responsable = $user->responsableMarche;
             if (!$responsable || $appelOffre->responsable_marche_id !== $responsable->id) {
                 return response()->json(['message' => 'Accès refusé'], 403);

@@ -160,7 +160,7 @@ class DocumentController extends Controller
 
         $user = auth()->user();
 
-        if ($user->isAdmin()) {
+        if ($user->canManageAllAppelsOffres()) {
             return DocumentResource::collection(Document::latest()->get());
         }
 
@@ -255,12 +255,12 @@ class DocumentController extends Controller
     {
         $user = auth()->user();
 
-        if (!$user || (!$user->isAdmin() && !$user->isResponsableMarche())) {
+        if (! $user || ! $user->canManageAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
 
         // Pour un PRM, on n'autorise que les fournisseurs actifs (dossier validé).
-        if ($user->isResponsableMarche() && $fournisseur->statut !== 'actif') {
+        if ($user->isResponsableMarche() && ! $user->canManageAllAppelsOffres() && $fournisseur->statut !== 'actif') {
             return response()->json([
                 'message' => "Le dossier de ce fournisseur n'est pas (encore) accessible : son compte doit être validé par l'administrateur.",
             ], 403);
@@ -284,12 +284,12 @@ class DocumentController extends Controller
         $user = auth()->user();
         
         // Vérifier que c'est un responsable de marché ou admin
-        if (!$user->isResponsableMarche() && !$user->isAdmin()) {
+        if (! $user->canManageAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé.'], 403);
         }
         
         // Vérifier que le responsable a accès à cette candidature (via l'appel d'offres)
-        if ($user->isResponsableMarche()) {
+        if ($user->isResponsableMarche() && ! $user->canManageAllAppelsOffres()) {
             $candidature->load('appelOffre.responsableMarche');
             if ($candidature->appelOffre->responsable_marche_id !== $user->responsableMarche->id) {
                 return response()->json(['message' => 'Non autorisé.'], 403);

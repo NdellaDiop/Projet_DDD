@@ -13,7 +13,7 @@ class DocumentPolicy
      */
     public function viewAny(User $user): bool
     {
-        return in_array($user->role->name, ['ADMIN', 'RESPONSABLE_MARCHE', 'FOURNISSEUR']);
+        return in_array($user->role->name, ['ADMIN', 'GESTIONNAIRE', 'RESPONSABLE_MARCHE', 'FOURNISSEUR']);
     }
 
     /**
@@ -25,7 +25,7 @@ class DocumentPolicy
             return false;
         }
 
-        if ($user->role->name === 'ADMIN') {
+        if ($user->canManageAllAppelsOffres()) {
             return true;
         }
 
@@ -94,7 +94,7 @@ class DocumentPolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role->name, ['ADMIN', 'RESPONSABLE_MARCHE', 'FOURNISSEUR']);
+        return in_array($user->role->name, ['ADMIN', 'GESTIONNAIRE', 'RESPONSABLE_MARCHE', 'FOURNISSEUR']);
     }
 
     /**
@@ -102,7 +102,7 @@ class DocumentPolicy
      */
     public function update(User $user, Document $document): bool
     {
-        if ($user->role->name === 'ADMIN') {
+        if ($user->canManageAllAppelsOffres()) {
             return true;
         }
 
@@ -115,7 +115,7 @@ class DocumentPolicy
      */
     public function delete(User $user, Document $document): bool
     {
-        if ($user->role->name === 'ADMIN') {
+        if ($user->canManageAllAppelsOffres()) {
             return true;
         }
 

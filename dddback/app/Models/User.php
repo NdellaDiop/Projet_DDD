@@ -119,4 +119,28 @@ class User extends Authenticatable
     {
         return $this->role && $this->role->name === 'FOURNISSEUR';
     }
+
+    /**
+     * Check if the user is a Gestionnaire (vue globale AO, sans gestion des comptes).
+     */
+    public function isGestionnaire(): bool
+    {
+        return $this->role && $this->role->name === 'GESTIONNAIRE';
+    }
+
+    /**
+     * Peut voir et gérer tous les appels d'offres (admin ou gestionnaire).
+     */
+    public function canManageAllAppelsOffres(): bool
+    {
+        return $this->isAdmin() || $this->isGestionnaire();
+    }
+
+    /**
+     * Peut créer / modifier des appels d'offres (PRM, gestionnaire ou admin).
+     */
+    public function canManageAppelsOffres(): bool
+    {
+        return $this->isAdmin() || $this->isGestionnaire() || $this->isResponsableMarche();
+    }
 }

@@ -31,7 +31,7 @@ class UpdateAppelOffreRequest extends FormRequest
             && $appelOffre->statut === AppelOffre::STATUS_PUBLISHED
             && $user
             && $user->isResponsableMarche()
-            && ! $user->isAdmin()
+            && ! $user->canManageAllAppelsOffres()
         ) {
             return [
                 'modalites_soumission_physique' => 'required|string|max:20000',

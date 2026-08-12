@@ -9,7 +9,7 @@ class CandidaturePolicy
 {
     public function before(?User $user, string $ability): bool|null
     {
-        if ($user && $user->isAdmin()) {
+        if ($user && $user->canManageAllAppelsOffres()) {
             return true;
         }
         return null;
@@ -17,7 +17,7 @@ class CandidaturePolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->role && in_array($user->role->name, ['ADMIN','RESPONSABLE_MARCHE','FOURNISSEUR']);
+        return $user->role && in_array($user->role->name, ['ADMIN', 'GESTIONNAIRE', 'RESPONSABLE_MARCHE', 'FOURNISSEUR']);
     }
 
     public function view(User $user, Candidature $candidature): bool

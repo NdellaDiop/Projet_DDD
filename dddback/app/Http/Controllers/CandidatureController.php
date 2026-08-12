@@ -34,7 +34,7 @@ class CandidatureController extends Controller
 
         $query = Candidature::query();
 
-        if ($user->isAdmin()) {
+        if ($user->canManageAllAppelsOffres()) {
             $query->with(['appelOffre', 'fournisseur.user']);
         } elseif ($user->isResponsableMarche()) {
             $query->whereHas('appelOffre', function ($q) use ($user) {

@@ -20,17 +20,19 @@ type Props = {
 };
 
 export default function DashboardNavbar({ title, onOpenProfile, onOpenSettings, onLogout }: Props) {
-  const { user, isAdmin, isResponsableMarche, isFournisseur, logout } = useAuth();
+  const { user, isAdmin, isGestionnaire, isResponsableMarche, isFournisseur, logout } = useAuth();
 
   const dashboardHref = isAdmin
     ? "/admin"
+    : isGestionnaire
+      ? "/gestionnaire/dashboard"
     : isResponsableMarche
       ? "/responsable/dashboard"
       : isFournisseur
         ? "/fournisseur/dashboard"
         : "/";
 
-  const RoleIcon = isAdmin ? Shield : isResponsableMarche ? Briefcase : Building2;
+  const RoleIcon = isAdmin ? Shield : isGestionnaire ? Briefcase : isResponsableMarche ? Briefcase : Building2;
   const roleLabel = user?.role?.name ?? "";
   const userName = user?.name ?? "Utilisateur";
   const userEmail = user?.email ?? "";

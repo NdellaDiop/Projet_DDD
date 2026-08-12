@@ -118,7 +118,7 @@ function messageCahierIndisponible(ao: AppelOffre, marcheCloture: boolean): stri
 
 const AppelOffreDetails = () => {
   const { id } = useParams();
-  const { api, user, token, isReady, isAuthenticated, isFournisseur, isAdmin, isResponsableMarche } = useAuth();
+  const { api, user, token, isReady, isAuthenticated, isFournisseur, isAdmin, isGestionnaire, isResponsableMarche } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const waveReturnHandled = useRef(false);
@@ -140,7 +140,7 @@ const AppelOffreDetails = () => {
   const [attributionMontant, setAttributionMontant] = useState("");
   const [attributionCommentaire, setAttributionCommentaire] = useState("");
 
-  const canManageAoDocs = isAuthenticated && (isAdmin || isResponsableMarche);
+  const canManageAoDocs = isAuthenticated && (isAdmin || isGestionnaire || isResponsableMarche);
   /** L'attribution du marché est réservée à l'administrateur. */
   const canAttribuer = isAuthenticated && isAdmin;
 
@@ -447,6 +447,8 @@ const AppelOffreDetails = () => {
   const isClosed = daysLeft === 0 || appelOffre.statut === 'closed';
   const dashboardBackHref = isAdmin
     ? "/admin"
+    : isGestionnaire
+      ? "/gestionnaire/dashboard"
     : isResponsableMarche
       ? "/responsable/dashboard"
       : isFournisseur

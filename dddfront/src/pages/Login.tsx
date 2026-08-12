@@ -110,6 +110,8 @@ export default function Login() {
         navigate("/fournisseur/dashboard", { replace: true });
       } else if (roleName === "RESPONSABLE_MARCHE") {
         navigate("/responsable/dashboard", { replace: true });
+      } else if (roleName === "GESTIONNAIRE") {
+        navigate("/gestionnaire/dashboard", { replace: true });
       } else {
         navigate("/appels-offres", { replace: true });
       }

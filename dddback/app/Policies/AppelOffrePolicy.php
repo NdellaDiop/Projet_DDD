@@ -13,7 +13,7 @@ class AppelOffrePolicy
         if (in_array($ability, ['viewAny', 'view'])) {
             return null;
         }
-        if ($user && $user->isAdmin()) {
+        if ($user && $user->canManageAllAppelsOffres()) {
             return true;
         }
         return null;
@@ -31,7 +31,7 @@ class AppelOffrePolicy
 
     public function create(User $user): bool
     {
-        return $user->isResponsableMarche();
+        return $user->isResponsableMarche() || $user->isGestionnaire();
     }
 
     public function update(User $user, AppelOffre $appelOffre): bool

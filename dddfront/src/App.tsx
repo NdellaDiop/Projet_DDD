@@ -28,7 +28,7 @@ const LoadingScreen = () => (
 );
 
 function App() {
-  const { isAuthenticated, user, isReady, isAdmin } = useAuth();
+  const { isAuthenticated, user, isReady, isAdmin, isGestionnaire } = useAuth();
   const isFournisseur = user?.role?.name === "FOURNISSEUR";
 
   return (
@@ -93,6 +93,19 @@ function App() {
               <PaiementCahierSimulation />
             ) : (
               <Navigate to="/connexion" replace state={{ from: "/paiement/cahier/simulation" }} />
+            )
+          }
+        />
+
+      <Route
+          path="/gestionnaire/dashboard"
+          element={
+            !isReady ? (
+              <LoadingScreen />
+            ) : isAuthenticated && isGestionnaire ? (
+              <ResponsableDashboard />
+            ) : (
+              <Navigate to="/connexion" replace />
             )
           }
         />
