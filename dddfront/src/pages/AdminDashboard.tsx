@@ -911,14 +911,27 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteResponsable = async (id: number) => {
-    if (!confirm("Supprimer définitivement ce compte PRM ? Cette action est irréversible.")) return;
+    const prm = responsables.find((r) => r.id === id);
+    const aoCount = prm?.nombre_appels_offres ?? 0;
+    const warning =
+      aoCount > 0
+        ? `Ce PRM a ${aoCount} appel(s) d'offres assigné(s). Ils ne seront PAS supprimés : ils passeront en « non assigné ». Continuer ?`
+        : "Supprimer définitivement ce compte PRM ? Cette action est irréversible.";
+    if (!confirm(warning)) return;
 
     try {
       if (!api) throw new Error("API non disponible");
-      await api.delete(`${API_BASE_URL}/api/admin/responsables/${id}`);
-      toast({ title: "Succès", description: "Compte PRM supprimé." });
+      const res = await api.delete(`${API_BASE_URL}/api/admin/responsables/${id}`);
+      toast({
+        title: "Succès",
+        description:
+          typeof res.data?.message === "string"
+            ? res.data.message
+            : "Compte PRM supprimé. Les appels d'offres associés restent disponibles.",
+      });
       fetchResponsables();
       fetchGlobalData();
+      fetchAppelsOffres();
     } catch (error: unknown) {
       toast({
         title: "Erreur",

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Role;
 use App\Models\ResponsableMarche;
+use App\Models\AppelOffre;
 use App\Models\LogActivite;
 use App\Mail\StaffAccountCreated;
 use App\Rules\SenegalPhoneNumber;
@@ -82,23 +83,26 @@ class AdminResponsableController extends Controller
     public function destroy(string $id)
     {
         $responsable = ResponsableMarche::findOrFail($id);
-        
-        // On supprime d'abord le user associé (cascade ou manuel)
-        if ($responsable->user) {
-            $responsable->user->delete();
-        }
-        
-        // Puis le responsable (si pas cascade)
+
+        // Détacher les AO avant suppression du PRM (sécurité métier :
+        // un marché public ne doit jamais disparaître avec le compte du PRM).
+        AppelOffre::where('responsable_marche_id', $responsable->id)
+            ->update(['responsable_marche_id' => null]);
+
+        $user = $responsable->user;
         $responsable->delete();
+        if ($user) {
+            $user->delete();
+        }
 
         LogActivite::create([
             'user_id' => auth()->id(),
             'action' => 'delete_responsable',
-            'details' => "Suppression responsable #{$id}",
+            'details' => "Suppression responsable #{$id} (AO détachés, non supprimés)",
             'ip_address' => request()->ip(),
         ]);
 
-        return response()->json(['message' => 'Responsable supprimé avec succès.']);
+        return response()->json(['message' => 'Responsable supprimé avec succès. Les appels d\'offres associés restent disponibles (non assignés).']);
     }
     public function update(Request $request, string $id)
     {
