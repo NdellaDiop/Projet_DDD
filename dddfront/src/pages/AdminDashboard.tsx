@@ -1171,6 +1171,44 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleReplyContact = async (message: ContactMessage) => {
+    const subject = encodeURIComponent(`Re: ${message.sujet}`);
+    const quoted = [
+      "",
+      "",
+      "--- Message original ---",
+      `De: ${message.nom || message.user?.name || "Visiteur"} <${message.email}>`,
+      `Date: ${new Date(message.created_at).toLocaleString("fr-FR")}`,
+      "",
+      message.message,
+    ].join("\n");
+    const body = encodeURIComponent(quoted);
+    const mailtoUrl = `mailto:${message.email}?subject=${subject}&body=${body}`;
+
+    try {
+      await navigator.clipboard.writeText(message.email);
+    } catch {
+      // Presse-papiers indisponible : on continue avec mailto.
+    }
+
+    // Ouverture via <a> temporaire : plus fiable que location.href / asChild dans certains navigateurs.
+    const link = document.createElement("a");
+    link.href = mailtoUrl;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Réponse par e-mail",
+      description: `Client mail ouvert pour ${message.email}. L'adresse a aussi été copiée dans le presse-papiers.`,
+    });
+
+    if (message.statut === "nouveau") {
+      void handleMarkContactRead(message.id);
+    }
+  };
+
   const handleArchiveContact = async (messageId: number) => {
     if (!api) return;
     try {
@@ -2711,10 +2749,8 @@ const AdminDashboard: React.FC = () => {
                         <Button size="sm" variant="outline" onClick={() => void handleArchiveContact(message.id)}>
                           Archiver
                         </Button>
-                        <Button size="sm" asChild>
-                          <a href={`mailto:${message.email}?subject=Re: ${encodeURIComponent(message.sujet)}`}>
-                            Répondre
-                          </a>
+                        <Button size="sm" onClick={() => void handleReplyContact(message)}>
+                          Répondre
                         </Button>
                       </div>
                     </div>
