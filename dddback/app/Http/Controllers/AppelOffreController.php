@@ -351,12 +351,11 @@ class AppelOffreController extends Controller
 
     /**
      * Assigner un appel d'offres à un responsable de marché.
-     * Seul l'admin peut assigner un AO à un responsable.
+     * Admin et gestionnaire (vue globale AO, sans gestion des comptes).
      */
     public function assign(Request $request, AppelOffre $appelOffre)
     {
-        // Seul l'admin peut assigner (vérification manuelle car pas de Policy spécifique pour 'assign')
-        if (auth()->user()->role->name !== 'ADMIN') {
+        if (! auth()->user()?->canManageAllAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
 

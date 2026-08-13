@@ -293,6 +293,26 @@ class AdminDashboardController extends Controller
         return response()->json($responsables);
     }
 
+    /**
+     * Annuaire lecture seule des PRM — pour assigner un AO (admin / gestionnaire).
+     */
+    public function getResponsablesDirectory(Request $request)
+    {
+        $user = $request->user();
+        if (! $user || ! $user->canManageAllAppelsOffres()) {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        $responsables = ResponsableMarche::with('user')
+            ->withCount('appelsOffres')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn ($r) => $this->formatResponsable($r))
+            ->values();
+
+        return response()->json(['data' => $responsables]);
+    }
+
     private function formatResponsable($r)
     {
                 return [

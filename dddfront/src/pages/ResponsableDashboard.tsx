@@ -50,6 +50,7 @@ import {
   Search,
   Award,
   RotateCcw,
+  User,
 } from "lucide-react";
 import AdvancedSearch from "@/components/AdvancedSearch";
 import ResponsableAdvancedStats from "@/components/ResponsableAdvancedStats";
@@ -98,9 +99,23 @@ interface AppelOffre {
   date_limite_depot: string;
   statut: 'draft' | 'published' | 'closed' | 'archived';
   candidatures_count?: number;
-  responsable_marche?: { id: number; user?: { name?: string } } | null;
+  responsable_marche_id?: number | null;
+  responsable?: {
+    id: number;
+    name?: string | null;
+    direction?: string | null;
+    fonction?: string | null;
+    user?: { name?: string } | null;
+  } | null;
   pieces_ao_manquantes?: string[];
   pieces_ao_completes?: boolean;
+}
+
+interface PrmDirectoryItem {
+  id: number;
+  direction?: string;
+  fonction?: string;
+  user?: { name?: string; email?: string };
 }
 
 interface Candidature {
@@ -141,6 +156,10 @@ interface ResponsableProfile {
 }
 
 type DashboardFilterValue = string | number | boolean;
+
+function prmAssignedLabel(ao: AppelOffre): string {
+  return ao.responsable?.name || ao.responsable?.user?.name || "— Non assigné —";
+}
 
 function roleDisplayLabel(roleName?: string): string {
   switch (roleName) {
@@ -212,6 +231,12 @@ export default function ResponsableDashboard() {
   const [avisAoFile, setAvisAoFile] = useState<File | null>(null);
   const [cahierChargesFile, setCahierChargesFile] = useState<File | null>(null);
   const [creatingTender, setCreatingTender] = useState(false);
+
+  const [prmDirectory, setPrmDirectory] = useState<PrmDirectoryItem[]>([]);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [aoForAssign, setAoForAssign] = useState<AppelOffre | null>(null);
+  const [selectedPrmId, setSelectedPrmId] = useState<number | null>(null);
+  const [assigningAo, setAssigningAo] = useState(false);
 
   const [isEditModalitesOpen, setIsEditModalitesOpen] = useState(false);
   const [aoForModalites, setAoForModalites] = useState<AppelOffre | null>(null);
@@ -491,6 +516,70 @@ export default function ResponsableDashboard() {
     ]
   );
 
+  const loadPrmDirectory = useCallback(async () => {
+    if (!api || !isGestionnaire) return;
+    try {
+      const response = await api.get("/api/responsables-directory");
+      const rows = Array.isArray(response.data?.data)
+        ? response.data.data
+        : Array.isArray(response.data)
+          ? response.data
+          : [];
+      setPrmDirectory(rows);
+    } catch (error) {
+      console.error("Erreur chargement PRM:", error);
+    }
+  }, [api, isGestionnaire]);
+
+  useEffect(() => {
+    if (isGestionnaire) {
+      void loadPrmDirectory();
+    }
+  }, [isGestionnaire, loadPrmDirectory]);
+
+  const openAssignModal = (ao: AppelOffre) => {
+    setAoForAssign(ao);
+    setSelectedPrmId(ao.responsable_marche_id ?? ao.responsable?.id ?? null);
+    setIsAssignOpen(true);
+  };
+
+  const handleAssignAo = async () => {
+    if (!api || !aoForAssign || !selectedPrmId) return;
+    const prm = prmDirectory.find((r) => r.id === selectedPrmId);
+    const prmLabel = prm?.user?.name ?? `PRM #${selectedPrmId}`;
+    const currentId = aoForAssign.responsable_marche_id ?? aoForAssign.responsable?.id ?? null;
+    const isChange = Boolean(currentId && currentId !== selectedPrmId);
+    const confirmMsg = isChange
+      ? `Confirmer le changement de PRM pour « ${aoForAssign.titre} » ?\n\nNouveau responsable : ${prmLabel}`
+      : `Confirmer l'assignation de « ${aoForAssign.titre} » à ${prmLabel} ?`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setAssigningAo(true);
+      await api.post(`/api/appels-offres/${aoForAssign.id}/assign`, {
+        responsable_marche_id: selectedPrmId,
+      });
+      toast({
+        title: "Succès",
+        description: isChange
+          ? "Le PRM assigné a été modifié."
+          : "L'appel d'offres a été assigné au responsable.",
+      });
+      setIsAssignOpen(false);
+      setAoForAssign(null);
+      setSelectedPrmId(null);
+      void loadAppelsOffres({ fetchAll: activeTab === "overview" });
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible d'assigner cet appel d'offres."),
+        variant: "destructive",
+      });
+    } finally {
+      setAssigningAo(false);
+    }
+  };
+
   const overviewStats = (() => {
     const total = appelsOffres.length;
     const draft = appelsOffres.filter((a) => a.statut === "draft").length;
@@ -560,9 +649,11 @@ export default function ResponsableDashboard() {
             columns: [
                 { header: 'Référence', key: 'reference' },
                 { header: 'Titre', key: 'titre' },
+                ...(isGestionnaire
+                  ? [{ header: 'PRM assigné', key: 'responsable', format: (v: { name?: string } | null) => v?.name || 'Non assigné' }]
+                  : []),
                 { header: 'Date Clôture', key: 'date_limite_depot', format: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
                 { header: 'Statut', key: 'statut' },
-                // Dépôt en présentiel : pas d'export "candidatures"
             ],
             data: data
         });
@@ -1549,7 +1640,13 @@ export default function ResponsableDashboard() {
                                     <TableCell className="font-medium text-slate-800">{ao.titre}</TableCell>
                                     {isGestionnaire && (
                                       <TableCell className="text-sm text-slate-600">
-                                        {ao.responsable_marche?.user?.name ?? "— Non assigné —"}
+                                        {ao.responsable?.name || ao.responsable?.user?.name ? (
+                                          <span>{prmAssignedLabel(ao)}</span>
+                                        ) : (
+                                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                                            Non assigné
+                                          </Badge>
+                                        )}
                                       </TableCell>
                                     )}
                                     <TableCell className="text-slate-600">{new Date(ao.date_limite_depot).toLocaleDateString()}</TableCell>
@@ -1579,6 +1676,22 @@ export default function ResponsableDashboard() {
                                         >
                                           <FileText className="w-3 h-3 mr-1" /> Fiche
                                         </Button>
+                                        {isGestionnaire && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 border border-primary text-primary hover:bg-primary/10"
+                                            onClick={() => openAssignModal(ao)}
+                                            title={
+                                              ao.responsable_marche_id || ao.responsable?.id
+                                                ? "Changer la personne responsable du marché (PRM)"
+                                                : "Assigner à une personne responsable du marché (PRM)"
+                                            }
+                                          >
+                                            <User className="w-3 h-3 mr-1" />
+                                            {ao.responsable_marche_id || ao.responsable?.id ? "Changer PRM" : "Assigner"}
+                                          </Button>
+                                        )}
                                         {(ao.statut === "draft" || ao.statut === "published") && (
                                           <Button
                                             size="sm"
@@ -2798,6 +2911,76 @@ export default function ResponsableDashboard() {
                   <Button type="submit">Mettre à jour</Button>
                 </DialogFooter>
               </form>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isAssignOpen}
+        onOpenChange={(open) => {
+          setIsAssignOpen(open);
+          if (!open) {
+            setAoForAssign(null);
+            setSelectedPrmId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {aoForAssign?.responsable_marche_id || aoForAssign?.responsable?.id
+                ? "Changer le PRM assigné"
+                : "Assigner un appel d'offres"}
+            </DialogTitle>
+            <DialogDescription>
+              Choisissez la personne responsable du marché (PRM) en charge de cet appel d'offres.
+            </DialogDescription>
+          </DialogHeader>
+          {aoForAssign && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-1">Appel d'offres</p>
+                <p className="text-lg font-bold text-slate-800">{aoForAssign.titre}</p>
+                <p className="text-xs text-slate-500 font-mono mt-1">{aoForAssign.reference}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="prm-select">Personne responsable du marché (PRM)</Label>
+                <Select
+                  value={selectedPrmId?.toString() || ""}
+                  onValueChange={(value) => setSelectedPrmId(parseInt(value, 10))}
+                >
+                  <SelectTrigger id="prm-select">
+                    <SelectValue placeholder="Choisir un PRM..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {prmDirectory.map((r) => (
+                      <SelectItem key={r.id} value={r.id.toString()}>
+                        {r.user?.name || `PRM #${r.id}`}
+                        {r.direction ? ` — ${r.direction}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {prmDirectory.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Aucun PRM disponible. Demandez à l'administrateur d'en créer un.</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAssignOpen(false)}>Annuler</Button>
+                <Button
+                  onClick={() => void handleAssignAo()}
+                  disabled={
+                    assigningAo ||
+                    !selectedPrmId ||
+                    selectedPrmId === (aoForAssign.responsable_marche_id ?? aoForAssign.responsable?.id ?? null)
+                  }
+                >
+                  {aoForAssign.responsable_marche_id || aoForAssign.responsable?.id
+                    ? "Confirmer le changement"
+                    : "Assigner"}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>
