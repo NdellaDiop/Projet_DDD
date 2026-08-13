@@ -1,0 +1,114 @@
+@startuml architecture-pmp-demdikk
+!theme plain
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+skinparam package {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+  FontSize 12
+}
+skinparam component {
+  BackgroundColor white
+  BorderColor #334155
+  FontSize 11
+}
+skinparam arrow {
+  Color #2563EB
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #334155
+}
+skinparam cloud {
+  BackgroundColor #FFF7ED
+  BorderColor #334155
+}
+skinparam storage {
+  BackgroundColor #F0FDF4
+  BorderColor #334155
+}
+
+title Architecture du système — Portail des marchés publics\nDakar Dem Dikk (PMP) — https://pmp.demdikk.sn
+
+top to bottom direction
+
+actor "Utilisateurs\n(Visiteur · Fournisseur · PRM · Admin)" as USER
+
+package "Couche présentation — Frontend\nReact 18 · TypeScript · Vite 5 · Tailwind · shadcn/ui\n(dev local : port 8080)" as L1 #E0F2FE {
+
+  component [SPA React\ndddfront/dist] as SPA
+  note right of SPA
+    Pages publiques : AO, contact
+    Dashboards : /admin, /responsable, /fournisseur
+    Axios + AuthContext (Bearer Sanctum)
+  end note
+}
+
+package "Couche serveur web — Point d'entrée unique\nApache 2 · PHP-FPM 8.3 · HTTPS (Let's Encrypt)\n(production : port 443)" as L2 #DBEAFE {
+
+  component [Routage Apache\npmp.demdikk.sn] as APACHE
+  note right of APACHE
+    / → dist/index.html (SPA)
+    /api/* → Laravel (dddback/public)
+    /sanctum/* → auth Sanctum
+    /storage → BLOQUÉ (sécurité)
+  end note
+}
+
+package "Couche métier — Backend API\nLaravel 10 · PHP 8.1+ · Sanctum\n(dev local : port 8000)" as L3 #E0E7FF {
+
+  component [API REST\ndddback] as API
+  component [Services métier\napp/Services/] as SVC
+
+  note bottom of API
+    Auth & rôles · Appels d'offres · Documents
+    Fournisseurs · Paiement cahier · Notifications
+    Audit · Suggestions · Contact · Assistant IA
+  end note
+
+  note bottom of SVC
+    AppelOffreService · NotificationService
+    CahierAccesPaiementService · WaveCheckoutClient
+    OrangeMoneyPaymentClient · AiChatService
+  end note
+
+  API --> SVC
+}
+
+package "Couche données & fichiers" as L4 #F0FDF4 {
+
+  database "MySQL\n(port 3306)\nUtilisateurs · AO · achats\nnotifications…" as DB
+  storage "Stockage privé Laravel\nstorage/app\nTéléchargement via API sécurisée" as FILES
+}
+
+cloud "Services externes" as EXT {
+
+  component [Wave API\nCheckout + webhooks] as WAVE
+  component [Orange Money\nAPI Sonatel] as OM
+  component [OpenAI API\nassistant optionnel] as OPENAI
+  component [Serveur SMTP\ncourriel] as SMTP
+}
+
+component [Dépôt physique des plis\nsiège Dakar Dem Dikk\n(hors système)] as PHYS #FEF3C7
+
+USER -down-> SPA : HTTPS\n(navigateur)
+SPA -down-> APACHE : HTTP\n(JSON · assets)
+APACHE -down-> API : /api · /sanctum
+SVC -down-> DB : Eloquent ORM
+SVC -down-> FILES : fichiers uploadés
+SVC -right-> WAVE : paiement cahier
+SVC -right-> OM : paiement cahier
+SVC -right-> OPENAI : chat IA
+SVC -right-> SMTP : emails
+USER ..> PHYS : dépôt en présentiel
+
+note as N_DEPLOY
+  **Déploiement production**
+  Monorepo /var/www/ddd (dddfront + dddback)
+  npm run build → dist/ · php artisan migrate
+  config:cache · route:cache
+end note
+N_DEPLOY .. L2
+
+@enduml
