@@ -911,15 +911,20 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteResponsable = async (id: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette personne responsable du marché (PRM) ?")) return;
+    if (!confirm("Supprimer définitivement ce compte PRM ? Cette action est irréversible.")) return;
 
     try {
       if (!api) throw new Error("API non disponible");
       await api.delete(`${API_BASE_URL}/api/admin/responsables/${id}`);
-      toast({ title: "Succès", description: "Personne responsable du marché (PRM) supprimée." });
-      fetchDashboardData();
+      toast({ title: "Succès", description: "Compte PRM supprimé." });
+      fetchResponsables();
+      fetchGlobalData();
     } catch (error: unknown) {
-      toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de supprimer ce compte PRM."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -987,15 +992,20 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleDeleteGestionnaire = async (id: number) => {
-    if (!confirm("Supprimer ce compte gestionnaire ?")) return;
+    if (!confirm("Supprimer définitivement ce compte gestionnaire ? Cette action est irréversible.")) return;
 
     try {
       if (!api) throw new Error("API non disponible");
       await api.delete(`${API_BASE_URL}/api/admin/gestionnaires/${id}`);
-      toast({ title: "Succès", description: "Gestionnaire supprimé." });
+      toast({ title: "Succès", description: "Compte gestionnaire supprimé." });
       fetchGestionnaires();
-    } catch {
-      toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
+      fetchGlobalData();
+    } catch (error: unknown) {
+      toast({
+        title: "Erreur",
+        description: getErrorMessage(error, "Impossible de supprimer ce compte gestionnaire."),
+        variant: "destructive",
+      });
     }
   };
 
@@ -2222,8 +2232,8 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'vue-ensemble' && "Métriques clés et activités récentes"}
                 {activeTab === 'appels-offres' && "Suivez et gérez tous les appels d'offres de la plateforme"}
                 {activeTab === 'fournisseurs' && "Gérez les inscriptions et validations des fournisseurs"}
-                {activeTab === 'responsables' && "Administrez les comptes des PRM"}
-                {activeTab === 'gestionnaires' && "Créez des comptes gestionnaires (vue globale sur les AO, sans gestion des fournisseurs)"}
+                {activeTab === 'responsables' && "Créez, modifiez ou supprimez les comptes PRM"}
+                {activeTab === 'gestionnaires' && "Créez, modifiez ou supprimez les comptes gestionnaires (vue globale AO, sans gestion des fournisseurs)"}
                 {activeTab === 'suggestions' && "Consultez et traitez les retours des fournisseurs"}
                 {activeTab === 'contact' && "Messages reçus via le formulaire de contact du portail"}
                 {activeTab === 'gestion-ao' && "Créez, publiez et gérez vos appels d'offres"}
@@ -2600,22 +2610,15 @@ const AdminDashboard: React.FC = () => {
                  {responsables.map((r) => (
                      <Card key={r.id} className="hover:shadow-md transition-shadow border-slate-200">
                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                             <div className="flex items-center space-x-3">
-                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                             <div className="flex items-center space-x-3 min-w-0">
+                                <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                                     {r.user?.name?.charAt(0) || "R"}
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-slate-800">{r.user?.name}</h3>
-                                    <p className="text-xs text-muted-foreground">{r.fonction}</p>
+                                <div className="min-w-0">
+                                    <h3 className="font-bold text-slate-800 truncate">{r.user?.name}</h3>
+                                    <p className="text-xs text-muted-foreground truncate">{r.fonction}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{r.user?.email}</p>
                                 </div>
-                             </div>
-                             <div className="flex">
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditClick(r)}>
-                                     <Edit className="w-4 h-4" />
-                                 </Button>
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => handleDeleteResponsable(r.id)}>
-                                     <Trash2 className="w-4 h-4" />
-                                 </Button>
                              </div>
                          </CardHeader>
                          <CardContent className="mt-4 space-y-3">
@@ -2634,6 +2637,21 @@ const AdminDashboard: React.FC = () => {
                                      <span className="text-sm text-muted-foreground">Appels d'offres gérés</span>
                                      <Badge variant="secondary">{r.nombre_appels_offres}</Badge>
                                  </div>
+                             </div>
+                             <div className="flex gap-2 pt-1">
+                                 <Button size="sm" variant="outline" className="flex-1" onClick={() => handleEditClick(r)}>
+                                     <Edit className="w-3.5 h-3.5 mr-1.5" />
+                                     Modifier
+                                 </Button>
+                                 <Button
+                                   size="sm"
+                                   variant="outline"
+                                   className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                   onClick={() => handleDeleteResponsable(r.id)}
+                                 >
+                                     <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                     Supprimer
+                                 </Button>
                              </div>
                          </CardContent>
                      </Card>
@@ -2658,29 +2676,36 @@ const AdminDashboard: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {gestionnaires.map((g) => (
                 <Card key={g.id} className="hover:shadow-md transition-shadow border-slate-200">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-400 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-slate-600 to-slate-400 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                         {g.name?.charAt(0) || "G"}
                       </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800">{g.name}</h3>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-slate-800 truncate">{g.name}</h3>
                         <p className="text-xs text-muted-foreground break-all">{g.email}</p>
                       </div>
                     </div>
-                    <div className="flex">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditGestionnaireClick(g)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => handleDeleteGestionnaire(g.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
                   </CardHeader>
-                  <CardContent className="mt-2">
+                  <CardContent className="mt-2 space-y-3">
                     <Badge variant={g.is_active === false ? "outline" : "secondary"}>
                       {g.is_active === false ? "Inactif" : "Actif"}
                     </Badge>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="flex-1" onClick={() => handleEditGestionnaireClick(g)}>
+                        <Edit className="w-3.5 h-3.5 mr-1.5" />
+                        Modifier
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handleDeleteGestionnaire(g.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                        Supprimer
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
