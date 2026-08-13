@@ -1280,13 +1280,13 @@ export default function ResponsableDashboard() {
                 {activeTab === 'overview' && "Vue d'ensemble"}
                 {activeTab === 'appels-offres' && "Gestion des Appels d'Offres"}
                 {activeTab === 'fournisseurs' && "Annuaire des Fournisseurs"}
-                {activeTab === 'statistiques' && "Tableau de Bord Statistiques"}
+                {activeTab === 'statistiques' && (isGestionnaire ? "Statistiques globales" : "Tableau de Bord Statistiques")}
               </h1>
               <p className="text-slate-500 mt-1">
-                {activeTab === 'overview' && "Un aperçu rapide de vos activités et actions prioritaires."}
+                {activeTab === 'overview' && (isGestionnaire ? "Vue d'ensemble de tous les marchés du portail." : "Un aperçu rapide de vos activités et actions prioritaires.")}
                 {activeTab === 'appels-offres' && (isGestionnaire ? "Créez, publiez et gérez l'ensemble des appels d'offres." : "Créez, publiez et gérez vos appels d'offres.")}
                 {activeTab === 'fournisseurs' && "Consultez les dossiers légaux des fournisseurs lors du dépôt des plis au siège."}
-                {activeTab === 'statistiques' && "Analysez les performances de vos marchés."}
+                {activeTab === 'statistiques' && (isGestionnaire ? "Suivez l'activité de tous les appels d'offres du portail." : "Analysez les performances de vos marchés.")}
               </p>
            </div>
            
@@ -1320,7 +1320,7 @@ export default function ResponsableDashboard() {
                     setActiveTab("appels-offres");
                   }
                 }}
-                title="Voir tous mes appels d'offres"
+                title="Voir tous les appels d'offres"
               >
                 <div
                   aria-hidden="true"
@@ -1334,7 +1334,7 @@ export default function ResponsableDashboard() {
                     <div>
                       <p className="text-xs text-slate-500">Appels d'offres</p>
                       <p className="text-2xl font-bold text-slate-800 mt-1">{overviewStats.total}</p>
-                      <p className="text-xs text-slate-400 mt-1">Total géré</p>
+                      <p className="text-xs text-slate-400 mt-1">{isGestionnaire ? "Total portail" : "Total géré"}</p>
                     </div>
                     <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
                       <Briefcase className="h-4 w-4" />

@@ -1,8 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/context/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Loader2, TrendingUp, Users, Briefcase, Megaphone, Archive } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from "recharts";
+import {
+  Loader2,
+  TrendingUp,
+  Briefcase,
+  Megaphone,
+  Archive,
+  FileEdit,
+  UserX,
+} from "lucide-react";
 
 interface ResponsableAdvancedStatsProps {
   className?: string;
@@ -13,199 +33,294 @@ interface AOEvolutionItem {
   count: number;
 }
 
-interface CandidatureStatItem {
+interface StatutItem {
   statut: string;
   count: number;
 }
 
-interface FormattedPieItem {
-  name: string;
-  value: number;
-  color: string;
+interface AdvancedStatsPayload {
+  scope?: "global" | "prm";
+  totalAO: number;
+  draftAO?: number;
+  publishedAO: number;
+  closedAO: number;
+  unassignedAO?: number;
+  aoEvolution: AOEvolutionItem[];
+  statutDistribution?: StatutItem[];
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  draft: { label: "Brouillon", color: "#f59e0b" },
+  published: { label: "Publié", color: "#0d9488" },
+  closed: { label: "Clôturé", color: "#dc2626" },
+  archived: { label: "Archivé", color: "#64748b" },
+};
+
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan",
+  "02": "Fév",
+  "03": "Mar",
+  "04": "Avr",
+  "05": "Mai",
+  "06": "Juin",
+  "07": "Juil",
+  "08": "Aoû",
+  "09": "Sep",
+  "10": "Oct",
+  "11": "Nov",
+  "12": "Déc",
+};
+
+function formatMonthLabel(month: string): string {
+  const [, mm] = month.split("-");
+  return MONTH_LABELS[mm] ?? month;
+}
+
+function percent(part: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
+}
 
 const ResponsableAdvancedStats: React.FC<ResponsableAdvancedStatsProps> = ({ className }) => {
-  const { api } = useAuth();
-  // Dépôt en présentiel : ne pas afficher les stats "candidatures" côté PRM.
-  const afficherCandidatures = false;
+  const { api, isGestionnaire } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<{
-    totalAO: number;
-    publishedAO: number;
-    closedAO: number;
-    totalCandidatures: number;
-    aoEvolution: AOEvolutionItem[];
-    candidatureStats: CandidatureStatItem[];
-  } | null>(null);
+  const [data, setData] = useState<AdvancedStatsPayload | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
       if (!api) return;
       try {
-        const response = await api.get('/api/responsable/dashboard-advanced-stats');
+        const response = await api.get("/api/responsable/dashboard-advanced-stats");
         setData(response.data);
       } catch (error) {
-        console.error("Erreur chargement stats avancées responsable:", error);
+        console.error("Erreur chargement stats avancées:", error);
+        setData(null);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStats();
+    void fetchStats();
   }, [api]);
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-8">
+      <div className="flex justify-center items-center p-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (!data) return null;
-
-  // Formatter les données pour les graphiques
-  const formattedAOEvolution = data.aoEvolution.map((item: AOEvolutionItem) => ({
-    name: item.month,
-    AppelsOffres: item.count
-  }));
-
-  const formattedCandidatureStats: FormattedPieItem[] = afficherCandidatures
-    ? data.candidatureStats.map((item: CandidatureStatItem) => ({
-        name: item.statut.charAt(0).toUpperCase() + item.statut.slice(1).replace('_', ' '),
-        value: item.count,
-        // Couleurs basées sur le statut (à adapter selon vos constantes)
-        color:
-          item.statut === 'accepted'
-            ? '#16a34a'
-            : item.statut === 'rejected'
-              ? '#dc2626'
-              : item.statut === 'submitted'
-                ? '#2563eb'
-                : '#94a3b8',
-      }))
-    : [];
-
-  return (
-    <div className={`space-y-6 ${className}`}>
-      {/* 1. CARTES GLOBALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card className="border-none shadow-sm hover:shadow-md transition-all">
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="p-3 bg-blue-50 rounded-full mb-4">
-                      <Briefcase className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Appels d'Offres</p>
-                  <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.totalAO}</h3>
-              </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-sm hover:shadow-md transition-all">
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="p-3 bg-green-50 rounded-full mb-4">
-                      <Megaphone className="w-6 h-6 text-green-600" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Publiés</p>
-                  <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.publishedAO}</h3>
-              </CardContent>
-          </Card>
-
-          {afficherCandidatures ? (
-            <Card className="border-none shadow-sm hover:shadow-md transition-all">
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                <div className="p-3 bg-purple-50 rounded-full mb-4">
-                  <Users className="w-6 h-6 text-purple-600" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground">Candidatures reçues</p>
-                <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.totalCandidatures}</h3>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <Card className="border-none shadow-sm hover:shadow-md transition-all">
-              <CardContent className="p-6 flex flex-col items-center text-center">
-                  <div className="p-3 bg-orange-50 rounded-full mb-4">
-                      <Archive className="w-6 h-6 text-orange-600" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Clôturés</p>
-                  <h3 className="text-3xl font-bold text-slate-800 mt-2">{data.closedAO}</h3>
-              </CardContent>
-          </Card>
-      </div>
-
-      {/* 2. GRAPHIQUES */}
-      <div className={`grid grid-cols-1 gap-6 ${afficherCandidatures ? "md:grid-cols-2" : ""}`}>
-      {/* 1. Évolution de MES Appels d'Offres */}
-      <Card className="shadow-sm border-slate-100">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-600" />
-            Évolution de mes AO
-          </CardTitle>
-          <CardDescription>Publications sur les 6 derniers mois</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[250px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={formattedAOEvolution}>
-                <defs>
-                  <linearGradient id="colorRespAo" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  itemStyle={{ color: '#1e293b' }}
-                />
-                <Area type="monotone" dataKey="AppelsOffres" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorRespAo)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+  if (!data) {
+    return (
+      <Card className="border-none shadow-sm">
+        <CardContent className="py-12 text-center text-muted-foreground">
+          Impossible de charger les statistiques pour le moment.
         </CardContent>
       </Card>
+    );
+  }
 
-      {/* Dépôt en présentiel : pas de stats candidatures */}
-      {afficherCandidatures ? (
-        <Card className="shadow-sm border-slate-100">
-          <CardHeader>
+  const draftAO = data.draftAO ?? 0;
+  const unassignedAO = data.unassignedAO ?? 0;
+  const isGlobal = data.scope === "global" || isGestionnaire;
+
+  const kpiCards = [
+    {
+      title: isGlobal ? "Tous les appels d'offres" : "Mes appels d'offres",
+      value: data.totalAO,
+      subtitle: isGlobal ? "Vue globale du portail" : "Total sous votre responsabilité",
+      icon: Briefcase,
+      accent: "bg-slate-100 text-slate-700",
+      bar: "bg-slate-400",
+      ratio: 100,
+    },
+    {
+      title: "Publiés",
+      value: data.publishedAO,
+      subtitle: `${percent(data.publishedAO, data.totalAO)} % du total`,
+      icon: Megaphone,
+      accent: "bg-teal-50 text-teal-700",
+      bar: "bg-teal-500",
+      ratio: percent(data.publishedAO, data.totalAO),
+    },
+    {
+      title: "Brouillons",
+      value: draftAO,
+      subtitle: `${percent(draftAO, data.totalAO)} % du total`,
+      icon: FileEdit,
+      accent: "bg-amber-50 text-amber-700",
+      bar: "bg-amber-500",
+      ratio: percent(draftAO, data.totalAO),
+    },
+    {
+      title: "Clôturés",
+      value: data.closedAO,
+      subtitle: `${percent(data.closedAO, data.totalAO)} % du total`,
+      icon: Archive,
+      accent: "bg-rose-50 text-rose-700",
+      bar: "bg-rose-500",
+      ratio: percent(data.closedAO, data.totalAO),
+    },
+  ];
+
+  if (isGlobal) {
+    kpiCards.push({
+      title: "Non assignés",
+      value: unassignedAO,
+      subtitle: "AO sans PRM",
+      icon: UserX,
+      accent: "bg-orange-50 text-orange-700",
+      bar: "bg-orange-500",
+      ratio: percent(unassignedAO, data.totalAO),
+    });
+  }
+
+  const evolution = data.aoEvolution.map((item) => ({
+    name: formatMonthLabel(item.month),
+    AppelsOffres: Number(item.count) || 0,
+  }));
+
+  const statutPie = (data.statutDistribution ?? []).map((item) => {
+    const meta = STATUS_META[item.statut] ?? {
+      label: item.statut,
+      color: "#94a3b8",
+    };
+    return {
+      name: meta.label,
+      value: Number(item.count) || 0,
+      color: meta.color,
+    };
+  });
+
+  return (
+    <div className={`space-y-6 ${className ?? ""}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isGlobal ? "xl:grid-cols-5" : "xl:grid-cols-4"} gap-4`}>
+        {kpiCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card
+              key={card.title}
+              className="border-none shadow-sm hover:shadow-md transition-shadow overflow-hidden bg-white"
+            >
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">{card.title}</p>
+                    <p className="text-3xl font-bold text-slate-800 mt-1 tracking-tight">{card.value}</p>
+                    <p className="text-xs text-slate-400 mt-1">{card.subtitle}</p>
+                  </div>
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${card.accent}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                </div>
+                <div className="mt-4 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${card.bar} transition-all`}
+                    style={{ width: `${Math.max(card.ratio, card.value > 0 ? 6 : 0)}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <Card className="lg:col-span-3 shadow-sm border-slate-100">
+          <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Users className="w-5 h-5 text-green-600" />
-              Candidatures reçues
+              <TrendingUp className="w-5 h-5 text-teal-700" />
+              {isGlobal ? "Évolution des appels d'offres" : "Évolution de mes appels d'offres"}
             </CardTitle>
-            <CardDescription>Répartition par statut</CardDescription>
+            <CardDescription>Publications sur les 6 derniers mois</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[250px] w-full flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={formattedCandidatureStats}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {formattedCandidatureStats.map((entry, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="h-[280px] w-full">
+              {evolution.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                  Aucune publication sur la période.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={evolution} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorAoBrand" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0d9488" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        borderRadius: "10px",
+                        border: "1px solid #e2e8f0",
+                        boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
+                      }}
+                      labelStyle={{ color: "#334155", fontWeight: 600 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="AppelsOffres"
+                      name="Appels d'offres"
+                      stroke="#0d9488"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorAoBrand)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
-      ) : null}
-    </div>
+
+        <Card className="lg:col-span-2 shadow-sm border-slate-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Répartition par statut</CardTitle>
+            <CardDescription>
+              {isGlobal ? "Ensemble des marchés du portail" : "Répartition de vos marchés"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] w-full">
+              {statutPie.length === 0 || statutPie.every((s) => s.value === 0) ? (
+                <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                  Aucune donnée à afficher.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statutPie}
+                      cx="50%"
+                      cy="46%"
+                      innerRadius={58}
+                      outerRadius={86}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {statutPie.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        `${value} (${percent(value, data.totalAO)} %)`,
+                        name,
+                      ]}
+                    />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

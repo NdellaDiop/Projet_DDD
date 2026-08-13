@@ -389,49 +389,74 @@ class AdminDashboardController extends Controller
     }
 
     /**
-     * Récupère les statistiques avancées pour le responsable de marché.
+     * Statistiques avancées pour le PRM (ses AO) ou le gestionnaire (tous les AO).
      */
     public function getResponsableAdvancedStats()
     {
         $user = auth()->user();
-        if (!$user->responsableMarche) {
+        if (! $user || ! $user->canManageAppelsOffres()) {
             return response()->json(['message' => 'Non autorisé'], 403);
         }
-        $responsableId = $user->responsableMarche->id;
 
-        // Stats globales
-        $totalAO = AppelOffre::where('responsable_marche_id', $responsableId)->count();
-        $publishedAO = AppelOffre::where('responsable_marche_id', $responsableId)
-            ->where('statut', 'published')->count();
-        $closedAO = AppelOffre::where('responsable_marche_id', $responsableId)
-            ->where('statut', 'closed')->count();
-        
-        $totalCandidatures = Candidature::join('appels_offres', 'candidatures.appel_offre_id', '=', 'appels_offres.id')
-            ->where('appels_offres.responsable_marche_id', $responsableId)
-            ->count();
+        $isGlobal = $user->canManageAllAppelsOffres();
+        $responsableId = $user->responsableMarche?->id;
 
-        // 1. Évolution de ses appels d'offres sur les 6 derniers mois
+        if (! $isGlobal && ! $responsableId) {
+            return response()->json(['message' => 'Non autorisé'], 403);
+        }
+
+        $aoQuery = AppelOffre::query();
+        if (! $isGlobal) {
+            $aoQuery->where('responsable_marche_id', $responsableId);
+        }
+
+        $totalAO = (clone $aoQuery)->count();
+        $draftAO = (clone $aoQuery)->where('statut', AppelOffre::STATUS_DRAFT)->count();
+        $publishedAO = (clone $aoQuery)->where('statut', AppelOffre::STATUS_PUBLISHED)->count();
+        $closedAO = (clone $aoQuery)->where('statut', AppelOffre::STATUS_CLOSED)->count();
+        $unassignedAO = $isGlobal
+            ? AppelOffre::whereNull('responsable_marche_id')->count()
+            : 0;
+
+        $candidatureQuery = Candidature::query()->join('appels_offres', 'candidatures.appel_offre_id', '=', 'appels_offres.id');
+        if (! $isGlobal) {
+            $candidatureQuery->where('appels_offres.responsable_marche_id', $responsableId);
+        }
+        $totalCandidatures = (clone $candidatureQuery)->count();
+
         $sixMonthsAgo = now()->subMonths(6);
-        $aoEvolution = AppelOffre::selectRaw("DATE_FORMAT(date_publication, '%Y-%m') as month, count(*) as count")
-            ->where('responsable_marche_id', $responsableId)
-            ->where('date_publication', '>=', $sixMonthsAgo)
-            ->groupBy('month')
-            ->orderBy('month')
+        $driver = \Illuminate\Support\Facades\Schema::getConnection()->getDriverName();
+        $monthExpr = $driver === 'pgsql'
+            ? "to_char(date_publication, 'YYYY-MM')"
+            : "DATE_FORMAT(date_publication, '%Y-%m')";
+
+        $evolutionQuery = AppelOffre::selectRaw("{$monthExpr} as month, count(*) as count")
+            ->where('date_publication', '>=', $sixMonthsAgo);
+        if (! $isGlobal) {
+            $evolutionQuery->where('responsable_marche_id', $responsableId);
+        }
+        $aoEvolution = $evolutionQuery->groupBy('month')->orderBy('month')->get();
+
+        $statutDistribution = (clone $aoQuery)
+            ->selectRaw('statut, count(*) as count')
+            ->groupBy('statut')
             ->get();
 
-        // 2. Répartition des statuts des candidatures reçues sur ses AO
-        $candidatureStats = Candidature::join('appels_offres', 'candidatures.appel_offre_id', '=', 'appels_offres.id')
-            ->where('appels_offres.responsable_marche_id', $responsableId)
+        $candidatureStats = (clone $candidatureQuery)
             ->selectRaw('candidatures.statut, count(*) as count')
             ->groupBy('candidatures.statut')
             ->get();
 
         return response()->json([
+            'scope' => $isGlobal ? 'global' : 'prm',
             'totalAO' => $totalAO,
+            'draftAO' => $draftAO,
             'publishedAO' => $publishedAO,
             'closedAO' => $closedAO,
+            'unassignedAO' => $unassignedAO,
             'totalCandidatures' => $totalCandidatures,
             'aoEvolution' => $aoEvolution,
+            'statutDistribution' => $statutDistribution,
             'candidatureStats' => $candidatureStats,
         ]);
     }
