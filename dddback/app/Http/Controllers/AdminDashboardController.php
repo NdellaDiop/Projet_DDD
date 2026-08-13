@@ -21,6 +21,8 @@ class AdminDashboardController extends Controller
      */
     public function getDashboardStats()
     {
+        app(\App\Services\AppelOffreService::class)->closeExpiredAppelsOffres();
+
         $totalFournisseurs = Fournisseur::count();
         $fournisseursActifs = Fournisseur::where('statut', 'actif')->count();
         $fournisseursEnAttente = Fournisseur::where('statut', 'en_attente')->count();
@@ -66,6 +68,8 @@ class AdminDashboardController extends Controller
      */
     public function getAppelsOffres(Request $request)
     {
+        app(\App\Services\AppelOffreService::class)->closeExpiredAppelsOffres();
+
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');

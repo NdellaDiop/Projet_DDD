@@ -12,7 +12,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->command('appels-offres:close-expired')->hourly();
+        $schedule->command('appels-offres:close-expired')->everyFiveMinutes();
         $schedule->command('fournisseurs:auto-valider')->dailyAt('02:00');
         // $schedule->command('inspire')->hourly();
     }

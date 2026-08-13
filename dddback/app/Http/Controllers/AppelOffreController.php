@@ -33,6 +33,9 @@ class AppelOffreController extends Controller
 
     public function index(Request $request)
     {
+        // Sécurité métier : clôturer immédiatement les AO expirés même si le cron a pris du retard.
+        $this->appelOffreService->closeExpiredAppelsOffres();
+
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');
         $statut = $request->get('statut', '');
@@ -68,6 +71,9 @@ class AppelOffreController extends Controller
     
     public function show(AppelOffre $appelOffre)
     {
+        $this->appelOffreService->closeExpiredAppelsOffres();
+        $appelOffre->refresh();
+
         // SÉCURITÉ : Si l'utilisateur n'est pas admin/responsable, il ne doit voir que les AO publiés ou clôturés
         $user = auth('sanctum')->user();
         
@@ -244,6 +250,8 @@ class AppelOffreController extends Controller
      */
     public function indexForResponsable(Request $request)
     {
+        $this->appelOffreService->closeExpiredAppelsOffres();
+
         $user = auth()->user();
         $perPage = $request->get('per_page', 15);
         $search = $request->get('search', '');

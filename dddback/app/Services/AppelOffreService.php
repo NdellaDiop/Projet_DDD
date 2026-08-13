@@ -112,6 +112,36 @@ class AppelOffreService
         return $appelOffre;
     }
 
+    /**
+     * Clôture les AO publiés dont la date limite de dépôt est dépassée
+     * (après la fin du jour calendaire de l'échéance).
+     *
+     * @return int Nombre d'AO clôturés
+     */
+    public function closeExpiredAppelsOffres(): int
+    {
+        // Une échéance au jour J reste ouverte jusqu'à la fin de J ;
+        // on clôture dès que le calendrier passe au jour suivant.
+        $expired = AppelOffre::query()
+            ->where('statut', AppelOffre::STATUS_PUBLISHED)
+            ->whereNotNull('date_limite_depot')
+            ->where('date_limite_depot', '<', now()->startOfDay())
+            ->get();
+
+        foreach ($expired as $ao) {
+            $ao->update(['statut' => AppelOffre::STATUS_CLOSED]);
+
+            \App\Models\LogActivite::create([
+                'user_id' => null,
+                'action' => 'auto_close_appel_offre',
+                'details' => "Clôture automatique AO #{$ao->id} (délai de dépôt dépassé)",
+                'ip_address' => null,
+            ]);
+        }
+
+        return $expired->count();
+    }
+
     /** Réouvre un AO clôturé (admin — retour en arrière). */
     public function reopenAppelOffre(AppelOffre $appelOffre, ?string $newDateLimiteDepot = null): AppelOffre
     {
