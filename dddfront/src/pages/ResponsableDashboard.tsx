@@ -555,8 +555,8 @@ export default function ResponsableDashboard() {
         const data = response.data.data || response.data; 
 
         exportData(format, {
-            fileName: 'mes_appels_offres',
-            title: 'Mes Appels d\'Offres',
+            fileName: isGestionnaire ? 'appels_offres' : 'mes_appels_offres',
+            title: isGestionnaire ? "Appels d'offres" : "Mes Appels d'Offres",
             columns: [
                 { header: 'Référence', key: 'reference' },
                 { header: 'Titre', key: 'titre' },
@@ -1148,7 +1148,7 @@ export default function ResponsableDashboard() {
             onClick={() => setActiveTab("appels-offres")}
           >
             <Briefcase className="w-4 h-4 mr-3" />
-            Mes Appels d'Offres
+            {isGestionnaire ? "Appels d'offres" : "Mes Appels d'Offres"}
           </Button>
 
           <Button

@@ -6,9 +6,12 @@ use App\Models\User;
 use App\Models\Role;
 use App\Models\ResponsableMarche;
 use App\Models\LogActivite;
+use App\Mail\StaffAccountCreated;
 use App\Rules\SenegalPhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules;
 
 class AdminResponsableController extends Controller
@@ -30,11 +33,13 @@ class AdminResponsableController extends Controller
             return response()->json(['message' => 'Rôle RESPONSABLE_MARCHE introuvable.'], 500);
         }
 
+        $plainPassword = $request->password;
+
         // 1. Créer le User
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make($plainPassword),
             'role_id' => $role->id,
             'is_active' => true, // Actif par défaut
         ]);
@@ -54,6 +59,22 @@ class AdminResponsableController extends Controller
             'details' => "Création responsable #{$responsable->id} ({$user->email})",
             'ip_address' => $request->ip(),
         ]);
+
+        // 4. Notifier le PRM par e-mail (identifiants)
+        try {
+            $frontend = rtrim((string) config('app.frontend_url', config('app.url')), '/');
+            Mail::to($user->email)->send(new StaffAccountCreated(
+                $user,
+                $plainPassword,
+                'Personne responsable du marché (PRM)',
+                $frontend.'/connexion'
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('Échec envoi e-mail création PRM', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return response()->json($responsable->load('user'), 201);
     }

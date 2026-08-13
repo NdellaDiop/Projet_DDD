@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\LogActivite;
 use App\Models\Role;
 use App\Models\User;
+use App\Mail\StaffAccountCreated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules;
 
 class AdminGestionnaireController extends Controller
@@ -48,10 +51,12 @@ class AdminGestionnaireController extends Controller
             return response()->json(['message' => 'Rôle GESTIONNAIRE introuvable.'], 500);
         }
 
+        $plainPassword = $request->password;
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make($plainPassword),
             'role_id' => $role->id,
             'is_active' => true,
         ]);
@@ -62,6 +67,21 @@ class AdminGestionnaireController extends Controller
             'details' => "Création gestionnaire #{$user->id} ({$user->email})",
             'ip_address' => $request->ip(),
         ]);
+
+        try {
+            $frontend = rtrim((string) config('app.frontend_url', config('app.url')), '/');
+            Mail::to($user->email)->send(new StaffAccountCreated(
+                $user,
+                $plainPassword,
+                'Gestionnaire',
+                $frontend.'/connexion'
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('Échec envoi e-mail création gestionnaire', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return response()->json($user->load('role'), 201);
     }
