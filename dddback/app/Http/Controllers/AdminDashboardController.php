@@ -7,6 +7,8 @@ use App\Models\AppelOffre;
 use App\Models\Document;
 use App\Models\Fournisseur;
 use App\Models\ResponsableMarche;
+use App\Models\Role;
+use App\Models\User;
 use App\Models\LogActivite;
 use App\Models\Candidature;
 use App\Services\FournisseurValidationService;
@@ -36,6 +38,11 @@ class AdminDashboardController extends Controller
 
         $totalResponsables = ResponsableMarche::count();
 
+        $gestionnaireRoleId = Role::where('name', 'GESTIONNAIRE')->value('id');
+        $totalGestionnaires = $gestionnaireRoleId
+            ? User::where('role_id', $gestionnaireRoleId)->count()
+            : 0;
+
         return response()->json([
             'totalFournisseurs' => $totalFournisseurs,
             'fournisseursActifs' => $fournisseursActifs,
@@ -50,6 +57,7 @@ class AdminDashboardController extends Controller
             'candidaturesRetenues' => $candidaturesRetenues,
             'candidaturesRejetees' => $candidaturesRejetees,
             'totalResponsables' => $totalResponsables,
+            'totalGestionnaires' => $totalGestionnaires,
         ]);
     }
 

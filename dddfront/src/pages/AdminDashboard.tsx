@@ -117,6 +117,7 @@ interface DashboardStats {
   candidaturesRetenues: number;
   candidaturesRejetees: number;
   totalResponsables: number;
+  totalGestionnaires: number;
 }
 
 const EMPTY_DASHBOARD_STATS: DashboardStats = {
@@ -133,6 +134,7 @@ const EMPTY_DASHBOARD_STATS: DashboardStats = {
   candidaturesRetenues: 0,
   candidaturesRejetees: 0,
   totalResponsables: 0,
+  totalGestionnaires: 0,
 };
 
 function parseDashboardStats(payload: unknown): DashboardStats | null {
@@ -154,6 +156,7 @@ function parseDashboardStats(payload: unknown): DashboardStats | null {
     candidaturesRetenues: num("candidaturesRetenues"),
     candidaturesRejetees: num("candidaturesRejetees"),
     totalResponsables: num("totalResponsables"),
+    totalGestionnaires: num("totalGestionnaires"),
   };
 }
 
@@ -2020,6 +2023,14 @@ const AdminDashboard: React.FC = () => {
       color: "text-orange-600",
       bgColor: "bg-orange-50",
     },
+    {
+      title: "Gestionnaires",
+      value: stats.totalGestionnaires,
+      subtitle: "Comptes actifs",
+      icon: Shield,
+      color: "text-slate-700",
+      bgColor: "bg-slate-100",
+    },
   ];
 
   // ============================================
@@ -2217,7 +2228,7 @@ const AdminDashboard: React.FC = () => {
         {activeTab === "vue-ensemble" && (
           <div className="space-y-6 animate-in fade-in duration-500">
              {/* Cartes Stats */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 {statsCards.map((stat, index) => (
                   <motion.div
                     key={stat.title}
